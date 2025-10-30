@@ -5,10 +5,7 @@
 #![warn(missing_docs)]
 
 /// REST APIハンドラー
-pub mod api {
-    //! エージェント登録、ヘルスチェック、プロキシAPI
-    // TODO: T027で実装
-}
+pub mod api;
 
 /// ロードバランサー
 pub mod balancer {
@@ -23,19 +20,20 @@ pub mod health {
 }
 
 /// エージェント登録管理
-pub mod registry {
-    //! エージェント状態管理
-    // TODO: T029で実装
-}
+pub mod registry;
 
 /// データベースアクセス
-pub mod db {
-    //! SQLxクエリ、マイグレーション
-    // TODO: T042で実装
-}
+pub mod db;
 
 /// 設定管理
 pub mod config {
     //! 設定ファイル読み込み
     // TODO: T055で実装
+}
+
+/// アプリケーション状態
+#[derive(Clone)]
+pub struct AppState {
+    /// エージェントレジストリ
+    pub registry: registry::AgentRegistry,
 }
