@@ -165,7 +165,7 @@
   - **参照**: `research.md` の既存ワークフロー統合
   - **コミット**: `chore(workflow): ci.ymlを削除（quality-checksに統合済み）`
 
-- [ ] **T016** [P] ドキュメント最終確認とmarkdownlintチェック
+- [x] **T016** [P] ドキュメント最終確認とmarkdownlintチェック
   - **ファイル**: `CLAUDE.md`, `finish-feature.sh` のコメント、新規作成ワークフローYAML
   - **コマンド**: `npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git`
   - **修正**: markdownlint警告/エラーを修正
