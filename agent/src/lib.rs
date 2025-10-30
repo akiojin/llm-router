@@ -4,20 +4,14 @@
 
 #![warn(missing_docs)]
 
-/// Coordinator通信クライアント
-pub mod client {
-    //! 自己登録、ハートビート送信
-    // TODO: T059で実装
-}
+/// Coordinator通信クライアント（登録・ハートビート）
+pub mod client;
 
 /// Ollama管理（自動ダウンロード・起動）
 pub mod ollama;
 
-/// メトリクス収集
-pub mod metrics {
-    //! CPU/メモリ監視
-    // TODO: T061で実装
-}
+/// メトリクス収集（CPU/メモリ監視）
+pub mod metrics;
 
 /// GUI
 pub mod gui {
