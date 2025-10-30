@@ -17,6 +17,6 @@
 
 ## 検証項目
 
-- [ ] quality-checksワークフローが成功
-- [ ] auto-mergeワークフローが起動
-- [ ] PRがマージされた
+1. quality-checksワークフローが成功
+2. auto-mergeワークフローが起動
+3. PRがマージされた
