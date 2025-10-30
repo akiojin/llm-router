@@ -108,18 +108,23 @@
 3. 自動実行される処理:
    - featureブランチをリモートにpush
    - GitHub PRを自動作成（spec.mdからタイトル取得）
-   - GitHub Actionsで品質チェック実行:
-     - tasks.md 全タスク完了チェック
-     - テスト実行（npm + Unity）
-     - コンパイルチェック（TypeScript + C#）
-     - commitlint 規約チェック
-   - 全チェック成功時、自動的にmainへマージ（`--no-ff`で履歴保持）
+   - GitHub Actions「**Quality Checks**」ワークフローで品質チェック実行（5つのジョブを並列実行）:
+     1. **tasks-check**: tasks.mdの全タスク完了チェック（`.specify/scripts/checks/check-tasks.sh`）
+     2. **rust-test**: Rustテスト実行（`cargo test`, ubuntu-latest + windows-latest）
+     3. **rust-lint**: Rust lintチェック（`cargo fmt --check`, `cargo clippy`）
+     4. **commitlint**: コミットメッセージ検証（Conventional Commits準拠、`.specify/scripts/checks/check-commits.sh`）
+     5. **markdownlint**: マークダウンファイルlint（`npx markdownlint-cli`）
+   - 全チェック成功時、GitHub Actions「**Auto Merge**」ワークフローが起動し、以下の条件を満たす場合に自動的にmainへマージ（MERGEメソッド、履歴保持）:
+     - ✅ 全品質チェックが成功
+     - ✅ PRがドラフトでない
+     - ✅ マージ可能（コンフリクトなし）
+     - ✅ マージ状態が正常（CLEAN または UNSTABLE）
 
 **重要な注意事項**:
 
 - **mainブランチで直接SPEC作業禁止**: 必ずWorktreeを使用
 - **PR自動マージ**: GitHub Actionsで品質チェック後に自動マージ
-- **ドラフトPR**: `--draft`オプションで作成したPRは自動マージ対象外
+- **ドラフトPR**: `--draft`オプションで作成したPRは自動マージ対象外。品質チェックは実行されるが、ドラフト解除するまで自動マージされない
 - **並行開発推奨**: 複数のSPECを同時に異なるWorktreeで作業可能
 - **Worktree間の独立性**: 各Worktreeは完全に独立（相互干渉なし）
 - **コミット**: Worktree内でのコミットはfeatureブランチに記録される

@@ -147,7 +147,7 @@
     - 自動マージ条件を明記（全チェック合格、ドラフトでない、マージ可能）
   - **コミット**: `docs(scripts): finish-feature.shのPRボディを更新`
 
-- [ ] **T014** [P] `CLAUDE.md`の自動マージセクションを更新
+- [x] **T014** [P] `CLAUDE.md`の自動マージセクションを更新
   - **ファイル**: `/ollama-coordinator/CLAUDE.md`
   - **更新内容**:
     - 「Worktree＆ブランチ運用」セクションに自動マージフローの詳細を追加
