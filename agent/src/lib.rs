@@ -13,9 +13,8 @@ pub mod ollama;
 /// メトリクス収集（CPU/メモリ監視）
 pub mod metrics;
 
-/// GUI
+/// GUI（システムトレイ、設定ウィンドウ）
 pub mod gui {
-    //! システムトレイ、設定ウィンドウ
     // TODO: T062で実装
 }
 

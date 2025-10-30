@@ -105,7 +105,7 @@ async fn select_available_agent(
 mod tests {
     use super::*;
     use crate::registry::AgentRegistry;
-    use ollama_coordinator_common::protocol::{ChatMessage, RegisterRequest};
+    use ollama_coordinator_common::protocol::RegisterRequest;
     use std::net::IpAddr;
 
     fn create_test_state() -> AppState {

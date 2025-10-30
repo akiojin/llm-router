@@ -102,7 +102,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
         };
-        register_agent(State(state.clone()), Json(req1))
+        let _ = register_agent(State(state.clone()), Json(req1))
             .await
             .unwrap();
 
@@ -112,7 +112,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
         };
-        register_agent(State(state.clone()), Json(req2))
+        let _ = register_agent(State(state.clone()), Json(req2))
             .await
             .unwrap();
 

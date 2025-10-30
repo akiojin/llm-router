@@ -105,7 +105,7 @@ async fn test_agent_registration_invalid_coordinator() {
 #[test]
 fn test_agent_id_persistence() {
     // Arrange
-    let mut client = CoordinatorClient::new("http://localhost:8080".to_string());
+    let client = CoordinatorClient::new("http://localhost:8080".to_string());
 
     // Act & Assert: 初期状態ではAgent IDがない
     assert!(
