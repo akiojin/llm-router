@@ -4,6 +4,7 @@
 
 pub mod agent;
 pub mod health;
+pub mod proxy;
 
 use axum::{
     routing::post,
@@ -16,5 +17,7 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/agents", post(agent::register_agent))
         .route("/api/health", post(health::health_check))
+        .route("/api/chat", post(proxy::proxy_chat))
+        .route("/api/generate", post(proxy::proxy_generate))
         .with_state(state)
 }
