@@ -13,11 +13,8 @@ pub mod balancer {
     // TODO: T037で実装
 }
 
-/// ヘルスチェック
-pub mod health {
-    //! 定期ヘルスチェック、タイムアウト検知
-    // TODO: T033で実装
-}
+/// ヘルスチェック監視
+pub mod health;
 
 /// エージェント登録管理
 pub mod registry;

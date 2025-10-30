@@ -1,6 +1,6 @@
 //! Ollama Coordinator Server Entry Point
 
-use ollama_coordinator_coordinator::{AppState, api, registry, db};
+use ollama_coordinator_coordinator::{AppState, api, registry, db, health};
 
 #[tokio::main]
 async fn main() {
@@ -23,6 +23,22 @@ async fn main() {
     let registry = registry::AgentRegistry::with_database(db_pool)
         .await
         .expect("Failed to initialize agent registry");
+
+    // ヘルスチェック設定
+    let health_check_interval_secs = std::env::var("HEALTH_CHECK_INTERVAL")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+    let agent_timeout_secs = std::env::var("AGENT_TIMEOUT")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60);
+
+    // ヘルスモニター起動
+    let health_monitor = health::HealthMonitor::new(
+        registry.clone(),
+        health_check_interval_secs,
+        agent_timeout_secs,
+    );
+    health_monitor.start();
 
     // アプリケーション状態を初期化
     let state = AppState { registry };
