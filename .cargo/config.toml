@@ -1,0 +1,12 @@
+# Cargo configuration for ollama-coordinator
+
+[build]
+# SQLx offline mode: コンパイル時にデータベース接続不要
+[env]
+SQLX_OFFLINE = "true"
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]

@@ -1,0 +1,14 @@
+# Clippy configuration
+
+# Deny warnings in CI
+warn-on-all-wildcard-imports = true
+
+# Allowed lints
+allow-unwrap-in-tests = true
+allow-dbg-in-tests = true
+
+# Cognitive complexity limit
+cognitive-complexity-threshold = 30
+
+# Maximum function parameters
+too-many-arguments-threshold = 7
