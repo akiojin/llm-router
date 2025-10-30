@@ -12,14 +12,38 @@
 
 set -e
 
-# 引数チェック
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <tasks.md path>" >&2
+# 引数チェック - 引数がない場合はCI環境変数から推定
+if [ $# -eq 0 ]; then
+    # CI環境でブランチ名から SPEC-ID を抽出
+    if [ -n "$GITHUB_HEAD_REF" ]; then
+        # Pull request の場合
+        BRANCH_NAME="$GITHUB_HEAD_REF"
+    elif [ -n "$GITHUB_REF_NAME" ]; then
+        # Push の場合
+        BRANCH_NAME="$GITHUB_REF_NAME"
+    else
+        echo "Error: No tasks.md path provided and not in CI environment" >&2
+        echo "Usage: $0 <tasks.md path>" >&2
+        exit 2
+    fi
+
+    # ブランチ名が feature/SPEC-xxx 形式の場合、SPEC-ID を抽出
+    if [[ "$BRANCH_NAME" =~ ^feature/(SPEC-[a-z0-9]{8})$ ]]; then
+        SPEC_ID="${BASH_REMATCH[1]}"
+        TASKS_FILE="specs/$SPEC_ID/tasks.md"
+        echo "Auto-detected SPEC-ID: $SPEC_ID from branch: $BRANCH_NAME"
+    else
+        echo "⚠️  Branch name does not match feature/SPEC-xxx pattern: $BRANCH_NAME"
+        echo "   Skipping tasks check"
+        exit 0
+    fi
+elif [ $# -eq 1 ]; then
+    TASKS_FILE="$1"
+else
+    echo "Usage: $0 [<tasks.md path>]" >&2
     echo "Example: $0 specs/SPEC-12345678/tasks.md" >&2
     exit 2
 fi
-
-TASKS_FILE="$1"
 
 # ファイル存在チェック
 if [ ! -f "$TASKS_FILE" ]; then
