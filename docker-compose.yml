@@ -1,0 +1,39 @@
+services:
+  ollama-coordinator:
+    build: .
+    container_name: ollama-coordinator
+    volumes:
+      - .:/ollama-coordinator
+      - bash-history:/root/.bash_history_dir
+      - claude-config:/root/.claude
+      - codex-config:/root/.codex
+      - ~/.codex/auth.json:/root/.codex/auth.json
+      - ~/.serena:/root/.serena
+    environment:
+      - NPM_USER
+      - NPM_EMAIL
+      - NPM_PASS
+      - GITHUB_TOKEN
+      - GITHUB_PERSONAL_ACCESS_TOKEN
+      - GITHUB_USERNAME
+      - GIT_USER_EMAIL
+      - UNITY_HOST=host.docker.internal
+      - UNITY_PORT=6400
+      # bash_history
+      - HISTFILE=/root/.bash_history_dir/.bash_history
+      - HISTSIZE=5000
+      - HISTFILESIZE=200000
+      # Claude Code
+      - MAX_MCP_OUTPUT_TOKENS
+      - ENABLE_BACKGROUND_TASKS=1
+      - FORCE_AUTO_BACKGROUND_TASKS=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stdin_open: true
+    tty: true
+    working_dir: /ollama-coordinator
+
+volumes:
+  bash-history: {}
+  claude-config: {}
+  codex-config: {}

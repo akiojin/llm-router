@@ -1,0 +1,62 @@
+# Git
+.git/
+.gitignore
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env*
+!.env.example
+
+# Testing
+coverage/
+tests/
+*.test.ts
+*.spec.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Docker files
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Documentation (optional - uncomment if not needed in image)
+# README.md
+# docs/
+
+# Spec Kit files
+.specify/
+specs/
+
+# MCP cache
+.serena/
+
+# Claude Code settings
+.claude/
+
+# Temporary files
+tmp/
+temp/
