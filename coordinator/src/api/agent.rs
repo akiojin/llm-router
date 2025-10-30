@@ -162,7 +162,7 @@ mod tests {
         // メトリクスを記録
         state
             .load_manager
-            .record_metrics(response.agent_id, 42.0, 33.0, 1)
+            .record_metrics(response.agent_id, 42.0, 33.0, 1, None)
             .await
             .unwrap();
 
@@ -208,7 +208,7 @@ mod tests {
         // ハートビートでメトリクス更新
         state
             .load_manager
-            .record_metrics(response.agent_id, 55.0, 44.0, 2)
+            .record_metrics(response.agent_id, 55.0, 44.0, 2, Some(150.0))
             .await
             .unwrap();
 

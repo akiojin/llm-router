@@ -152,6 +152,7 @@ impl LoadManager {
         cpu_usage: f32,
         memory_usage: f32,
         active_requests: u32,
+        average_response_time_ms: Option<f32>,
     ) -> CoordinatorResult<()> {
         // エージェントが存在することを確認
         self.registry.get(agent_id).await?;
@@ -159,12 +160,16 @@ impl LoadManager {
         let mut state = self.state.write().await;
         let entry = state.entry(agent_id).or_default();
 
+        let derived_average =
+            average_response_time_ms.or_else(|| self.compute_average_response_time(&*entry));
+
         entry.last_metrics = Some(HealthMetrics {
             agent_id,
             cpu_usage,
             memory_usage,
             active_requests,
             total_requests: entry.total_assigned,
+            average_response_time_ms: derived_average,
             timestamp: Utc::now(),
         });
 
@@ -179,11 +184,6 @@ impl LoadManager {
         let entry = state.entry(agent_id).or_default();
         entry.assigned_active = entry.assigned_active.saturating_add(1);
         entry.total_assigned = entry.total_assigned.saturating_add(1);
-
-        // 最新メトリクスがある場合はトータルリクエスト数も同期
-        if let Some(metrics) = entry.last_metrics.as_mut() {
-            metrics.total_requests = entry.total_assigned;
-        }
 
         Ok(())
     }
@@ -212,6 +212,13 @@ impl LoadManager {
         entry.total_latency_ms = entry
             .total_latency_ms
             .saturating_add(duration.as_millis() as u128);
+
+        let updated_average = self.compute_average_response_time(&*entry);
+
+        if let Some(metrics) = entry.last_metrics.as_mut() {
+            metrics.total_requests = entry.total_assigned;
+            metrics.average_response_time_ms = updated_average;
+        }
 
         Ok(())
     }
@@ -387,9 +394,22 @@ impl LoadManager {
             total_requests: load_state.total_assigned,
             successful_requests: load_state.success_count,
             failed_requests: load_state.error_count,
-            average_response_time_ms: load_state.average_latency_ms(),
+            average_response_time_ms: load_state
+                .last_metrics
+                .as_ref()
+                .and_then(|m| m.average_response_time_ms)
+                .or_else(|| load_state.average_latency_ms()),
             last_updated: load_state.last_updated(),
             is_stale: load_state.is_stale(now),
+        }
+    }
+
+    fn compute_average_response_time(&self, load_state: &AgentLoadState) -> Option<f32> {
+        let completed = load_state.success_count + load_state.error_count;
+        if completed == 0 {
+            None
+        } else {
+            Some((load_state.total_latency_ms as f64 / completed as f64) as f32)
         }
     }
 }

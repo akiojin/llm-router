@@ -20,6 +20,7 @@ pub async fn health_check(
             req.cpu_usage,
             req.memory_usage,
             req.active_requests,
+            req.average_response_time_ms,
         )
         .await?;
 
@@ -62,6 +63,7 @@ mod tests {
             cpu_usage: 45.5,
             memory_usage: 60.2,
             active_requests: 3,
+            average_response_time_ms: Some(110.0),
         };
 
         let result = health_check(State(state.clone()), Json(health_req)).await;
@@ -88,6 +90,7 @@ mod tests {
             cpu_usage: 45.5,
             memory_usage: 60.2,
             active_requests: 3,
+            average_response_time_ms: None,
         };
 
         let result = health_check(State(state), Json(health_req)).await;

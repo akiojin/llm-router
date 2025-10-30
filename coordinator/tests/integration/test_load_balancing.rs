@@ -82,11 +82,11 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
 
     // 高負荷エージェントはCPU 95%、低負荷エージェントはCPU 10%
     load_manager
-        .record_metrics(high_cpu_agent, 95.0, 40.0, 2)
+        .record_metrics(high_cpu_agent, 95.0, 40.0, 2, None)
         .await
         .unwrap();
     load_manager
-        .record_metrics(low_cpu_agent, 10.0, 30.0, 0)
+        .record_metrics(low_cpu_agent, 10.0, 30.0, 0, None)
         .await
         .unwrap();
 

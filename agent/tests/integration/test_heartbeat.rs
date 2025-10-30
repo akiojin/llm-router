@@ -31,6 +31,7 @@ async fn test_heartbeat_sending_after_registration() {
         cpu_usage: 45.5,
         memory_usage: 60.2,
         active_requests: 0,
+        average_response_time_ms: None,
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -77,6 +78,7 @@ async fn test_heartbeat_with_real_metrics() {
         cpu_usage,
         memory_usage,
         active_requests: 0,
+        average_response_time_ms: None,
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -104,6 +106,7 @@ async fn test_heartbeat_unregistered_agent() {
         cpu_usage: 50.0,
         memory_usage: 50.0,
         active_requests: 0,
+        average_response_time_ms: None,
     };
 
     // Act: 未登録エージェントでハートビート送信
@@ -143,6 +146,7 @@ async fn test_multiple_heartbeats() {
             cpu_usage: 40.0 + i as f32,
             memory_usage: 55.0 + i as f32,
             active_requests: i,
+            average_response_time_ms: None,
         };
 
         let result = client.send_heartbeat(heartbeat_req).await;

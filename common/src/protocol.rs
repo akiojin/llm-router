@@ -49,6 +49,9 @@ pub struct HealthCheckRequest {
     pub memory_usage: f32,
     /// 処理中リクエスト数
     pub active_requests: u32,
+    /// 過去N件の平均レスポンスタイム (ms)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_response_time_ms: Option<f32>,
 }
 
 /// Ollamaチャットリクエスト
@@ -131,6 +134,7 @@ mod tests {
             cpu_usage: 45.5,
             memory_usage: 60.2,
             active_requests: 3,
+            average_response_time_ms: Some(123.4),
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -139,6 +143,10 @@ mod tests {
         assert_eq!(request.cpu_usage, deserialized.cpu_usage);
         assert_eq!(request.memory_usage, deserialized.memory_usage);
         assert_eq!(request.active_requests, deserialized.active_requests);
+        assert_eq!(
+            request.average_response_time_ms,
+            deserialized.average_response_time_ms
+        );
     }
 
     #[test]
