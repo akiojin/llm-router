@@ -7,25 +7,22 @@
 /// Coordinator通信クライアント
 pub mod client {
     //! 自己登録、ハートビート送信
-    // TODO: T057で実装
+    // TODO: T059で実装
 }
 
-/// Ollama管理
-pub mod ollama {
-    //! Ollama状態監視、プロキシ
-    // TODO: T060で実装
-}
+/// Ollama管理（自動ダウンロード・起動）
+pub mod ollama;
 
 /// メトリクス収集
 pub mod metrics {
     //! CPU/メモリ監視
-    // TODO: T063で実装
+    // TODO: T061で実装
 }
 
 /// GUI
 pub mod gui {
     //! システムトレイ、設定ウィンドウ
-    // TODO: T066で実装
+    // TODO: T062で実装
 }
 
 /// 設定管理
