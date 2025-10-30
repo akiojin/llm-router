@@ -18,9 +18,7 @@ fn get_data_file_path() -> CoordinatorResult<PathBuf> {
     } else {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
-            .map_err(|_| {
-                CoordinatorError::Database("Failed to get home directory".to_string())
-            })?;
+            .map_err(|_| CoordinatorError::Database("Failed to get home directory".to_string()))?;
 
         PathBuf::from(home).join(".ollama-coordinator")
     };
@@ -37,11 +35,9 @@ pub async fn init_storage() -> CoordinatorResult<()> {
 
     // ディレクトリが存在しない場合は作成
     if !data_dir.exists() {
-        fs::create_dir_all(data_dir)
-            .await
-            .map_err(|e| {
-                CoordinatorError::Database(format!("Failed to create data directory: {}", e))
-            })?;
+        fs::create_dir_all(data_dir).await.map_err(|e| {
+            CoordinatorError::Database(format!("Failed to create data directory: {}", e))
+        })?;
     }
 
     // ファイルが存在しない場合は空の配列を作成
