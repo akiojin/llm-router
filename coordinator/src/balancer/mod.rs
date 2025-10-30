@@ -43,6 +43,84 @@ fn compare_average_ms(a: Option<f32>, b: Option<f32>) -> Ordering {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+    use ollama_coordinator_common::protocol::RegisterRequest;
+
+    #[test]
+    fn compare_average_ms_orders_values() {
+        assert_eq!(compare_average_ms(Some(120.0), Some(180.0)), Ordering::Less);
+        assert_eq!(
+            compare_average_ms(Some(220.0), Some(180.0)),
+            Ordering::Greater
+        );
+        assert_eq!(compare_average_ms(Some(100.0), None), Ordering::Less);
+        assert_eq!(compare_average_ms(None, Some(90.0)), Ordering::Greater);
+        assert_eq!(compare_average_ms(None, None), Ordering::Equal);
+    }
+
+    #[test]
+    fn effective_average_ms_prefers_metrics_value() {
+        let mut state = AgentLoadState::default();
+        state.success_count = 5;
+        state.total_latency_ms = 500;
+        let timestamp = Utc::now();
+        state.last_metrics = Some(HealthMetrics {
+            agent_id: Uuid::new_v4(),
+            cpu_usage: 10.0,
+            memory_usage: 20.0,
+            active_requests: 1,
+            total_requests: 5,
+            average_response_time_ms: Some(80.0),
+            timestamp,
+        });
+
+        assert_eq!(state.effective_average_ms(), Some(80.0));
+    }
+
+    #[tokio::test]
+    async fn load_manager_prefers_lower_latency_when_active_equal() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let slow_agent = registry
+            .register(RegisterRequest {
+                machine_name: "slow".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let fast_agent = registry
+            .register(RegisterRequest {
+                machine_name: "fast".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(slow_agent, 20.0, 30.0, 1, Some(240.0))
+            .await
+            .unwrap();
+        manager
+            .record_metrics(fast_agent, 20.0, 30.0, 1, Some(120.0))
+            .await
+            .unwrap();
+
+        let selected = manager.select_agent().await.unwrap();
+        assert_eq!(selected.id, fast_agent);
+    }
+}
+
 /// エージェントの最新ロード状態
 #[derive(Debug, Clone, Default)]
 struct AgentLoadState {
