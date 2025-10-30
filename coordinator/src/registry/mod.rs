@@ -17,6 +17,7 @@ use ollama_coordinator_common::{
 #[derive(Clone)]
 pub struct AgentRegistry {
     agents: Arc<RwLock<HashMap<Uuid, Agent>>>,
+    db_pool: Option<sqlx::SqlitePool>,
 }
 
 impl AgentRegistry {
@@ -24,7 +25,44 @@ impl AgentRegistry {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            db_pool: None,
         }
+    }
+
+    /// データベース接続付きでレジストリを作成
+    pub async fn with_database(db_pool: sqlx::SqlitePool) -> CoordinatorResult<Self> {
+        let registry = Self {
+            agents: Arc::new(RwLock::new(HashMap::new())),
+            db_pool: Some(db_pool.clone()),
+        };
+
+        // 起動時にDBからエージェント情報を読み込み
+        registry.load_from_db().await?;
+
+        Ok(registry)
+    }
+
+    /// データベースからエージェント情報を読み込み
+    async fn load_from_db(&self) -> CoordinatorResult<()> {
+        if let Some(pool) = &self.db_pool {
+            let loaded_agents = crate::db::load_agents(pool).await?;
+            let mut agents = self.agents.write().await;
+
+            for agent in loaded_agents {
+                agents.insert(agent.id, agent);
+            }
+
+            println!("Loaded {} agents from database", agents.len());
+        }
+        Ok(())
+    }
+
+    /// エージェントをデータベースに保存
+    async fn save_to_db(&self, agent: &Agent) -> CoordinatorResult<()> {
+        if let Some(pool) = &self.db_pool {
+            crate::db::save_agent(pool, agent).await?;
+        }
+        Ok(())
     }
 
     /// エージェントを登録
@@ -36,7 +74,7 @@ impl AgentRegistry {
             .find(|a| a.machine_name == req.machine_name)
             .map(|a| a.id);
 
-        let (agent_id, status) = if let Some(id) = existing {
+        let (agent_id, status, agent) = if let Some(id) = existing {
             // 既存エージェントを更新
             let agent = agents.get_mut(&id).unwrap();
             agent.ip_address = req.ip_address;
@@ -44,7 +82,7 @@ impl AgentRegistry {
             agent.ollama_port = req.ollama_port;
             agent.status = AgentStatus::Online;
             agent.last_seen = Utc::now();
-            (id, RegisterStatus::Updated)
+            (id, RegisterStatus::Updated, agent.clone())
         } else {
             // 新規エージェントを登録
             let agent_id = Uuid::new_v4();
@@ -59,9 +97,13 @@ impl AgentRegistry {
                 registered_at: now,
                 last_seen: now,
             };
-            agents.insert(agent_id, agent);
-            (agent_id, RegisterStatus::Registered)
+            agents.insert(agent_id, agent.clone());
+            (agent_id, RegisterStatus::Registered, agent)
         };
+
+        // ロックを解放してからDB保存
+        drop(agents);
+        self.save_to_db(&agent).await?;
 
         Ok(RegisterResponse {
             agent_id,
@@ -85,20 +127,32 @@ impl AgentRegistry {
 
     /// エージェントの最終確認時刻を更新
     pub async fn update_last_seen(&self, agent_id: Uuid) -> CoordinatorResult<()> {
-        let mut agents = self.agents.write().await;
-        let agent = agents.get_mut(&agent_id)
-            .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
-        agent.last_seen = Utc::now();
-        agent.status = AgentStatus::Online;
+        let agent_to_save = {
+            let mut agents = self.agents.write().await;
+            let agent = agents.get_mut(&agent_id)
+                .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
+            agent.last_seen = Utc::now();
+            agent.status = AgentStatus::Online;
+            agent.clone()
+        };
+
+        // ロック解放後にDB保存
+        self.save_to_db(&agent_to_save).await?;
         Ok(())
     }
 
     /// エージェントをオフラインにする
     pub async fn mark_offline(&self, agent_id: Uuid) -> CoordinatorResult<()> {
-        let mut agents = self.agents.write().await;
-        let agent = agents.get_mut(&agent_id)
-            .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
-        agent.status = AgentStatus::Offline;
+        let agent_to_save = {
+            let mut agents = self.agents.write().await;
+            let agent = agents.get_mut(&agent_id)
+                .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
+            agent.status = AgentStatus::Offline;
+            agent.clone()
+        };
+
+        // ロック解放後にDB保存
+        self.save_to_db(&agent_to_save).await?;
         Ok(())
     }
 }
