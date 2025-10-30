@@ -133,18 +133,41 @@ $(git log origin/main..HEAD --oneline --no-merges | head -10)
 
 ---
 
+## 自動品質チェック
+
+このPRが作成されると、GitHub Actions **"Quality Checks"** ワークフローが自動実行されます：
+
+### 並列実行されるチェック（5つ）
+
+1. **tasks-check**: tasks.mdの全タスク完了チェック
+2. **rust-test**: Rustテスト実行（ubuntu-latest, windows-latest）
+3. **rust-lint**: Rust lintチェック（\`cargo fmt --check\`, \`cargo clippy\`）
+4. **commitlint**: コミットメッセージ検証（Conventional Commits準拠）
+5. **markdownlint**: マークダウンファイルlint
+
+### 自動マージ条件
+
+すべての品質チェックが合格すると、**"Auto Merge"** ワークフローが起動し、以下の条件を満たす場合に自動的にmainブランチへマージされます：
+
+- ✅ 全品質チェックが成功
+- ✅ PRがドラフトでない
+- ✅ マージ可能（コンフリクトなし）
+- ✅ マージ状態が正常（CLEAN または UNSTABLE）
+
+---
+
 ## チェックリスト
 
-- [ ] tasks.md の全タスクが完了している
+- [ ] tasks.md の全タスクが完了している（\`- [x]\`）
 - [ ] 全テストが合格している
 - [ ] コンパイルエラーがない
-- [ ] コミットメッセージが規約に準拠している
+- [ ] コミットメッセージがConventional Commits準拠
 
 ---
 
 📝 **詳細**: \`specs/$SPEC_ID/spec.md\` を参照してください。
 
-🤖 このPRは自動マージワークフローの対象です。すべてのCI/CDチェックが成功すると自動的にmainブランチへマージされます。
+🤖 このPRは自動マージワークフローの対象です。品質チェック合格後、自動的にmainブランチへマージされます。
 EOF
 )
 

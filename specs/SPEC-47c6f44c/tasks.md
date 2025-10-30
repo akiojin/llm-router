@@ -139,7 +139,7 @@
 
 **前提条件**: Phase 3.4完了、統合テストがすべて合格
 
-- [ ] **T013** [P] `finish-feature.sh`のPRボディを更新
+- [x] **T013** [P] `finish-feature.sh`のPRボディを更新
   - **ファイル**: `/ollama-coordinator/.specify/scripts/bash/finish-feature.sh`
   - **更新内容**:
     - PRボディの「GitHub Actionsが品質チェックを実行する」説明を実際のワークフロー名（"Quality Checks"、"Auto Merge"）に更新
