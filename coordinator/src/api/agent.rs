@@ -24,6 +24,7 @@ pub async fn list_agents(State(state): State<AppState>) -> Json<Vec<Agent>> {
 }
 
 /// Axum用のエラーレスポンス型
+#[derive(Debug)]
 pub struct AppError(CoordinatorError);
 
 impl From<CoordinatorError> for AppError {
