@@ -3,7 +3,7 @@
 **機能ID**: `SPEC-[UUID8桁]` (例: `SPEC-a1b2c3d4`) | **日付**: [日付] | **仕様**: [リンク]
 **入力**: `/specs/SPEC-[UUID8桁]/spec.md`の機能仕様
 
-## 実行フロー (/plan コマンドのスコープ)
+## 実行フロー (/speckit.plan コマンドのスコープ)
 ```
 1. 入力パスから機能仕様を読み込み
    → 見つからない場合: ERROR "{path}に機能仕様がありません"
@@ -21,11 +21,11 @@
    → 新しい違反がある場合: 設計をリファクタリング、Phase 1に戻る
    → 進捗トラッキングを更新: 設計後憲章チェック
 7. Phase 2 を計画 → タスク生成アプローチを記述 (tasks.mdを作成しない)
-8. 停止 - /tasks コマンドの準備完了
+8. 停止 - /speckit.tasks コマンドの準備完了
 ```
 
-**重要**: /planコマンドはステップ7で停止します。Phase 2-4は他のコマンドで実行:
-- Phase 2: /tasksコマンドがtasks.mdを作成
+- **重要**: /speckit.planコマンドはステップ7で停止します。Phase 2-4は他のコマンドで実行:
+- Phase 2: /speckit.tasksコマンドがtasks.mdを作成
 - Phase 3-4: 実装実行 (手動またはツール経由)
 
 ## 概要
@@ -80,12 +80,12 @@
 ### ドキュメント (この機能)
 ```
 specs/SPEC-[UUID8桁]/
-├── plan.md              # このファイル (/plan コマンド出力)
-├── research.md          # Phase 0 出力 (/plan コマンド)
-├── data-model.md        # Phase 1 出力 (/plan コマンド)
-├── quickstart.md        # Phase 1 出力 (/plan コマンド)
-├── contracts/           # Phase 1 出力 (/plan コマンド)
-└── tasks.md             # Phase 2 出力 (/tasks コマンド - /planでは作成しない)
+├── plan.md              # このファイル (/speckit.plan コマンド出力)
+├── research.md          # Phase 0 出力 (/speckit.plan コマンド)
+├── data-model.md        # Phase 1 出力 (/speckit.plan コマンド)
+├── quickstart.md        # Phase 1 出力 (/speckit.plan コマンド)
+├── contracts/           # Phase 1 出力 (/speckit.plan コマンド)
+└── tasks.md             # Phase 2 出力 (/speckit.tasks コマンド - /speckit.planでは作成しない)
 ```
 
 ### ソースコード (リポジトリルート)
@@ -181,7 +181,7 @@ ios/ または android/
 **出力**: data-model.md, /contracts/*, 失敗するテスト, quickstart.md, エージェント固有ファイル
 
 ## Phase 2: タスク計画アプローチ
-*このセクションは/tasksコマンドが実行することを記述 - /plan中は実行しない*
+*このセクションは/speckit.tasksコマンドが実行することを記述 - /speckit.plan中は実行しない*
 
 **タスク生成戦略**:
 - `/templates/tasks-template.md` をベースとして読み込み
@@ -198,12 +198,12 @@ ios/ または android/
 
 **推定出力**: tasks.mdに25-30個の番号付き、順序付きタスク
 
-**重要**: このフェーズは/tasksコマンドで実行、/planではない
+**重要**: このフェーズは/speckit.tasksコマンドで実行、/speckit.planではない
 
 ## Phase 3+: 今後の実装
 *これらのフェーズは/planコマンドのスコープ外*
 
-**Phase 3**: タスク実行 (/tasksコマンドがtasks.mdを作成)
+**Phase 3**: タスク実行 (/speckit.tasksコマンドがtasks.mdを作成)
 **Phase 4**: 実装 (憲章原則に従ってtasks.mdを実行)
 **Phase 5**: 検証 (テスト実行、quickstart.md実行、パフォーマンス検証)
 
@@ -219,10 +219,10 @@ ios/ または android/
 *このチェックリストは実行フロー中に更新される*
 
 **フェーズステータス**:
-- [ ] Phase 0: Research完了 (/plan コマンド)
-- [ ] Phase 1: Design完了 (/plan コマンド)
-- [ ] Phase 2: Task planning完了 (/plan コマンド - アプローチのみ記述)
-- [ ] Phase 3: Tasks生成済み (/tasks コマンド)
+- [ ] Phase 0: Research完了 (/speckit.plan コマンド)
+- [ ] Phase 1: Design完了 (/speckit.plan コマンド)
+- [ ] Phase 2: Task planning完了 (/speckit.plan コマンド - アプローチのみ記述)
+- [ ] Phase 3: Tasks生成済み (/speckit.tasks コマンド)
 - [ ] Phase 4: 実装完了
 - [ ] Phase 5: 検証合格
 
