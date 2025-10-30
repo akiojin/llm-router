@@ -1,0 +1,124 @@
+# Auto Merge Workflow
+# 機能ID: SPEC-47c6f44c
+# 目的: 品質チェック合格後に自動マージ実行
+# 要件: FR-008, FR-009, FR-010, FR-011, FR-012
+
+name: Auto Merge
+
+on:
+  workflow_run:
+    workflows: ["Quality Checks"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    # 要件: FR-008, FR-009, FR-010, FR-011
+    # 目的: 条件判定してPRをmainにマージ
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get PR number
+        id: pr
+        run: |
+          echo "🔍 Getting PR number from branch: ${{ github.event.workflow_run.head_branch }}"
+          PR_NUMBER=$(gh pr list --head ${{ github.event.workflow_run.head_branch }} --json number --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
+            echo "::error::No PR found for branch ${{ github.event.workflow_run.head_branch }}"
+            exit 1
+          fi
+
+          echo "📌 PR number: $PR_NUMBER"
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check PR status
+        id: check
+        run: |
+          echo "🔍 Checking PR status for PR #${{ steps.pr.outputs.number }}"
+          PR_STATUS=$(gh pr view ${{ steps.pr.outputs.number }} --json isDraft,mergeable,mergeStateStatus --jq '{isDraft, mergeable, mergeStateStatus}')
+
+          echo "📊 PR status: $PR_STATUS"
+          echo "status=$PR_STATUS" >> $GITHUB_OUTPUT
+
+          # Parse and display each condition
+          IS_DRAFT=$(echo "$PR_STATUS" | jq -r '.isDraft')
+          MERGEABLE=$(echo "$PR_STATUS" | jq -r '.mergeable')
+          MERGE_STATE=$(echo "$PR_STATUS" | jq -r '.mergeStateStatus')
+
+          echo "  - isDraft: $IS_DRAFT"
+          echo "  - mergeable: $MERGEABLE"
+          echo "  - mergeStateStatus: $MERGE_STATE"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Merge PR
+        # 要件: FR-009, FR-010
+        # 条件: ドラフトでない、マージ可能、マージ状態が正常
+        if: |
+          fromJSON(steps.check.outputs.status).isDraft == false &&
+          fromJSON(steps.check.outputs.status).mergeable == 'MERGEABLE' &&
+          (fromJSON(steps.check.outputs.status).mergeStateStatus == 'CLEAN' || fromJSON(steps.check.outputs.status).mergeStateStatus == 'UNSTABLE')
+        run: |
+          echo "🚀 Merging PR #${{ steps.pr.outputs.number }}..."
+
+          # Get PR ID (GraphQL format)
+          PR_ID=$(gh pr view ${{ steps.pr.outputs.number }} --json id --jq '.id')
+          echo "📌 PR ID: $PR_ID"
+
+          # Merge using GraphQL API with MERGE method
+          gh api graphql -f query='
+            mutation($pr:ID!) {
+              mergePullRequest(input:{
+                pullRequestId: $pr,
+                mergeMethod: MERGE,
+                commitHeadline: "Merge pull request #${{ steps.pr.outputs.number }} from ${{ github.event.workflow_run.head_branch }}",
+                commitBody: "Auto-merged by GitHub Actions after quality checks passed.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+              }) {
+                pullRequest {
+                  number
+                  merged
+                  mergedAt
+                }
+              }
+            }
+          ' -f pr="$PR_ID"
+
+          echo "✅ PR #${{ steps.pr.outputs.number }} merged successfully"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Skip merge (conditions not met)
+        # 要件: FR-012
+        # 目的: 条件不一致の場合、スキップ理由をログ記録
+        if: |
+          fromJSON(steps.check.outputs.status).isDraft == true ||
+          fromJSON(steps.check.outputs.status).mergeable != 'MERGEABLE' ||
+          (fromJSON(steps.check.outputs.status).mergeStateStatus != 'CLEAN' && fromJSON(steps.check.outputs.status).mergeStateStatus != 'UNSTABLE')
+        run: |
+          echo "⏭️ Skipping auto-merge for PR #${{ steps.pr.outputs.number }}"
+          echo "Reasons:"
+
+          IS_DRAFT=$(echo '${{ steps.check.outputs.status }}' | jq -r '.isDraft')
+          MERGEABLE=$(echo '${{ steps.check.outputs.status }}' | jq -r '.mergeable')
+          MERGE_STATE=$(echo '${{ steps.check.outputs.status }}' | jq -r '.mergeStateStatus')
+
+          if [ "$IS_DRAFT" == "true" ]; then
+            echo "  ❌ PR is a draft"
+          fi
+
+          if [ "$MERGEABLE" != "MERGEABLE" ]; then
+            echo "  ❌ PR is not mergeable (status: $MERGEABLE)"
+          fi
+
+          if [ "$MERGE_STATE" != "CLEAN" ] && [ "$MERGE_STATE" != "UNSTABLE" ]; then
+            echo "  ❌ Merge state is not clean or unstable (status: $MERGE_STATE)"
+          fi

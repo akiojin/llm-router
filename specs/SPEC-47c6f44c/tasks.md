@@ -40,7 +40,7 @@
   - **目的**: workflow_runトリガー、条件判定、GraphQL APIマージをテスト
   - **期待**: 実装前なので失敗する（RED）
 
-- [ ] **T005** テストワークフロー実行 → 失敗確認（RED確認）
+- [x] **T005** テストワークフロー実行 → 失敗確認（RED確認）
   - **コマンド**: ダミーPRを作成してテストワークフローを起動
   - **確認**: `gh run list --workflow="test-quality-checks"` で失敗を確認
   - **コミット**: `test(workflow): quality-checks契約テスト追加` → `test(workflow): auto-merge契約テスト追加`
@@ -49,7 +49,7 @@
 
 **前提条件**: Phase 3.2完了、テストが失敗していることを確認
 
-- [ ] **T006** `quality-checks.yml`を作成（品質チェック統合ワークフロー）
+- [x] **T006** `quality-checks.yml`を作成（品質チェック統合ワークフロー）
   - **ファイル**: `/ollama-coordinator/.github/workflows/quality-checks.yml`
   - **参照**: `contracts/quality-checks.contract.yml`
   - **内容**:
@@ -61,7 +61,7 @@
   - **トリガー**: `pull_request` (main), `push` (feature/**)
   - **コミット**: `feat(workflow): quality-checksワークフロー実装`
 
-- [ ] **T007** `auto-merge.yml`を作成（自動マージワークフロー）
+- [x] **T007** `auto-merge.yml`を作成（自動マージワークフロー）
   - **ファイル**: `/ollama-coordinator/.github/workflows/auto-merge.yml`
   - **参照**: `contracts/auto-merge.contract.yml`, `research.md` のGraphQL API実装
   - **内容**:
@@ -74,7 +74,7 @@
   - **permissions**: `contents: write`, `pull-requests: write`
   - **コミット**: `feat(workflow): auto-mergeワークフロー実装`
 
-- [ ] **T008** テストワークフロー再実行 → 合格確認（GREEN確認）
+- [x] **T008** テストワークフロー再実行 → 合格確認（GREEN確認）
   - **コマンド**: 同じダミーPRでテストワークフローを再実行
   - **確認**: `gh run list --workflow="test-quality-checks"` で成功を確認
   - **リファクタリング**: 必要に応じてワークフローYAMLを最適化（REFACTOR）
