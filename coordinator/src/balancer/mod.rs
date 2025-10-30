@@ -46,8 +46,8 @@ fn compare_average_ms(a: Option<f32>, b: Option<f32>) -> Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
     use ollama_coordinator_common::protocol::RegisterRequest;
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
     fn compare_average_ms_orders_values() {
@@ -415,6 +415,8 @@ impl LoadManager {
 
         let mut total_latency_ms = 0u128;
         let mut latency_samples = 0u64;
+        let mut weighted_average_sum = 0f64;
+        let mut weighted_average_weight = 0f64;
         let mut latest_timestamp: Option<DateTime<Utc>> = None;
         let now = Utc::now();
 
@@ -448,6 +450,11 @@ impl LoadManager {
                             latest_timestamp = Some(timestamp);
                         }
                     }
+                    if let Some(avg) = load_state.effective_average_ms() {
+                        let weight = load_state.total_assigned.max(1) as f64;
+                        weighted_average_sum += avg as f64 * weight;
+                        weighted_average_weight += weight;
+                    }
                 } else if latest_timestamp.is_none() {
                     // フレッシュなメトリクスがない場合でも最も新しい値を保持
                     if let Some(timestamp) = load_state.last_updated() {
@@ -457,7 +464,10 @@ impl LoadManager {
             }
         }
 
-        if latency_samples > 0 {
+        if weighted_average_weight > 0.0 {
+            summary.average_response_time_ms =
+                Some((weighted_average_sum / weighted_average_weight) as f32);
+        } else if latency_samples > 0 {
             summary.average_response_time_ms =
                 Some((total_latency_ms as f64 / latency_samples as f64) as f32);
         }
