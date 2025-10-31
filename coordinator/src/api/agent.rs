@@ -71,6 +71,24 @@ pub async fn metrics_summary(State(state): State<AppState>) -> Json<SystemSummar
     Json(summary)
 }
 
+/// DELETE /api/agents/:id - エージェントを削除
+pub async fn delete_agent(
+    State(state): State<AppState>,
+    axum::extract::Path(agent_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.registry.delete(agent_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /api/agents/:id/disconnect - エージェントを強制オフラインにする
+pub async fn disconnect_agent(
+    State(state): State<AppState>,
+    axum::extract::Path(agent_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.registry.mark_offline(agent_id).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
 /// Axum用のエラーレスポンス型
 #[derive(Debug)]
 pub struct AppError(CoordinatorError);
@@ -377,21 +395,4 @@ mod tests {
         let agent = state.registry.get(agent_id).await.unwrap();
         assert_eq!(agent.status, AgentStatus::Offline);
     }
-}
-/// DELETE /api/agents/:id - エージェントを削除
-pub async fn delete_agent(
-    State(state): State<AppState>,
-    axum::extract::Path(agent_id): axum::extract::Path<uuid::Uuid>,
-) -> Result<StatusCode, AppError> {
-    state.registry.delete(agent_id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// POST /api/agents/:id/disconnect - エージェントを強制オフラインにする
-pub async fn disconnect_agent(
-    State(state): State<AppState>,
-    axum::extract::Path(agent_id): axum::extract::Path<uuid::Uuid>,
-) -> Result<StatusCode, AppError> {
-    state.registry.mark_offline(agent_id).await?;
-    Ok(StatusCode::ACCEPTED)
 }
