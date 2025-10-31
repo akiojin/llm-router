@@ -247,6 +247,19 @@ body {
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
+.agents-table th:first-child,
+.agents-table td:first-child {
+  width: 40px;
+  text-align: center;
+}
+
+.agents-table td:first-child input,
+.agents-table th:first-child input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
 .agents-table td:last-child {
   text-align: right;
 }

@@ -9,6 +9,8 @@ const state = {
   sortKey: "machine",
   sortOrder: "asc",
   lastFocused: null,
+  selection: new Set(),
+  selectAll: false,
   timerId: null,
 };
 
@@ -32,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const statusSelect = document.getElementById("filter-status");
   const queryInput = document.getElementById("filter-query");
   const sortableHeaders = document.querySelectorAll("th[data-sort]");
+  const selectAllCheckbox = document.getElementById("select-all");
   const modal = document.getElementById("agent-modal");
   const modalClose = document.getElementById("agent-modal-close");
   const modalOk = document.getElementById("agent-modal-ok");
@@ -61,9 +64,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const value = event.target.value ?? "";
     window.clearTimeout(queryDebounce);
     queryDebounce = window.setTimeout(() => {
-      state.filterQuery = value.trim().toLowerCase();
-      renderAgents();
-    }, 150);
+    state.filterQuery = value.trim().toLowerCase();
+    renderAgents();
+  }, 150);
+});
+  selectAllCheckbox.addEventListener("change", (event) => {
+    state.selectAll = event.target.checked;
+    if (state.selectAll) {
+      const filtered = state.agents.filter((agent) =>
+        filterAgent(agent, state.filterStatus, state.filterQuery),
+      );
+      state.selection = new Set(filtered.map((agent) => agent.id));
+    } else {
+      state.selection.clear();
+    }
+    renderAgents();
   });
 
   sortableHeaders.forEach((header) => {
@@ -84,6 +99,18 @@ document.addEventListener("DOMContentLoaded", () => {
   updateSortIndicators();
 
   tbody.addEventListener("click", (event) => {
+    const rowCheckbox = event.target.closest("input[data-agent-id]");
+    if (rowCheckbox) {
+      const agentId = rowCheckbox.dataset.agentId;
+      if (rowCheckbox.checked) {
+        state.selection.add(agentId);
+      } else {
+        state.selection.delete(agentId);
+        state.selectAll = false;
+        selectAllCheckbox.checked = false;
+      }
+      return;
+    }
     const button = event.target.closest("button[data-agent-id]");
     if (!button) return;
     const agentId = button.dataset.agentId;
@@ -355,6 +382,14 @@ function buildAgentRow(agent) {
 
   tr.innerHTML = `
     <td>
+      <input
+        type="checkbox"
+        data-agent-id="${agent.id}"
+        ${state.selection.has(agent.id) ? "checked" : ""}
+        aria-label="${escapeHtml(agent.machine_name)} を選択"
+      />
+    </td>
+    <td>
       <div class="cell-title">${escapeHtml(agent.machine_name)}</div>
       <div class="cell-sub">${escapeHtml(agent.ollama_version)}</div>
     </td>
@@ -453,6 +488,7 @@ function updateSortIndicators() {
 function openAgentModal(agent) {
   if (!modalRefs.modal) return;
   state.lastFocused = document.activeElement;
+  state.selection = new Set([agent.id]);
 
   modalRefs.machineName.textContent = agent.machine_name ?? "-";
   modalRefs.ipAddress.textContent = agent.ip_address ?? "-";
@@ -610,3 +646,6 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+  state.selectAll =
+    filtered.length > 0 && filtered.every((agent) => state.selection.has(agent.id));
+  document.getElementById("select-all").checked = state.selectAll;
