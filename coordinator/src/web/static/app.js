@@ -6,6 +6,8 @@ const state = {
   history: [],
   filterStatus: "all",
   filterQuery: "",
+  sortKey: "machine",
+  sortOrder: "asc",
   timerId: null,
 };
 
@@ -15,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const refreshButton = document.getElementById("refresh-button");
   const statusSelect = document.getElementById("filter-status");
   const queryInput = document.getElementById("filter-query");
+  const sortableHeaders = document.querySelectorAll("th[data-sort]");
 
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
   statusSelect.addEventListener("change", (event) => {
@@ -30,6 +33,23 @@ document.addEventListener("DOMContentLoaded", () => {
       renderAgents();
     }, 150);
   });
+
+  sortableHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const key = header.dataset.sort;
+      if (!key) return;
+      if (state.sortKey === key) {
+        state.sortOrder = state.sortOrder === "asc" ? "desc" : "asc";
+      } else {
+        state.sortKey = key;
+        state.sortOrder = "asc";
+      }
+      updateSortIndicators();
+      renderAgents();
+    });
+  });
+
+  updateSortIndicators();
 
   refreshData({ initial: true });
   state.timerId = window.setInterval(refreshData, REFRESH_INTERVAL_MS);
@@ -128,18 +148,22 @@ function renderAgents() {
     return;
   }
 
-  const fragment = document.createDocumentFragment();
-  state.agents
-    .filter((agent) => filterAgent(agent, state.filterStatus, state.filterQuery))
-    .forEach((agent) => fragment.appendChild(buildAgentRow(agent)));
+  const filtered = state.agents.filter((agent) =>
+    filterAgent(agent, state.filterStatus, state.filterQuery),
+  );
 
-  if (!fragment.childNodes.length) {
+  if (!filtered.length) {
     const placeholder = document.createElement("tr");
     placeholder.className = "empty-row";
-    placeholder.innerHTML = `<td colspan="10">表示対象のエージェントはありません</td>`;
+    placeholder.innerHTML = `<td colspan="10">条件に一致するエージェントはありません</td>`;
     tbody.appendChild(placeholder);
     return;
   }
+
+  const sorted = sortAgents(filtered, state.sortKey, state.sortOrder);
+
+  const fragment = document.createDocumentFragment();
+  sorted.forEach((agent) => fragment.appendChild(buildAgentRow(agent)));
 
   tbody.appendChild(fragment);
 }
@@ -318,6 +342,53 @@ function filterAgent(agent, statusFilter, query) {
   const machine = (agent.machine_name ?? "").toLowerCase();
   const ip = (agent.ip_address ?? "").toLowerCase();
   return machine.includes(query) || ip.includes(query);
+}
+
+function sortAgents(agents, key, order) {
+  const multiplier = order === "desc" ? -1 : 1;
+  const safe = [...agents];
+  safe.sort((a, b) => multiplier * compareAgents(a, b, key));
+  return safe;
+}
+
+function compareAgents(a, b, key) {
+  switch (key) {
+    case "machine":
+      return localeCompare(a.machine_name, b.machine_name);
+    case "ip":
+      return localeCompare(a.ip_address, b.ip_address);
+    case "status":
+      return localeCompare(a.status, b.status);
+    case "uptime":
+      return numericCompare(a.uptime_seconds, b.uptime_seconds);
+    case "total":
+      return numericCompare(a.total_requests, b.total_requests);
+    default:
+      return 0;
+  }
+}
+
+function localeCompare(a, b) {
+  return String(a ?? "").localeCompare(String(b ?? ""), "ja");
+}
+
+function numericCompare(a, b) {
+  return Number(a ?? 0) - Number(b ?? 0);
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll("th[data-sort]").forEach((header) => {
+    const indicator = header.querySelector(".sort-indicator");
+    if (!indicator) return;
+
+    if (header.dataset.sort === state.sortKey) {
+      header.classList.add("sortable--active");
+      indicator.textContent = state.sortOrder === "asc" ? "▲" : "▼";
+    } else {
+      header.classList.remove("sortable--active");
+      indicator.textContent = "–";
+    }
+  });
 }
 
 function setConnectionStatus(mode) {

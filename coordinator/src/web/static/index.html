@@ -94,14 +94,29 @@
           <table class="agents-table">
             <thead>
               <tr>
-                <th>名前</th>
-                <th>アドレス</th>
-                <th>状態</th>
-                <th>稼働時間</th>
+                <th data-sort="machine" class="sortable">
+                  <span>名前</span>
+                  <span class="sort-indicator" aria-hidden="true">–</span>
+                </th>
+                <th data-sort="ip" class="sortable">
+                  <span>アドレス</span>
+                  <span class="sort-indicator" aria-hidden="true">–</span>
+                </th>
+                <th data-sort="status" class="sortable">
+                  <span>状態</span>
+                  <span class="sort-indicator" aria-hidden="true">–</span>
+                </th>
+                <th data-sort="uptime" class="sortable">
+                  <span>稼働時間</span>
+                  <span class="sort-indicator" aria-hidden="true">–</span>
+                </th>
                 <th>CPU</th>
                 <th>メモリ</th>
                 <th>処理中</th>
-                <th>累積</th>
+                <th data-sort="total" class="sortable">
+                  <span>累積</span>
+                  <span class="sort-indicator" aria-hidden="true">–</span>
+                </th>
                 <th>平均応答</th>
                 <th>最終確認</th>
               </tr>
