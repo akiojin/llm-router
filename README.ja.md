@@ -12,10 +12,11 @@ Ollama Coordinatorは、複数のマシン上で動作するOllamaインスタ�
 
 - **統一APIエンドポイント**: 複数のOllamaインスタンスを単一のURLで利用可能
 - **自動ロードバランシング**: リクエストを利用可能なエージェントに自動分散
-- **Ollama自動管理**: エージェント起動時にOllamaを自動ダウンロード・起動（ユーザーによる手動インストール不要）
 - **自動障害検知**: オフラインエージェントを自動検知して振り分けから除外
 - **リアルタイム監視**: Webダッシュボードで全エージェントの状態を可視化
 - **エージェント自己登録**: エージェントが自動的にCoordinatorに登録
+- **WebUI管理**: ブラウザベースのダッシュボードでエージェント設定、監視、制御が可能
+- **クロスプラットフォーム対応**: Windows 10+、macOS 12+、Linuxで動作
 
 ## アーキテクチャ
 
@@ -174,9 +175,10 @@ ollama-coordinator/
 
 ### 必要要件
 
-- **Coordinator**: Linux/macOS/Windows、Rust 1.70以降
-- **Agent**: Windows 10以降、Rust 1.70以降
-- **Ollama**: エージェントが自動ダウンロード・起動（手動インストール不要）
+- **Coordinator**: Linux / Windows 10以降 / macOS 12以降、Rust 1.70以降
+- **Agent**: Windows 10以降 / macOS 12以降（CLIベースアプリケーション）、Rust 1.70以降
+- **Ollama**: 事前インストール推奨（自動ダウンロード機能は将来的な拡張）
+- **管理**: ブラウザベースのWebUIダッシュボードでエージェント設定と監視
 
 ### Coordinatorのセットアップ
 
@@ -201,14 +203,14 @@ cargo build --release
 cd agent
 cargo build --release
 
-# Agentを起動（Ollamaは自動ダウンロード・起動）
+# Agentを起動
 COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator-agent
 
 # または環境変数なしで起動（デフォルト: http://localhost:8080）
 ./target/release/ollama-coordinator-agent
 ```
 
-**重要**: Agentを起動すると、Ollamaが未インストールの場合は自動的にダウンロード・インストール・起動されます。ユーザーによる手動インストールは不要です。
+**注意**: Agent起動前に、マシン上でOllamaがインストールされ、起動していることを確認してください。Ollamaは[ollama.ai](https://ollama.ai)からダウンロードできます。
 
 ## 使い方
 
