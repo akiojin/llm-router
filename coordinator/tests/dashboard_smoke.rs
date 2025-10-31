@@ -200,3 +200,44 @@ async fn dashboard_request_history_tracks_activity() {
     assert!(success >= 1, "expected latest success >= 1, got {success}");
     assert!(error >= 1, "expected latest error >= 1, got {error}");
 }
+
+#[tokio::test]
+async fn dashboard_overview_returns_combined_payload() {
+    let (router, registry, load_manager) = build_router();
+
+    let agent_id = registry
+        .register(RegisterRequest {
+            machine_name: "overview-smoke".into(),
+            ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 9)),
+            ollama_version: "0.1.0".into(),
+            ollama_port: 11434,
+        })
+        .await
+        .unwrap()
+        .agent_id;
+
+    load_manager.begin_request(agent_id).await.unwrap();
+    load_manager
+        .finish_request(agent_id, RequestOutcome::Success, Duration::from_millis(90))
+        .await
+        .unwrap();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/dashboard/overview")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let overview: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(overview["agents"].as_array().unwrap().len(), 1);
+    assert_eq!(overview["stats"]["total_agents"], 1);
+    assert_eq!(overview["history"].as_array().unwrap().len(), 60);
+}
