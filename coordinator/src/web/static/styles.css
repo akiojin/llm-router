@@ -387,6 +387,11 @@ body {
   box-shadow: none;
 }
 
+.btn--primary {
+  background: var(--accent);
+  color: #0b1120;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -471,6 +476,27 @@ body {
 .detail-list dd {
   margin: 0;
   font-size: 1rem;
+}
+
+.detail-list input,
+.detail-list textarea {
+  width: 100%;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.detail-list textarea {
+  resize: vertical;
+}
+
+.detail-list input:focus,
+.detail-list textarea:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.35);
+  border-color: rgba(56, 189, 248, 0.35);
 }
 
 .page-footer {

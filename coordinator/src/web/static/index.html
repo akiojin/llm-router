@@ -156,7 +156,20 @@
           <button type="button" id="agent-modal-close" class="modal__close" aria-label="閉じる">×</button>
         </header>
         <section class="modal__content">
-          <dl class="detail-list">
+          <form id="agent-settings-form" class="detail-list">
+            <div>
+              <dt>表示名</dt>
+              <dd><input id="detail-custom-name" name="custom_name" type="text" placeholder="任意の名前" /></dd>
+            </div>
+            <div>
+              <dt>タグ</dt>
+              <dd><input id="detail-tags" name="tags" type="text" placeholder="カンマ区切りで入力" /></dd>
+            </div>
+            <div>
+              <dt>メモ</dt>
+              <dd><textarea id="detail-notes" name="notes" rows="3" placeholder="任意のメモ"></textarea></dd>
+            </div>
+
             <div>
               <dt>マシン名</dt>
               <dd id="detail-machine-name">-</dd>
@@ -189,9 +202,10 @@
               <dt>直近平均応答</dt>
               <dd id="detail-average-response">-</dd>
             </div>
-          </dl>
+          </form>
         </section>
         <footer class="modal__footer">
+          <button type="button" id="agent-modal-save" class="btn btn--primary">保存</button>
           <button type="button" id="agent-modal-ok" class="btn">閉じる</button>
         </footer>
       </div>

@@ -27,6 +27,9 @@ const modalRefs = {
   lastSeen: null,
   totalRequests: null,
   averageResponse: null,
+  customName: null,
+  tags: null,
+  notes: null,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -52,6 +55,9 @@ document.addEventListener("DOMContentLoaded", () => {
     lastSeen: document.getElementById("detail-last-seen"),
     totalRequests: document.getElementById("detail-total-requests"),
     averageResponse: document.getElementById("detail-average-response"),
+    customName: document.getElementById("detail-custom-name"),
+    tags: document.getElementById("detail-tags"),
+    notes: document.getElementById("detail-notes"),
   });
 
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
@@ -498,6 +504,9 @@ function openAgentModal(agent) {
   modalRefs.lastSeen.textContent = formatTimestamp(agent.last_seen);
   modalRefs.totalRequests.textContent = agent.total_requests ?? 0;
   modalRefs.averageResponse.textContent = formatAverage(agent.average_response_time_ms);
+  modalRefs.customName.value = agent.custom_name ?? "";
+  modalRefs.tags.value = Array.isArray(agent.tags) ? agent.tags.join(", ") : "";
+  modalRefs.notes.value = agent.notes ?? "";
 
   modalRefs.modal.classList.remove("hidden");
   modalRefs.modal.setAttribute("tabindex", "-1");
@@ -509,6 +518,38 @@ function closeAgentModal() {
   modalRefs.modal.classList.add("hidden");
   if (state.lastFocused && typeof state.lastFocused.focus === "function") {
     state.lastFocused.focus();
+  }
+}
+
+async function saveAgentSettings(agent) {
+  const tags = modalRefs.tags.value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  const payload = {
+    custom_name: modalRefs.customName.value.trim() || null,
+    tags,
+    notes: modalRefs.notes.value.trim() || null,
+  };
+
+  try {
+    const response = await fetch(`/api/agents/${agent.id}/settings`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error("Failed to save agent settings:", error);
+    showError(`設定の保存に失敗しました: ${error.message}`);
+    throw error;
   }
 }
 
