@@ -247,6 +247,33 @@ body {
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
+.agents-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agents-table th.sortable:hover {
+  color: var(--accent);
+}
+
+.sort-indicator {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  min-width: 10px;
+  display: inline-block;
+}
+
+.sortable--active {
+  color: var(--accent);
+}
+
+.sortable--active .sort-indicator {
+  color: var(--accent);
+}
+
 .cell-title {
   font-weight: 600;
 }
