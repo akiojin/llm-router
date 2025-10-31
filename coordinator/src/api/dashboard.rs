@@ -82,10 +82,50 @@ pub struct DashboardStats {
     pub last_seen_at: Option<DateTime<Utc>>,
 }
 
+/// ダッシュボード概要レスポンス
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DashboardOverview {
+    /// エージェント一覧
+    pub agents: Vec<DashboardAgent>,
+    /// システム統計
+    pub stats: DashboardStats,
+    /// リクエスト履歴
+    pub history: Vec<RequestHistoryPoint>,
+}
+
 /// GET /api/dashboard/agents
 pub async fn get_agents(State(state): State<AppState>) -> Json<Vec<DashboardAgent>> {
-    let agents = state.registry.list().await;
-    let snapshots = state.load_manager.snapshots().await;
+    Json(collect_agents(&state).await)
+}
+
+/// GET /api/dashboard/stats
+pub async fn get_stats(State(state): State<AppState>) -> Json<DashboardStats> {
+    Json(collect_stats(&state).await)
+}
+
+/// GET /api/dashboard/request-history
+pub async fn get_request_history(State(state): State<AppState>) -> Json<Vec<RequestHistoryPoint>> {
+    Json(collect_history(&state).await)
+}
+
+/// GET /api/dashboard/overview
+pub async fn get_overview(State(state): State<AppState>) -> Json<DashboardOverview> {
+    let agents = collect_agents(&state).await;
+    let stats = collect_stats(&state).await;
+    let history = collect_history(&state).await;
+    Json(DashboardOverview {
+        agents,
+        stats,
+        history,
+    })
+}
+
+async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
+    let registry = state.registry.clone();
+    let load_manager = state.load_manager.clone();
+
+    let agents = registry.list().await;
+    let snapshots = load_manager.snapshots().await;
     let snapshot_map = snapshots
         .into_iter()
         .map(|snapshot| (snapshot.agent_id, snapshot))
@@ -93,7 +133,7 @@ pub async fn get_agents(State(state): State<AppState>) -> Json<Vec<DashboardAgen
 
     let now = Utc::now();
 
-    let result = agents
+    agents
         .into_iter()
         .map(|agent| {
             let uptime_seconds = (now - agent.registered_at).num_seconds().max(0);
@@ -146,20 +186,20 @@ pub async fn get_agents(State(state): State<AppState>) -> Json<Vec<DashboardAgen
                 metrics_stale,
             }
         })
-        .collect::<Vec<DashboardAgent>>();
-
-    Json(result)
+        .collect::<Vec<DashboardAgent>>()
 }
 
-/// GET /api/dashboard/stats
-pub async fn get_stats(State(state): State<AppState>) -> Json<DashboardStats> {
-    let summary = state.load_manager.summary().await;
-    let agents = state.registry.list().await;
+async fn collect_stats(state: &AppState) -> DashboardStats {
+    let load_manager = state.load_manager.clone();
+    let registry = state.registry.clone();
+
+    let summary = load_manager.summary().await;
+    let agents = registry.list().await;
 
     let last_registered_at = agents.iter().map(|agent| agent.registered_at).max();
     let last_seen_at = agents.iter().map(|agent| agent.last_seen).max();
 
-    let stats = DashboardStats {
+    DashboardStats {
         total_agents: summary.total_agents,
         online_agents: summary.online_agents,
         offline_agents: summary.offline_agents,
@@ -171,15 +211,11 @@ pub async fn get_stats(State(state): State<AppState>) -> Json<DashboardStats> {
         last_metrics_updated_at: summary.last_metrics_updated_at,
         last_registered_at,
         last_seen_at,
-    };
-
-    Json(stats)
+    }
 }
 
-/// GET /api/dashboard/request-history
-pub async fn get_request_history(State(state): State<AppState>) -> Json<Vec<RequestHistoryPoint>> {
-    let history = state.load_manager.request_history().await;
-    Json(history)
+async fn collect_history(state: &AppState) -> Vec<RequestHistoryPoint> {
+    state.load_manager.request_history().await
 }
 
 #[cfg(test)]
@@ -342,10 +378,43 @@ mod tests {
             .await
             .unwrap();
 
-        let history = get_request_history(State(state)).await.0;
+        let history = get_request_history(State(state.clone())).await.0;
         assert_eq!(history.len() as i64, 60);
         let latest = history.last().unwrap();
         assert!(latest.success >= 1);
         assert!(latest.error >= 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_overview_combines_all_sections() {
+        let state = create_state();
+
+        let agent_id = state
+            .registry
+            .register(RegisterRequest {
+                machine_name: "overview".into(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 21)),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        state.load_manager.begin_request(agent_id).await.unwrap();
+        state
+            .load_manager
+            .finish_request(
+                agent_id,
+                RequestOutcome::Success,
+                Duration::from_millis(180),
+            )
+            .await
+            .unwrap();
+
+        let overview = get_overview(State(state)).await.0;
+        assert_eq!(overview.agents.len(), 1);
+        assert_eq!(overview.stats.total_agents, 1);
+        assert_eq!(overview.history.len(), 60);
     }
 }

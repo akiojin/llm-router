@@ -42,6 +42,7 @@ pub fn create_router(state: AppState) -> Router {
             "/api/dashboard/request-history",
             get(dashboard::get_request_history),
         )
+        .route("/api/dashboard/overview", get(dashboard::get_overview))
         .route("/api/health", post(health::health_check))
         .route("/api/chat", post(proxy::proxy_chat))
         .route("/api/generate", post(proxy::proxy_generate))
@@ -124,5 +125,37 @@ mod tests {
         let agents: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert!(agents.is_array());
         assert_eq!(agents.as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_overview_endpoint_returns_all_sections() {
+        let (state, registry) = test_state();
+        registry
+            .register(RegisterRequest {
+                machine_name: "overview-agent".into(),
+                ip_address: "127.0.0.1".parse().unwrap(),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap();
+
+        let mut router = create_router(state);
+        let response = router
+            .call(
+                Request::builder()
+                    .uri("/api/dashboard/overview")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+        let overview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(overview["agents"].is_array());
+        assert!(overview["stats"].is_object());
+        assert!(overview["history"].is_array());
     }
 }

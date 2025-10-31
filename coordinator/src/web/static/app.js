@@ -258,27 +258,54 @@ async function refreshData({ manual = false } = {}) {
   setConnectionStatus(manual ? "loading" : "updating");
 
   try {
-    const [agents, stats, history] = await Promise.all([
-      fetchJson("/api/dashboard/agents"),
-      fetchJson("/api/dashboard/stats"),
-      fetchJson("/api/dashboard/request-history"),
-    ]);
-
-    state.agents = agents;
-    state.stats = stats;
-    state.history = history;
-
-    renderStats();
-    renderAgents();
-    renderHistory();
-    hideError();
-    setConnectionStatus("online");
-    updateLastRefreshed(new Date());
+    const overview = await fetchOverview();
+    applyOverviewData(overview);
   } catch (error) {
-    console.error("Dashboard refresh failed:", error);
-    showError(`ダッシュボードデータの取得に失敗しました: ${error.message}`);
-    setConnectionStatus("offline");
+    if (error?.status === 404) {
+      try {
+        const legacy = await fetchLegacyOverview();
+        applyOverviewData(legacy);
+        return;
+      } catch (fallbackError) {
+        handleRefreshFailure(fallbackError);
+        return;
+      }
+    }
+    handleRefreshFailure(error);
   }
+}
+
+function applyOverviewData(overview) {
+  state.agents = Array.isArray(overview.agents) ? overview.agents : [];
+  state.stats = overview.stats ?? null;
+  state.history = Array.isArray(overview.history) ? overview.history : [];
+
+  renderStats();
+  renderAgents();
+  renderHistory();
+  hideError();
+  setConnectionStatus("online");
+  updateLastRefreshed(new Date());
+}
+
+async function fetchLegacyOverview() {
+  const [agents, stats, history] = await Promise.all([
+    fetchJson("/api/dashboard/agents"),
+    fetchJson("/api/dashboard/stats"),
+    fetchJson("/api/dashboard/request-history"),
+  ]);
+
+  return { agents, stats, history };
+}
+
+async function fetchOverview() {
+  return fetchJson("/api/dashboard/overview");
+}
+
+function handleRefreshFailure(error) {
+  console.error("Dashboard refresh failed:", error);
+  showError(`ダッシュボードデータの取得に失敗しました: ${error?.message ?? error}`);
+  setConnectionStatus("offline");
 }
 
 async function fetchJson(url) {
@@ -291,7 +318,9 @@ async function fetchJson(url) {
   });
 
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    const error = new Error(`${response.status} ${response.statusText}`);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
