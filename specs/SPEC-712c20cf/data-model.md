@@ -1,316 +1,308 @@
 # データモデル: 管理ダッシュボード
 
-**SPEC-ID**: SPEC-712c20cf
-**日付**: 2025-10-31
+**機能ID**: `SPEC-712c20cf` | **日付**: 2025-10-31
 
 ## 概要
 
-ダッシュボード機能では、既存のエージェント管理モデルを再利用し、統計情報の集約のための新規モデルのみ追加します。
+管理ダッシュボード機能で使用するデータモデル定義。既存の`Agent`型を再利用し、新規に`SystemStats`型を追加する。
 
-## 既存モデル（再利用）
+## エンティティ
 
-### Agent
+### 1. Agent (既存)
 
-エージェント情報を表すモデル（`coordinator/src/registry/mod.rs` に既存）
+**説明**: エージェント情報を表す構造体（既存の`common/src/types.rs`で定義済み）
 
+**フィールド**:
 ```rust
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
-    /// エージェントの一意識別子（UUID）
-    pub id: String,
-
-    /// ホスト名
-    pub hostname: String,
-
-    /// IPアドレス
+    pub id: Uuid,
+    pub machine_name: String,
     pub ip_address: String,
-
-    /// Ollamaのバージョン
     pub ollama_version: String,
-
-    /// エージェントの現在ステータス
     pub status: AgentStatus,
-
-    /// 最後のハートビート受信時刻
-    pub last_heartbeat: DateTime<Utc>,
-
-    /// エージェント登録時刻
     pub registered_at: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
+    pub system_info: SystemInfo,
+}
+
+pub enum AgentStatus {
+    Online,
+    Offline,
+}
+
+pub struct SystemInfo {
+    pub os: String,
+    pub arch: String,
+    pub cpu_cores: u32,
+    pub total_memory: u64,
 }
 ```
 
 **検証ルール**:
-- `id`: 空文字列不可、UUID形式
-- `hostname`: 空文字列不可
-- `ip_address`: 空文字列不可、IPv4またはIPv6形式
-- `ollama_version`: 空文字列不可
+- `machine_name`: 空文字列禁止
+- `ip_address`: 有効なIPv4/IPv6アドレス
+- `ollama_version`: セマンティックバージョニング形式
 
-### AgentStatus
+**ダッシュボードでの使用**:
+- エージェント一覧表示
+- オンライン/オフラインステータス表示
+- 稼働時間計算（`registered_at`から現在時刻までの差分）
 
-エージェントの稼働状態を表す列挙型（`coordinator/src/registry/mod.rs` に既存）
+### 2. SystemStats (新規)
 
+**説明**: システム全体の統計情報
+
+**フィールド**:
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AgentStatus {
-    /// オンライン（ハートビート受信中）
-    Online,
-
-    /// オフライン（タイムアウト）
-    Offline,
-}
-```
-
-**状態遷移**:
-```
-┌─────────┐
-│ Online  │ ←──── 新規登録時
-└────┬────┘
-     │
-     │ ハートビートタイムアウト（60秒）
-     ↓
-┌─────────┐
-│ Offline │
-└────┬────┘
-     │
-     │ ハートビート受信
-     ↓
-┌─────────┐
-│ Online  │
-└─────────┘
-```
-
-## 新規モデル
-
-### DashboardStats
-
-システム全体の統計情報を表すモデル
-
-**ファイル**: `coordinator/src/dashboard/stats.rs`（新規作成）
-
-```rust
-use serde::{Deserialize, Serialize};
-
-/// ダッシュボード統計情報
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct DashboardStats {
-    /// 登録エージェント総数
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemStats {
     pub total_agents: usize,
-
-    /// オンラインエージェント数
     pub online_agents: usize,
-
-    /// オフラインエージェント数
     pub offline_agents: usize,
-
-    /// 総リクエスト処理数（Phase 3で実装、現在はNone）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub total_requests: Option<u64>,
-
-    /// 平均レスポンスタイム（ミリ秒、Phase 3で実装、現在はNone）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avg_response_time_ms: Option<f64>,
-
-    /// エラー総数（Phase 3で実装、現在はNone）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_count: Option<u64>,
+    pub total_requests: u64,      // 将来拡張
+    pub avg_response_time_ms: u32, // 将来拡張
+    pub errors_count: u64,         // 将来拡張
 }
+```
 
-impl DashboardStats {
-    /// エージェントリストから統計情報を生成
-    pub fn from_agents(agents: &[Agent]) -> Self {
-        let total_agents = agents.len();
-        let online_agents = agents
-            .iter()
-            .filter(|a| a.status == AgentStatus::Online)
-            .count();
-        let offline_agents = total_agents - online_agents;
+**検証ルール**:
+- `total_agents >= 0`
+- `online_agents + offline_agents == total_agents`
+- `total_requests >= 0`
+- `avg_response_time_ms >= 0`
 
+**計算方法**:
+- `total_agents`: AgentRegistryの全エージェント数
+- `online_agents`: `status == AgentStatus::Online`の数
+- `offline_agents`: `status == AgentStatus::Offline`の数
+- `total_requests`, `avg_response_time_ms`, `errors_count`: 将来拡張（初期実装では0）
+
+### 3. AgentWithUptime (新規レスポンス型)
+
+**説明**: ダッシュボードAPI用のエージェント情報（稼働時間を含む）
+
+**フィールド**:
+```rust
+#[derive(Debug, Serialize)]
+pub struct AgentWithUptime {
+    pub id: Uuid,
+    pub machine_name: String,
+    pub ip_address: String,
+    pub status: AgentStatus,
+    pub ollama_version: String,
+    pub registered_at: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
+    pub uptime_seconds: i64,
+}
+```
+
+**計算方法**:
+- `uptime_seconds`: `last_seen - registered_at`（秒単位）
+
+**API変換**:
+```rust
+impl From<Agent> for AgentWithUptime {
+    fn from(agent: Agent) -> Self {
+        let uptime_seconds = (agent.last_seen - agent.registered_at).num_seconds();
         Self {
-            total_agents,
-            online_agents,
-            offline_agents,
-            total_requests: None,      // Phase 3で実装
-            avg_response_time_ms: None, // Phase 3で実装
-            error_count: None,          // Phase 3で実装
+            id: agent.id,
+            machine_name: agent.machine_name,
+            ip_address: agent.ip_address,
+            status: agent.status,
+            ollama_version: agent.ollama_version,
+            registered_at: agent.registered_at,
+            last_seen: agent.last_seen,
+            uptime_seconds,
         }
     }
 }
 ```
 
-**検証ルール**:
-- `total_agents = online_agents + offline_agents` （不変条件）
-- `online_agents >= 0`
-- `offline_agents >= 0`
-- `total_requests >= 0` （Someの場合）
-- `avg_response_time_ms >= 0.0` （Someの場合）
-- `error_count >= 0` （Someの場合）
+### 4. AgentMetrics (将来拡張、SPEC-589f2df1依存)
 
-**JSON シリアライゼーション例**:
-```json
-{
-  "total_agents": 5,
-  "online_agents": 3,
-  "offline_agents": 2
-}
-```
+**説明**: エージェントのパフォーマンスメトリクス（将来拡張用）
 
-Phase 3実装後:
-```json
-{
-  "total_agents": 5,
-  "online_agents": 3,
-  "offline_agents": 2,
-  "total_requests": 1523,
-  "avg_response_time_ms": 45.2,
-  "error_count": 3
-}
-```
-
-### AgentMetrics（Phase 3で実装）
-
-エージェントごとのパフォーマンスメトリクス（将来実装）
-
+**フィールド**:
 ```rust
-use serde::{Deserialize, Serialize};
-
-/// エージェントメトリクス（Phase 3で実装）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AgentMetrics {
-    /// エージェントID
-    pub agent_id: String,
-
-    /// CPU使用率（パーセント、0.0-100.0）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_usage: Option<f64>,
-
-    /// メモリ使用率（パーセント、0.0-100.0）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory_usage: Option<f64>,
-
-    /// 処理中のリクエスト数
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_requests: Option<u32>,
-
-    /// 総リクエスト処理数
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub total_requests: Option<u64>,
-
-    /// 平均レスポンスタイム（ミリ秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avg_response_time_ms: Option<f64>,
+    pub agent_id: Uuid,
+    pub cpu_usage: f64,           // %
+    pub memory_usage: f64,        // %
+    pub active_requests: u32,     // 件
+    pub avg_response_time_ms: u32,// ms
+    pub timestamp: DateTime<Utc>,
 }
 ```
 
-**検証ルール**:
-- `cpu_usage`: 0.0 <= x <= 100.0
-- `memory_usage`: 0.0 <= x <= 100.0
-- `active_requests >= 0`
-- `total_requests >= 0`
-- `avg_response_time_ms >= 0.0`
+**注**: SPEC-589f2df1（ロードバランシングシステム）でメトリクス収集機能が実装された後に使用可能。
 
 ## エンティティ関係図
 
 ```
-┌──────────────┐
-│ Agent        │
-├──────────────┤
-│ id           │
-│ hostname     │
-│ ip_address   │
-│ status       │◄──┐
-│ ...          │   │
-└──────────────┘   │
-                   │
-                   │
-┌──────────────────┴──────┐
-│ AgentStatus (enum)      │
-├─────────────────────────┤
-│ • Online                │
-│ • Offline               │
-└─────────────────────────┘
-
-┌──────────────────────────┐
-│ DashboardStats           │
-├──────────────────────────┤
-│ total_agents             │
-│ online_agents            │
-│ offline_agents           │
-│ total_requests (opt)     │
-│ avg_response_time (opt)  │
-│ error_count (opt)        │
-└──────────────────────────┘
-         ▲
-         │ from_agents()
-         │
-┌────────┴────────┐
-│ Vec<Agent>      │
+┌─────────────────┐
+│     Agent       │ (既存)
+│─────────────────│
+│ + id            │
+│ + machine_name  │
+│ + ip_address    │
+│ + status        │
+│ + ...           │
 └─────────────────┘
+         │
+         │ 1:1 変換
+         ▼
+┌──────────────────┐
+│ AgentWithUptime  │ (新規レスポンス型)
+│──────────────────│
+│ + id             │
+│ + machine_name   │
+│ + uptime_seconds │
+│ + ...            │
+└──────────────────┘
+
+┌──────────────────┐
+│   SystemStats    │ (新規)
+│──────────────────│
+│ + total_agents   │
+│ + online_agents  │
+│ + ...            │
+└──────────────────┘
+
+┌──────────────────┐
+│  AgentMetrics    │ (将来拡張)
+│──────────────────│
+│ + agent_id       │
+│ + cpu_usage      │
+│ + ...            │
+└──────────────────┘
+         │
+         │ 1:N
+         │
+         ▼
+┌─────────────────┐
+│     Agent       │
+└─────────────────┘
+```
+
+## 状態遷移
+
+### AgentStatus
+
+```
+    register
+┌──────────────┐
+│   (未登録)    │
+└──────────────┘
+       │
+       │ POST /api/agents/register
+       ▼
+┌──────────────┐
+│    Online    │ ◄──────┐
+└──────────────┘        │
+       │                │ POST /api/agents/:id/heartbeat
+       │ timeout        │
+       ▼                │
+┌──────────────┐        │
+│   Offline    │ ───────┘
+└──────────────┘
 ```
 
 ## データフロー
 
-1. **エージェント一覧取得**:
-   ```
-   AgentRegistry → Vec<Agent> → JSON → Frontend
-   ```
+### エージェント一覧取得
+```
+Client ─GET /api/dashboard/agents→ Coordinator
+                                        │
+                                        │ AgentRegistry.list_all()
+                                        ▼
+                                    Vec<Agent>
+                                        │
+                                        │ map(Agent → AgentWithUptime)
+                                        ▼
+                                  Vec<AgentWithUptime>
+                                        │
+                                        │ JSON
+                                        ▼
+Client ◄──────────────────────────── Response
+```
 
-2. **統計情報取得**:
-   ```
-   AgentRegistry → Vec<Agent> → DashboardStats::from_agents() → JSON → Frontend
-   ```
+### システム統計取得
+```
+Client ─GET /api/dashboard/stats→ Coordinator
+                                       │
+                                       │ AgentRegistry.list_all()
+                                       ▼
+                                   Vec<Agent>
+                                       │
+                                       │ count(), filter()
+                                       ▼
+                                   SystemStats
+                                       │
+                                       │ JSON
+                                       ▼
+Client ◄─────────────────────────── Response
+```
 
-3. **リアルタイム更新**:
-   ```
-   Frontend (5秒ポーリング) → GET /api/dashboard/agents
-                             → GET /api/dashboard/stats
-                             → Chart.js更新
-   ```
+## ファイル配置
 
-## テスト戦略
+```
+common/src/
+├── types.rs              # Agent, AgentStatus, SystemInfo (既存)
+└── dashboard.rs          # AgentWithUptime, SystemStats (新規)
 
-### Unit Tests
+coordinator/src/
+├── api/
+│   └── dashboard.rs      # ダッシュボードAPI実装
+└── registry/
+    └── mod.rs            # AgentRegistry (既存)
+```
 
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
+## テストデータ
 
-    #[test]
-    fn test_dashboard_stats_from_agents() {
-        let agents = vec![
-            Agent { status: AgentStatus::Online, ... },
-            Agent { status: AgentStatus::Online, ... },
-            Agent { status: AgentStatus::Offline, ... },
-        ];
-
-        let stats = DashboardStats::from_agents(&agents);
-
-        assert_eq!(stats.total_agents, 3);
-        assert_eq!(stats.online_agents, 2);
-        assert_eq!(stats.offline_agents, 1);
-        assert!(stats.total_requests.is_none());
-    }
-
-    #[test]
-    fn test_dashboard_stats_invariant() {
-        let stats = DashboardStats {
-            total_agents: 10,
-            online_agents: 7,
-            offline_agents: 3,
-            ...
-        };
-
-        assert_eq!(stats.total_agents, stats.online_agents + stats.offline_agents);
-    }
+### サンプルAgent
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "machine_name": "server-01",
+  "ip_address": "192.168.1.100",
+  "status": "Online",
+  "ollama_version": "0.1.0",
+  "registered_at": "2025-10-31T10:00:00Z",
+  "last_seen": "2025-10-31T12:30:00Z",
+  "system_info": {
+    "os": "Linux",
+    "arch": "x86_64",
+    "cpu_cores": 8,
+    "total_memory": 16777216
+  }
 }
 ```
 
-## まとめ
+### サンプルSystemStats
+```json
+{
+  "total_agents": 10,
+  "online_agents": 8,
+  "offline_agents": 2,
+  "total_requests": 0,
+  "avg_response_time_ms": 0,
+  "errors_count": 0
+}
+```
 
-- **既存モデル**: `Agent`, `AgentStatus` を再利用
-- **新規モデル**: `DashboardStats` のみ（Phase 1）
-- **将来拡張**: `AgentMetrics`（Phase 3）
-- **設計原則**: シンプル、不変条件維持、型安全
+## 将来拡張
+
+### メトリクス可視化（SPEC-589f2df1実装後）
+- `AgentMetrics`の実装
+- メトリクス収集API (`POST /api/agents/:id/metrics`)
+- メトリクス取得API (`GET /api/dashboard/metrics/:agent_id`)
+- リクエスト履歴グラフ用のデータ構造
+
+### リクエスト履歴
+- `RequestHistory`構造体
+- 時系列データ（1分単位のリクエスト数）
+- リングバッファによるメモリ管理（最新1時間分のみ保持）
+
+---
+*このデータモデルは plan.md Phase 1 の成果物です*
