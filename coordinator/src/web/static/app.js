@@ -12,6 +12,8 @@ const state = {
   selection: new Set(),
   selectAll: false,
   currentAgentId: null,
+  currentPage: 1,
+  pageSize: 50,
   timerId: null,
 };
 
@@ -34,6 +36,7 @@ const modalRefs = {
   tags: null,
   notes: null,
 };
+const paginationRefs = { prev: null, next: null, info: null };
 
 document.addEventListener("DOMContentLoaded", () => {
   const refreshButton = document.getElementById("refresh-button");
@@ -50,6 +53,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalDelete = document.getElementById("agent-modal-delete");
   const modalDisconnect = document.getElementById("agent-modal-disconnect");
   const tbody = document.getElementById("agents-body");
+
+  paginationRefs.prev = document.getElementById("page-prev");
+  paginationRefs.next = document.getElementById("page-next");
+  paginationRefs.info = document.getElementById("page-info");
 
   Object.assign(modalRefs, {
     modal,
@@ -74,6 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
   statusSelect.addEventListener("change", (event) => {
     state.filterStatus = event.target.value;
+    state.currentPage = 1;
     renderAgents();
   });
   let queryDebounce = null;
@@ -81,10 +89,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const value = event.target.value ?? "";
     window.clearTimeout(queryDebounce);
     queryDebounce = window.setTimeout(() => {
-    state.filterQuery = value.trim().toLowerCase();
-    renderAgents();
-  }, 150);
-});
+      state.filterQuery = value.trim().toLowerCase();
+      state.currentPage = 1;
+      renderAgents();
+    }, 150);
+  });
   selectAllCheckbox.addEventListener("change", (event) => {
     state.selectAll = event.target.checked;
     if (state.selectAll) {
@@ -114,6 +123,21 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   updateSortIndicators();
+
+  paginationRefs.prev?.addEventListener("click", () => {
+    if (state.currentPage > 1) {
+      state.currentPage -= 1;
+      renderAgents();
+    }
+  });
+
+  paginationRefs.next?.addEventListener("click", () => {
+    const totalPages = calculateTotalPages();
+    if (state.currentPage < totalPages) {
+      state.currentPage += 1;
+      renderAgents();
+    }
+  });
 
   exportJsonButton.addEventListener("click", () => {
     const data = getFilteredAgents();
@@ -314,15 +338,23 @@ function renderAgents() {
     placeholder.className = "empty-row";
     placeholder.innerHTML = `<td colspan="11">条件に一致するエージェントはありません</td>`;
     tbody.appendChild(placeholder);
+    updatePagination(0);
     return;
   }
 
+  state.selectAll = filtered.every((agent) => state.selection.has(agent.id));
+  document.getElementById("select-all").checked = state.selectAll;
+
   const sorted = sortAgents(filtered, state.sortKey, state.sortOrder);
+  const totalPages = calculateTotalPages(sorted.length);
+  state.currentPage = Math.min(Math.max(state.currentPage, 1), totalPages);
+  const pageSlice = paginate(sorted, state.currentPage, state.pageSize);
 
   const fragment = document.createDocumentFragment();
-  sorted.forEach((agent) => fragment.appendChild(buildAgentRow(agent)));
+  pageSlice.forEach((agent) => fragment.appendChild(buildAgentRow(agent)));
 
   tbody.appendChild(fragment);
+  updatePagination(totalPages);
 }
 
 function renderHistory() {
@@ -575,6 +607,28 @@ function updateSortIndicators() {
       indicator.textContent = "–";
     }
   });
+}
+
+function paginate(list, page, pageSize) {
+  const start = (page - 1) * pageSize;
+  return list.slice(start, start + pageSize);
+}
+
+function calculateTotalPages(length) {
+  const total = length ?? getFilteredAgents().length;
+  if (total === 0) return 1;
+  return Math.ceil(total / state.pageSize);
+}
+
+function updatePagination(totalPages) {
+  if (!paginationRefs.info) return;
+  paginationRefs.info.textContent = `${state.currentPage} / ${totalPages || 1}`;
+  if (paginationRefs.prev) {
+    paginationRefs.prev.disabled = state.currentPage <= 1;
+  }
+  if (paginationRefs.next) {
+    paginationRefs.next.disabled = state.currentPage >= (totalPages || 1);
+  }
 }
 
 function openAgentModal(agent) {

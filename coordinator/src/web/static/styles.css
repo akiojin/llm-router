@@ -206,6 +206,18 @@ body {
   gap: 10px;
 }
 
+.pagination {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-subtle);
+}
+
+.pagination__info {
+  font-size: 0.9rem;
+}
+
 .filter-label span {
   font-weight: 600;
 }
