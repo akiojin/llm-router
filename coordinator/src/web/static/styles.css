@@ -201,6 +201,11 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
+.export-group {
+  display: flex;
+  gap: 10px;
+}
+
 .filter-label span {
   font-weight: 600;
 }

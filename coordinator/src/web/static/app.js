@@ -41,6 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const queryInput = document.getElementById("filter-query");
   const sortableHeaders = document.querySelectorAll("th[data-sort]");
   const selectAllCheckbox = document.getElementById("select-all");
+  const exportJsonButton = document.getElementById("export-json");
+  const exportCsvButton = document.getElementById("export-csv");
   const modal = document.getElementById("agent-modal");
   const modalClose = document.getElementById("agent-modal-close");
   const modalOk = document.getElementById("agent-modal-ok");
@@ -112,6 +114,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   updateSortIndicators();
+
+  exportJsonButton.addEventListener("click", () => {
+    const data = getFilteredAgents();
+    downloadJson(data, "agents.json");
+  });
+
+  exportCsvButton.addEventListener("click", () => {
+    const data = getFilteredAgents();
+    downloadCsv(data, "agents.csv");
+  });
 
   tbody.addEventListener("click", (event) => {
     const rowCheckbox = event.target.closest("input[data-agent-id]");
@@ -295,9 +307,7 @@ function renderAgents() {
     return;
   }
 
-  const filtered = state.agents.filter((agent) =>
-    filterAgent(agent, state.filterStatus, state.filterQuery),
-  );
+  const filtered = getFilteredAgents();
 
   if (!filtered.length) {
     const placeholder = document.createElement("tr");
@@ -514,6 +524,12 @@ function filterAgent(agent, statusFilter, query) {
   return machine.includes(query) || ip.includes(query) || custom.includes(query);
 }
 
+function getFilteredAgents() {
+  return state.agents.filter((agent) =>
+    filterAgent(agent, state.filterStatus, state.filterQuery),
+  );
+}
+
 function sortAgents(agents, key, order) {
   const multiplier = order === "desc" ? -1 : 1;
   const safe = [...agents];
@@ -661,6 +677,56 @@ async function disconnectAgent(agentId) {
     showError(`強制切断に失敗しました: ${error.message}`);
     throw error;
   }
+}
+
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  triggerDownload(blob, filename);
+}
+
+function downloadCsv(data, filename) {
+  const headers = [
+    "id",
+    "display_name",
+    "machine_name",
+    "ip_address",
+    "ollama_version",
+    "status",
+    "registered_at",
+    "last_seen",
+    "tags",
+  ];
+
+  const rows = data.map((agent) => {
+    return [
+      agent.id,
+      getDisplayName(agent),
+      agent.machine_name ?? "",
+      agent.ip_address ?? "",
+      agent.ollama_version ?? "",
+      agent.status ?? "",
+      agent.registered_at ?? "",
+      agent.last_seen ?? "",
+      Array.isArray(agent.tags) ? agent.tags.join("|") : "",
+    ]
+      .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+      .join(",");
+  });
+
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  triggerDownload(blob, filename);
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function setConnectionStatus(mode) {
