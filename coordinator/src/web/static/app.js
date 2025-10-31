@@ -1123,6 +1123,3 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-  state.selectAll =
-    filtered.length > 0 && filtered.every((agent) => state.selection.has(agent.id));
-  document.getElementById("select-all").checked = state.selectAll;
