@@ -303,9 +303,7 @@ impl LoadManager {
             RequestOutcome::Error => entry.error_count = entry.error_count.saturating_add(1),
         }
 
-        entry.total_latency_ms = entry
-            .total_latency_ms
-            .saturating_add(duration.as_millis() as u128);
+        entry.total_latency_ms = entry.total_latency_ms.saturating_add(duration.as_millis());
 
         let updated_average = entry.average_latency_ms();
 
@@ -446,7 +444,7 @@ impl LoadManager {
 
                 if is_fresh {
                     if let Some(timestamp) = load_state.last_updated() {
-                        if latest_timestamp.map_or(true, |current| timestamp > current) {
+                        if latest_timestamp.is_none_or(|current| timestamp > current) {
                             latest_timestamp = Some(timestamp);
                         }
                     }

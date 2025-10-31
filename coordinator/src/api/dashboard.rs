@@ -115,7 +115,7 @@ pub async fn get_agents(State(state): State<AppState>) -> Json<Vec<DashboardAgen
                     snapshot.successful_requests,
                     snapshot.failed_requests,
                     snapshot.average_response_time_ms,
-                    snapshot.last_updated.clone(),
+                    snapshot.last_updated,
                     snapshot.is_stale,
                 )
             } else {
