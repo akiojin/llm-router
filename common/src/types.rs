@@ -26,6 +26,15 @@ pub struct Agent {
     pub registered_at: DateTime<Utc>,
     /// 最終ヘルスチェック時刻
     pub last_seen: DateTime<Utc>,
+    /// カスタム表示名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name: Option<String>,
+    /// タグ
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// メモ
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
 }
 
 /// エージェント状態
@@ -106,12 +115,34 @@ mod tests {
             status: AgentStatus::Online,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
+            custom_name: Some("Custom".to_string()),
+            tags: vec!["primary".to_string()],
+            notes: Some("memo".to_string()),
         };
 
         let json = serde_json::to_string(&agent).unwrap();
         let deserialized: Agent = serde_json::from_str(&json).unwrap();
 
         assert_eq!(agent, deserialized);
+    }
+
+    #[test]
+    fn test_agent_defaults() {
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000000",
+            "machine_name": "machine",
+            "ip_address": "127.0.0.1",
+            "ollama_version": "0.1.0",
+            "ollama_port": 11434,
+            "status": "online",
+            "registered_at": "2025-10-31T00:00:00Z",
+            "last_seen": "2025-10-31T00:00:00Z"
+        }"#;
+
+        let agent: Agent = serde_json::from_str(json).unwrap();
+        assert!(agent.custom_name.is_none());
+        assert!(agent.tags.is_empty());
+        assert!(agent.notes.is_none());
     }
 
     #[test]

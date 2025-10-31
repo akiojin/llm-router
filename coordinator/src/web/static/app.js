@@ -11,6 +11,7 @@ const state = {
   lastFocused: null,
   selection: new Set(),
   selectAll: false,
+  currentAgentId: null,
   timerId: null,
 };
 
@@ -19,6 +20,7 @@ const modalRefs = {
   modal: null,
   close: null,
   ok: null,
+  save: null,
   machineName: null,
   ipAddress: null,
   ollamaVersion: null,
@@ -41,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const modal = document.getElementById("agent-modal");
   const modalClose = document.getElementById("agent-modal-close");
   const modalOk = document.getElementById("agent-modal-ok");
+  const modalSave = document.getElementById("agent-modal-save");
   const tbody = document.getElementById("agents-body");
 
   Object.assign(modalRefs, {
@@ -58,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     customName: document.getElementById("detail-custom-name"),
     tags: document.getElementById("detail-tags"),
     notes: document.getElementById("detail-notes"),
+    save: modalSave,
   });
 
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
@@ -129,6 +133,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeModal = () => closeAgentModal();
   modalClose.addEventListener("click", closeModal);
   modalOk.addEventListener("click", closeModal);
+  modalSave.addEventListener("click", async () => {
+    if (!state.currentAgentId) return;
+    const agentId = state.currentAgentId;
+    try {
+      const updated = await saveAgentSettings(agentId);
+      if (updated && updated.id) {
+        state.agents = state.agents.map((agent) =>
+          agent.id === updated.id ? { ...agent, ...updated } : agent,
+        );
+        closeAgentModal();
+        renderAgents();
+      }
+    } catch (error) {
+      console.error("Failed to persist agent settings", error);
+    }
+  });
   modal.addEventListener("click", (event) => {
     if (event.target === modal) {
       closeModal();
@@ -375,6 +395,9 @@ function buildAgentRow(agent) {
     tr.classList.add("agent-offline");
   }
 
+  const displayName = getDisplayName(agent);
+  const secondaryName = agent.custom_name ? agent.machine_name : agent.ollama_version;
+
   const statusLabel =
     agent.status === "online"
       ? '<span class="badge badge--online">Online</span>'
@@ -396,8 +419,8 @@ function buildAgentRow(agent) {
       />
     </td>
     <td>
-      <div class="cell-title">${escapeHtml(agent.machine_name)}</div>
-      <div class="cell-sub">${escapeHtml(agent.ollama_version)}</div>
+      <div class="cell-title">${escapeHtml(displayName)}</div>
+      <div class="cell-sub">${escapeHtml(secondaryName ?? "-")}</div>
     </td>
     <td>
       <div class="cell-title">${escapeHtml(agent.ip_address)}</div>
@@ -427,6 +450,14 @@ function buildAgentRow(agent) {
   return tr;
 }
 
+function getDisplayName(agent) {
+  const custom = typeof agent.custom_name === "string" ? agent.custom_name.trim() : "";
+  if (custom) {
+    return custom;
+  }
+  return agent.machine_name ?? "-";
+}
+
 function filterAgent(agent, statusFilter, query) {
   if (statusFilter === "online" && agent.status !== "online") {
     return false;
@@ -441,7 +472,8 @@ function filterAgent(agent, statusFilter, query) {
 
   const machine = (agent.machine_name ?? "").toLowerCase();
   const ip = (agent.ip_address ?? "").toLowerCase();
-  return machine.includes(query) || ip.includes(query);
+  const custom = (agent.custom_name ?? "").toLowerCase();
+  return machine.includes(query) || ip.includes(query) || custom.includes(query);
 }
 
 function sortAgents(agents, key, order) {
@@ -454,7 +486,7 @@ function sortAgents(agents, key, order) {
 function compareAgents(a, b, key) {
   switch (key) {
     case "machine":
-      return localeCompare(a.machine_name, b.machine_name);
+      return localeCompare(getDisplayName(a), getDisplayName(b));
     case "ip":
       return localeCompare(a.ip_address, b.ip_address);
     case "status":
@@ -495,6 +527,7 @@ function openAgentModal(agent) {
   if (!modalRefs.modal) return;
   state.lastFocused = document.activeElement;
   state.selection = new Set([agent.id]);
+  state.currentAgentId = agent.id;
 
   modalRefs.machineName.textContent = agent.machine_name ?? "-";
   modalRefs.ipAddress.textContent = agent.ip_address ?? "-";
@@ -519,9 +552,10 @@ function closeAgentModal() {
   if (state.lastFocused && typeof state.lastFocused.focus === "function") {
     state.lastFocused.focus();
   }
+  state.currentAgentId = null;
 }
 
-async function saveAgentSettings(agent) {
+async function saveAgentSettings(agentId) {
   const tags = modalRefs.tags.value
     .split(",")
     .map((tag) => tag.trim())
@@ -534,7 +568,7 @@ async function saveAgentSettings(agent) {
   };
 
   try {
-    const response = await fetch(`/api/agents/${agent.id}/settings`, {
+    const response = await fetch(`/api/agents/${agentId}/settings`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -546,6 +580,8 @@ async function saveAgentSettings(agent) {
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
+
+    return response.json();
   } catch (error) {
     console.error("Failed to save agent settings:", error);
     showError(`設定の保存に失敗しました: ${error.message}`);

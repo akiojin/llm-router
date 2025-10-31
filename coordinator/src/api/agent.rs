@@ -2,6 +2,7 @@
 
 use crate::{
     balancer::{AgentLoadSnapshot, SystemSummary},
+    registry::AgentSettingsUpdate,
     AppState,
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
@@ -10,6 +11,7 @@ use ollama_coordinator_common::{
     protocol::{RegisterRequest, RegisterResponse},
     types::Agent,
 };
+use serde::Deserialize;
 
 /// POST /api/agents - エージェント登録
 pub async fn register_agent(
@@ -26,19 +28,35 @@ pub async fn list_agents(State(state): State<AppState>) -> Json<Vec<Agent>> {
     Json(agents)
 }
 
-/// PUT /api/agents/:id/settings - エージェント設定更新（ダミー）
+/// PUT /api/agents/:id/settings - エージェント設定更新
 pub async fn update_agent_settings(
     State(state): State<AppState>,
     axum::extract::Path(agent_id): axum::extract::Path<uuid::Uuid>,
-    Json(_payload): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    // TODO: 実装時にエージェントモデルへフィールド追加＆永続化
-    state.registry.get(agent_id).await?;
+    Json(payload): Json<UpdateAgentSettingsPayload>,
+) -> Result<Json<Agent>, AppError> {
+    let update = AgentSettingsUpdate {
+        custom_name: payload.custom_name,
+        tags: payload.tags,
+        notes: payload.notes,
+    };
 
-    Ok(Json(serde_json::json!({
-        "agent_id": agent_id,
-        "status": "accepted",
-    })))
+    let agent = state.registry.update_settings(agent_id, update).await?;
+
+    Ok(Json(agent))
+}
+
+/// エージェント設定更新リクエスト
+#[derive(Debug, Deserialize)]
+pub struct UpdateAgentSettingsPayload {
+    /// 表示名（nullでリセット）
+    #[serde(default)]
+    pub custom_name: Option<Option<String>>,
+    /// タグ一覧
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    /// メモ（nullでリセット）
+    #[serde(default)]
+    pub notes: Option<Option<String>>,
 }
 
 /// GET /api/agents/metrics - エージェントメトリクス取得
@@ -268,5 +286,43 @@ mod tests {
         let avg = summary.average_response_time_ms.unwrap();
         assert!((avg - 160.0).abs() < 0.1);
         assert!(summary.last_metrics_updated_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_update_agent_settings_endpoint() {
+        let state = create_test_state();
+
+        let agent_id = register_agent(
+            State(state.clone()),
+            Json(RegisterRequest {
+                machine_name: "agent-settings".into(),
+                ip_address: "10.0.0.5".parse().unwrap(),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            }),
+        )
+        .await
+        .unwrap()
+        .0
+        .agent_id;
+
+        let payload = UpdateAgentSettingsPayload {
+            custom_name: Some(Some("Primary".into())),
+            tags: Some(vec!["dallas".into(), "gpu".into()]),
+            notes: Some(Some("Keep online".into())),
+        };
+
+        let agent = update_agent_settings(
+            State(state.clone()),
+            axum::extract::Path(agent_id),
+            Json(payload),
+        )
+        .await
+        .unwrap()
+        .0;
+
+        assert_eq!(agent.custom_name.as_deref(), Some("Primary"));
+        assert_eq!(agent.tags, vec!["dallas", "gpu"]);
+        assert_eq!(agent.notes.as_deref(), Some("Keep online"));
     }
 }

@@ -228,6 +228,9 @@ mod tests {
             status: AgentStatus::Online,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
+            custom_name: None,
+            tags: Vec::new(),
+            notes: None,
         };
 
         // 保存
@@ -261,6 +264,9 @@ mod tests {
             status: AgentStatus::Online,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
+            custom_name: None,
+            tags: Vec::new(),
+            notes: None,
         };
 
         save_agent(&agent).await.unwrap();
@@ -292,6 +298,9 @@ mod tests {
             status: AgentStatus::Online,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
+            custom_name: None,
+            tags: Vec::new(),
+            notes: None,
         };
 
         save_agent(&agent1).await.unwrap();
@@ -306,6 +315,9 @@ mod tests {
             status: AgentStatus::Offline,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
+            custom_name: Some("Updated".into()),
+            tags: vec!["primary".into()],
+            notes: None,
         };
 
         save_agent(&agent2).await.unwrap();

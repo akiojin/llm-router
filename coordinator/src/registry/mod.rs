@@ -104,6 +104,9 @@ impl AgentRegistry {
                 status: AgentStatus::Online,
                 registered_at: now,
                 last_seen: now,
+                custom_name: None,
+                tags: Vec::new(),
+                notes: None,
             };
             agents.insert(agent_id, agent.clone());
             (agent_id, RegisterStatus::Registered, agent)
@@ -164,6 +167,67 @@ impl AgentRegistry {
         // ロック解放後にストレージ保存
         self.save_to_storage(&agent_to_save).await?;
         Ok(())
+    }
+}
+
+/// エージェント設定更新用ペイロード
+pub struct AgentSettingsUpdate {
+    /// カスタム表示名（Noneで未指定, Some(None)でリセット）
+    pub custom_name: Option<Option<String>>,
+    /// タグ配列
+    pub tags: Option<Vec<String>>,
+    /// メモ（Noneで未指定, Some(None)でリセット）
+    pub notes: Option<Option<String>>,
+}
+
+impl AgentRegistry {
+    /// エージェント設定を更新
+    pub async fn update_settings(
+        &self,
+        agent_id: Uuid,
+        settings: AgentSettingsUpdate,
+    ) -> CoordinatorResult<Agent> {
+        let updated_agent = {
+            let mut agents = self.agents.write().await;
+            let agent = agents
+                .get_mut(&agent_id)
+                .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
+
+            if let Some(custom_name) = settings.custom_name {
+                agent.custom_name = custom_name.and_then(|name| {
+                    let trimmed = name.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                });
+            }
+
+            if let Some(tags) = settings.tags {
+                agent.tags = tags
+                    .into_iter()
+                    .map(|tag| tag.trim().to_string())
+                    .filter(|tag| !tag.is_empty())
+                    .collect();
+            }
+
+            if let Some(notes) = settings.notes {
+                agent.notes = notes.and_then(|note| {
+                    let trimmed = note.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                });
+            }
+
+            agent.clone()
+        };
+
+        self.save_to_storage(&updated_agent).await?;
+        Ok(updated_agent)
     }
 }
 
@@ -253,5 +317,34 @@ mod tests {
 
         let agent = registry.get(response.agent_id).await.unwrap();
         assert_eq!(agent.status, AgentStatus::Offline);
+    }
+
+    #[tokio::test]
+    async fn test_update_settings() {
+        let registry = AgentRegistry::new();
+        let req = RegisterRequest {
+            machine_name: "settings-machine".to_string(),
+            ip_address: "192.168.1.150".parse().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 11434,
+        };
+
+        let agent_id = registry.register(req).await.unwrap().agent_id;
+
+        let updated = registry
+            .update_settings(
+                agent_id,
+                AgentSettingsUpdate {
+                    custom_name: Some(Some("Display".into())),
+                    tags: Some(vec!["primary".into(), "gpu".into()]),
+                    notes: Some(Some("Important".into())),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.custom_name.as_deref(), Some("Display"));
+        assert_eq!(updated.tags, vec!["primary", "gpu"]);
+        assert_eq!(updated.notes.as_deref(), Some("Important"));
     }
 }
