@@ -110,6 +110,7 @@ mod tests {
         balancer::{LoadManager, RequestOutcome},
         registry::AgentRegistry,
     };
+    use ollama_coordinator_common::types::AgentStatus;
     use std::net::IpAddr;
     use std::time::Duration;
 
@@ -350,6 +351,31 @@ mod tests {
         let agents = list_agents(State(state)).await.0;
         assert!(agents.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_disconnect_agent_endpoint_marks_offline() {
+        let state = create_test_state();
+        let agent_id = register_agent(
+            State(state.clone()),
+            Json(RegisterRequest {
+                machine_name: "disconnect-agent".into(),
+                ip_address: "10.0.0.8".parse().unwrap(),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            }),
+        )
+        .await
+        .unwrap()
+        .0
+        .agent_id;
+
+        let status =
+            disconnect_agent(State(state.clone()), axum::extract::Path(agent_id)).await.unwrap();
+        assert_eq!(status, StatusCode::ACCEPTED);
+
+        let agent = state.registry.get(agent_id).await.unwrap();
+        assert_eq!(agent.status, AgentStatus::Offline);
+    }
 }
 /// DELETE /api/agents/:id - エージェントを削除
 pub async fn delete_agent(
@@ -358,4 +384,13 @@ pub async fn delete_agent(
 ) -> Result<StatusCode, AppError> {
     state.registry.delete(agent_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /api/agents/:id/disconnect - エージェントを強制オフラインにする
+pub async fn disconnect_agent(
+    State(state): State<AppState>,
+    axum::extract::Path(agent_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.registry.mark_offline(agent_id).await?;
+    Ok(StatusCode::ACCEPTED)
 }

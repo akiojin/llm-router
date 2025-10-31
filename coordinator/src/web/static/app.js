@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalOk = document.getElementById("agent-modal-ok");
   const modalSave = document.getElementById("agent-modal-save");
   const modalDelete = document.getElementById("agent-modal-delete");
+  const modalDisconnect = document.getElementById("agent-modal-disconnect");
   const tbody = document.getElementById("agents-body");
 
   Object.assign(modalRefs, {
@@ -65,6 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
     notes: document.getElementById("detail-notes"),
     save: modalSave,
     delete: modalDelete,
+    disconnect: modalDisconnect,
   });
 
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
@@ -169,6 +171,20 @@ document.addEventListener("DOMContentLoaded", () => {
       renderAgents();
     } catch (error) {
       console.error("Failed to delete agent", error);
+    }
+  });
+  modalDisconnect.addEventListener("click", async () => {
+    if (!state.currentAgentId) return;
+    const agentId = state.currentAgentId;
+    try {
+      await disconnectAgent(agentId);
+      const agent = state.agents.find((item) => item.id === agentId);
+      if (agent) {
+        agent.status = "offline";
+      }
+      renderAgents();
+    } catch (error) {
+      console.error("Failed to disconnect agent", error);
     }
   });
   modal.addEventListener("click", (event) => {
@@ -625,6 +641,24 @@ async function deleteAgent(agentId) {
     }
   } catch (error) {
     showError(`エージェントの削除に失敗しました: ${error.message}`);
+    throw error;
+  }
+}
+
+async function disconnectAgent(agentId) {
+  try {
+    const response = await fetch(`/api/agents/${agentId}/disconnect`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    showError(`強制切断に失敗しました: ${error.message}`);
     throw error;
   }
 }

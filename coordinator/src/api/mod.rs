@@ -27,6 +27,10 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/api/agents/:agent_id", delete(agent::delete_agent))
         .route(
+            "/api/agents/:agent_id/disconnect",
+            post(agent::disconnect_agent),
+        )
+        .route(
             "/api/agents/:agent_id/settings",
             put(agent::update_agent_settings),
         )
