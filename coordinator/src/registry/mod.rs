@@ -17,6 +17,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct AgentRegistry {
     agents: Arc<RwLock<HashMap<Uuid, Agent>>>,
+    storage_enabled: bool,
 }
 
 impl AgentRegistry {
@@ -24,6 +25,7 @@ impl AgentRegistry {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            storage_enabled: false,
         }
     }
 
@@ -34,6 +36,7 @@ impl AgentRegistry {
 
         let registry = Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            storage_enabled: true,
         };
 
         // 起動時にストレージからエージェント情報を読み込み
@@ -44,6 +47,10 @@ impl AgentRegistry {
 
     /// ストレージからエージェント情報を読み込み
     async fn load_from_storage(&self) -> CoordinatorResult<()> {
+        if !self.storage_enabled {
+            return Ok(());
+        }
+
         let loaded_agents = crate::db::load_agents().await?;
         let mut agents = self.agents.write().await;
 
@@ -58,6 +65,10 @@ impl AgentRegistry {
 
     /// エージェントをストレージに保存
     async fn save_to_storage(&self, agent: &Agent) -> CoordinatorResult<()> {
+        if !self.storage_enabled {
+            return Ok(());
+        }
+
         crate::db::save_agent(agent).await
     }
 
@@ -117,7 +128,9 @@ impl AgentRegistry {
     /// 全エージェントを取得
     pub async fn list(&self) -> Vec<Agent> {
         let agents = self.agents.read().await;
-        agents.values().cloned().collect()
+        let mut list: Vec<Agent> = agents.values().cloned().collect();
+        list.sort_by(|a, b| a.registered_at.cmp(&b.registered_at));
+        list
     }
 
     /// エージェントの最終確認時刻を更新

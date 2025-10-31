@@ -2,6 +2,7 @@
 //!
 //! JSONファイルベースのデータ永続化
 
+use chrono::Utc;
 use ollama_coordinator_common::{
     error::{CoordinatorError, CoordinatorResult},
     types::Agent,
@@ -104,10 +105,17 @@ pub async fn load_agents() -> CoordinatorResult<Vec<Agent>> {
         return Ok(Vec::new());
     }
 
-    let agents: Vec<Agent> = serde_json::from_str(&content)
-        .map_err(|e| CoordinatorError::Database(format!("Failed to parse agents: {}", e)))?;
-
-    Ok(agents)
+    match serde_json::from_str::<Vec<Agent>>(&content) {
+        Ok(agents) => Ok(agents),
+        Err(err) => {
+            println!(
+                "Detected corrupted agents.json, attempting recovery: {}",
+                err
+            );
+            recover_corrupted_agents_file(&data_file).await?;
+            Ok(Vec::new())
+        }
+    }
 }
 
 /// エージェントを削除
@@ -127,6 +135,45 @@ pub async fn delete_agent(agent_id: Uuid) -> CoordinatorResult<()> {
     fs::write(&data_file, json)
         .await
         .map_err(|e| CoordinatorError::Database(format!("Failed to write data file: {}", e)))?;
+
+    Ok(())
+}
+
+/// 破損した agents.json をバックアップして空のファイルに復旧
+async fn recover_corrupted_agents_file(data_file: &PathBuf) -> CoordinatorResult<()> {
+    if !data_file.exists() {
+        // ファイルが存在しない場合は新規作成のみ行う
+        fs::write(data_file, "[]").await.map_err(|e| {
+            CoordinatorError::Database(format!("Failed to initialize data file: {}", e))
+        })?;
+        return Ok(());
+    }
+
+    let backup_name = format!(
+        "agents.json.corrupted-{}",
+        Utc::now().format("%Y%m%d%H%M%S")
+    );
+    let parent_dir = data_file
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let backup_path = parent_dir.join(backup_name);
+
+    if let Err(rename_err) = fs::rename(data_file, &backup_path).await {
+        println!(
+            "Failed to move corrupted agents.json: {}. Attempting to overwrite with empty file.",
+            rename_err
+        );
+    } else {
+        println!(
+            "Moved corrupted agents.json to backup: {}",
+            backup_path.display()
+        );
+    }
+
+    fs::write(data_file, "[]")
+        .await
+        .map_err(|e| CoordinatorError::Database(format!("Failed to reset data file: {}", e)))?;
 
     Ok(())
 }
@@ -268,6 +315,38 @@ mod tests {
         assert_eq!(loaded_agents.len(), 1);
         assert_eq!(loaded_agents[0].machine_name, "test-machine-2");
         assert_eq!(loaded_agents[0].ollama_port, 11435);
+
+        std::env::remove_var("OLLAMA_COORDINATOR_DATA_DIR");
+    }
+
+    #[tokio::test]
+    async fn test_load_agents_recovers_from_corrupted_file() {
+        let _lock = TEST_LOCK.lock().await;
+
+        let _guard = tempdir().unwrap();
+        std::env::set_var("OLLAMA_COORDINATOR_DATA_DIR", _guard.path());
+
+        init_storage().await.unwrap();
+
+        let data_path = get_data_file_path().unwrap();
+        fs::write(&data_path, b"{invalid json").await.unwrap();
+
+        let agents = load_agents().await.unwrap();
+        assert!(agents.is_empty());
+
+        let entries = std::fs::read_dir(_guard.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+
+        assert!(
+            entries
+                .iter()
+                .any(|name| name.starts_with("agents.json.corrupted-")),
+            "Expected corrupted backup file to be created, found: {:?}",
+            entries
+        );
 
         std::env::remove_var("OLLAMA_COORDINATOR_DATA_DIR");
     }

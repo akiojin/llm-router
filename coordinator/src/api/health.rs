@@ -12,7 +12,17 @@ pub async fn health_check(
     // エージェントの最終確認時刻を更新
     state.registry.update_last_seen(req.agent_id).await?;
 
-    // TODO: T044でヘルスメトリクスをデータベースに保存
+    // 最新メトリクスをロードマネージャーに記録
+    state
+        .load_manager
+        .record_metrics(
+            req.agent_id,
+            req.cpu_usage,
+            req.memory_usage,
+            req.active_requests,
+            req.average_response_time_ms,
+        )
+        .await?;
 
     Ok(Json(()))
 }
@@ -20,14 +30,17 @@ pub async fn health_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::AgentRegistry;
+    use crate::{balancer::LoadManager, registry::AgentRegistry};
     use ollama_coordinator_common::protocol::RegisterRequest;
     use std::net::IpAddr;
     use uuid::Uuid;
 
     fn create_test_state() -> AppState {
+        let registry = AgentRegistry::new();
+        let load_manager = LoadManager::new(registry.clone());
         AppState {
-            registry: AgentRegistry::new(),
+            registry,
+            load_manager,
         }
     }
 
@@ -50,6 +63,7 @@ mod tests {
             cpu_usage: 45.5,
             memory_usage: 60.2,
             active_requests: 3,
+            average_response_time_ms: Some(110.0),
         };
 
         let result = health_check(State(state.clone()), Json(health_req)).await;
@@ -76,6 +90,7 @@ mod tests {
             cpu_usage: 45.5,
             memory_usage: 60.2,
             active_requests: 3,
+            average_response_time_ms: None,
         };
 
         let result = health_check(State(state), Json(health_req)).await;

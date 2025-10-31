@@ -29,6 +29,8 @@ services:
       - FORCE_AUTO_BACKGROUND_TASKS=1
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "${COORDINATOR_PORT:-8080}:8080"
     stdin_open: true
     tty: true
     working_dir: /ollama-coordinator

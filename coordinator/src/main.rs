@@ -1,6 +1,6 @@
 //! Ollama Coordinator Server Entry Point
 
-use ollama_coordinator_coordinator::{api, health, registry, AppState};
+use ollama_coordinator_coordinator::{api, balancer, health, registry, AppState};
 
 #[tokio::main]
 async fn main() {
@@ -13,6 +13,9 @@ async fn main() {
     let registry = registry::AgentRegistry::with_storage()
         .await
         .expect("Failed to initialize agent registry");
+
+    // ロードマネージャー初期化
+    let load_manager = balancer::LoadManager::new(registry.clone());
 
     println!("Storage initialized successfully");
 
@@ -35,7 +38,10 @@ async fn main() {
     health_monitor.start();
 
     // アプリケーション状態を初期化
-    let state = AppState { registry };
+    let state = AppState {
+        registry,
+        load_manager,
+    };
 
     // ルーター作成
     let app = api::create_router(state);

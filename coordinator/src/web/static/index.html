@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ollama Coordinator ダッシュボード</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="title-group">
+        <h1>Ollama Coordinator ダッシュボード</h1>
+        <p class="subtitle">エージェントの稼働状況とシステム統計をリアルタイム監視</p>
+      </div>
+      <div class="header-controls">
+        <span id="connection-status" class="status-pill status-pill--connecting">
+          接続状態: 更新中…
+        </span>
+        <span id="last-refreshed" class="last-refreshed">最終更新: -</span>
+        <button id="refresh-button" class="refresh-button" type="button">
+          手動更新
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="banner hidden" id="error-banner"></section>
+
+      <section class="stats-grid">
+        <article class="stat-card">
+          <h2>登録エージェント</h2>
+          <p class="stat-value" data-stat="total-agents">-</p>
+          <p class="stat-caption">
+            オンライン <span data-stat="online-agents">-</span> / オフライン
+            <span data-stat="offline-agents">-</span>
+          </p>
+        </article>
+        <article class="stat-card">
+          <h2>リクエスト総数</h2>
+          <p class="stat-value" data-stat="total-requests">-</p>
+          <p class="stat-caption">
+            成功 <span data-stat="successful-requests">-</span> / 失敗
+            <span data-stat="failed-requests">-</span>
+          </p>
+        </article>
+        <article class="stat-card">
+          <h2>平均レスポンス</h2>
+          <p class="stat-value" data-stat="average-response-time-ms">-</p>
+          <p class="stat-caption">
+            メトリクス更新: <span data-stat="last-metrics-updated-at">-</span>
+          </p>
+        </article>
+        <article class="stat-card">
+          <h2>アクティブリクエスト</h2>
+          <p class="stat-value" data-stat="total-active-requests">-</p>
+          <p class="stat-caption">
+            最終登録: <span data-stat="last-registered-at">-</span><br />
+            最終確認: <span data-stat="last-seen-at">-</span>
+          </p>
+        </article>
+      </section>
+
+      <section class="agents-section">
+        <header class="section-header">
+          <h2>エージェント一覧</h2>
+          <div class="section-tools">
+            <label class="filter-label">
+              <input type="checkbox" id="filter-offline" />
+              オフラインを非表示
+            </label>
+          </div>
+        </header>
+
+        <div class="table-wrapper">
+          <table class="agents-table">
+            <thead>
+              <tr>
+                <th>名前</th>
+                <th>アドレス</th>
+                <th>状態</th>
+                <th>稼働時間</th>
+                <th>CPU</th>
+                <th>メモリ</th>
+                <th>処理中</th>
+                <th>累積</th>
+                <th>平均応答</th>
+                <th>最終確認</th>
+              </tr>
+            </thead>
+            <tbody id="agents-body">
+              <tr class="empty-row">
+                <td colspan="10">データ取得中…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="charts-section">
+        <header class="section-header">
+          <h2>リクエスト履歴</h2>
+          <p class="section-caption">次フェーズでのチャート実装予定（placeholder）</p>
+        </header>
+        <div class="chart-placeholder">
+          <span class="placeholder-text">可視化準備中…</span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <small>&copy; 2025 Ollama Coordinator</small>
+    </footer>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

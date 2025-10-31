@@ -1,0 +1,301 @@
+//! ダッシュボードAPIハンドラー
+//!
+//! `/api/dashboard/*` 系のエンドポイントを提供し、エージェントの状態および
+//! システム統計を返却する。
+
+use crate::{balancer::AgentLoadSnapshot, AppState};
+use axum::{extract::State, Json};
+use chrono::{DateTime, Utc};
+use ollama_coordinator_common::types::AgentStatus;
+use serde::Serialize;
+use std::collections::HashMap;
+use uuid::Uuid;
+
+/// エージェントのダッシュボード表示用サマリー
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DashboardAgent {
+    /// エージェントID
+    pub id: Uuid,
+    /// マシン名
+    pub machine_name: String,
+    /// IPアドレス（文字列化）
+    pub ip_address: String,
+    /// Ollama バージョン
+    pub ollama_version: String,
+    /// Ollama ポート
+    pub ollama_port: u16,
+    /// ステータス
+    pub status: AgentStatus,
+    /// 登録日時
+    pub registered_at: DateTime<Utc>,
+    /// 最終確認時刻
+    pub last_seen: DateTime<Utc>,
+    /// 稼働秒数
+    pub uptime_seconds: i64,
+    /// CPU使用率
+    pub cpu_usage: Option<f32>,
+    /// メモリ使用率
+    pub memory_usage: Option<f32>,
+    /// 処理中リクエスト数
+    pub active_requests: u32,
+    /// 累積リクエスト数
+    pub total_requests: u64,
+    /// 成功リクエスト数
+    pub successful_requests: u64,
+    /// 失敗リクエスト数
+    pub failed_requests: u64,
+    /// 平均レスポンスタイム
+    pub average_response_time_ms: Option<f32>,
+    /// メトリクス最終更新時刻
+    pub metrics_last_updated_at: Option<DateTime<Utc>>,
+    /// メトリクスが古いか
+    pub metrics_stale: bool,
+}
+
+/// システム統計レスポンス
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DashboardStats {
+    /// 登録エージェント総数
+    pub total_agents: usize,
+    /// オンラインエージェント数
+    pub online_agents: usize,
+    /// オフラインエージェント数
+    pub offline_agents: usize,
+    /// 累積リクエスト数
+    pub total_requests: u64,
+    /// 成功リクエスト数
+    pub successful_requests: u64,
+    /// 失敗リクエスト数
+    pub failed_requests: u64,
+    /// 処理中リクエスト数
+    pub total_active_requests: u32,
+    /// 平均レスポンスタイム
+    pub average_response_time_ms: Option<f32>,
+    /// 最新メトリクス更新時刻
+    pub last_metrics_updated_at: Option<DateTime<Utc>>,
+    /// 最新登録日時
+    pub last_registered_at: Option<DateTime<Utc>>,
+    /// 最新ヘルスチェック時刻
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+/// GET /api/dashboard/agents
+pub async fn get_agents(State(state): State<AppState>) -> Json<Vec<DashboardAgent>> {
+    let agents = state.registry.list().await;
+    let snapshots = state.load_manager.snapshots().await;
+    let snapshot_map = snapshots
+        .into_iter()
+        .map(|snapshot| (snapshot.agent_id, snapshot))
+        .collect::<HashMap<Uuid, AgentLoadSnapshot>>();
+
+    let now = Utc::now();
+
+    let result = agents
+        .into_iter()
+        .map(|agent| {
+            let uptime_seconds = (now - agent.registered_at).num_seconds().max(0);
+
+            let snapshot = snapshot_map.get(&agent.id);
+            let (
+                cpu_usage,
+                memory_usage,
+                active_requests,
+                total_requests,
+                successful_requests,
+                failed_requests,
+                average_response_time_ms,
+                metrics_last_updated_at,
+                metrics_stale,
+            ) = if let Some(snapshot) = snapshot {
+                (
+                    snapshot.cpu_usage,
+                    snapshot.memory_usage,
+                    snapshot.active_requests,
+                    snapshot.total_requests,
+                    snapshot.successful_requests,
+                    snapshot.failed_requests,
+                    snapshot.average_response_time_ms,
+                    snapshot.last_updated,
+                    snapshot.is_stale,
+                )
+            } else {
+                (None, None, 0, 0, 0, 0, None, None, true)
+            };
+
+            DashboardAgent {
+                id: agent.id,
+                machine_name: agent.machine_name,
+                ip_address: agent.ip_address.to_string(),
+                ollama_version: agent.ollama_version,
+                ollama_port: agent.ollama_port,
+                status: agent.status,
+                registered_at: agent.registered_at,
+                last_seen: agent.last_seen,
+                uptime_seconds,
+                cpu_usage,
+                memory_usage,
+                active_requests,
+                total_requests,
+                successful_requests,
+                failed_requests,
+                average_response_time_ms,
+                metrics_last_updated_at,
+                metrics_stale,
+            }
+        })
+        .collect::<Vec<DashboardAgent>>();
+
+    Json(result)
+}
+
+/// GET /api/dashboard/stats
+pub async fn get_stats(State(state): State<AppState>) -> Json<DashboardStats> {
+    let summary = state.load_manager.summary().await;
+    let agents = state.registry.list().await;
+
+    let last_registered_at = agents.iter().map(|agent| agent.registered_at).max();
+    let last_seen_at = agents.iter().map(|agent| agent.last_seen).max();
+
+    let stats = DashboardStats {
+        total_agents: summary.total_agents,
+        online_agents: summary.online_agents,
+        offline_agents: summary.offline_agents,
+        total_requests: summary.total_requests,
+        successful_requests: summary.successful_requests,
+        failed_requests: summary.failed_requests,
+        total_active_requests: summary.total_active_requests,
+        average_response_time_ms: summary.average_response_time_ms,
+        last_metrics_updated_at: summary.last_metrics_updated_at,
+        last_registered_at,
+        last_seen_at,
+    };
+
+    Json(stats)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        balancer::{LoadManager, RequestOutcome},
+        registry::AgentRegistry,
+    };
+    use ollama_coordinator_common::protocol::RegisterRequest;
+    use std::net::{IpAddr, Ipv4Addr};
+    use tokio::time::Duration;
+
+    fn create_state() -> AppState {
+        let registry = AgentRegistry::new();
+        let load_manager = LoadManager::new(registry.clone());
+        AppState {
+            registry,
+            load_manager,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_agents_returns_joined_state() {
+        let state = create_state();
+
+        // エージェントを登録
+        let register_req = RegisterRequest {
+            machine_name: "agent-01".into(),
+            ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+            ollama_version: "0.1.0".into(),
+            ollama_port: 11434,
+        };
+        let agent_id = state
+            .registry
+            .register(register_req)
+            .await
+            .unwrap()
+            .agent_id;
+
+        // メトリクスを記録
+        state
+            .load_manager
+            .record_metrics(agent_id, 32.5, 48.0, 2, Some(110.0))
+            .await
+            .unwrap();
+        state.load_manager.begin_request(agent_id).await.unwrap();
+        state
+            .load_manager
+            .finish_request(
+                agent_id,
+                RequestOutcome::Success,
+                Duration::from_millis(120),
+            )
+            .await
+            .unwrap();
+
+        let response = get_agents(State(state.clone())).await;
+        let body = response.0;
+
+        assert_eq!(body.len(), 1);
+        let agent = &body[0];
+        assert_eq!(agent.machine_name, "agent-01");
+        assert_eq!(agent.status, AgentStatus::Online);
+        assert_eq!(agent.ollama_port, 11434);
+        assert_eq!(agent.total_requests, 1);
+        assert_eq!(agent.successful_requests, 1);
+        assert_eq!(agent.failed_requests, 0);
+        assert_eq!(agent.average_response_time_ms, Some(120.0));
+        assert!(agent.cpu_usage.is_some());
+        assert!(agent.memory_usage.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_stats_summarises_registry_and_metrics() {
+        let state = create_state();
+
+        let first_agent = state
+            .registry
+            .register(RegisterRequest {
+                machine_name: "agent-01".into(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let _second_agent = state
+            .registry
+            .register(RegisterRequest {
+                machine_name: "agent-02".into(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        // 1台分はメトリクスとリクエスト処理を記録
+        state
+            .load_manager
+            .record_metrics(first_agent, 40.0, 65.0, 3, Some(95.0))
+            .await
+            .unwrap();
+        state.load_manager.begin_request(first_agent).await.unwrap();
+        state
+            .load_manager
+            .finish_request(
+                first_agent,
+                RequestOutcome::Error,
+                Duration::from_millis(150),
+            )
+            .await
+            .unwrap();
+
+        let stats = get_stats(State(state)).await.0;
+        assert_eq!(stats.total_agents, 2);
+        assert_eq!(stats.online_agents, 2);
+        assert_eq!(stats.total_requests, 1);
+        assert_eq!(stats.failed_requests, 1);
+        assert_eq!(stats.successful_requests, 0);
+        assert!(stats.last_registered_at.is_some());
+        assert!(stats.last_seen_at.is_some());
+    }
+}

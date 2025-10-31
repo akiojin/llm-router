@@ -88,6 +88,7 @@ async fn main() {
             cpu_usage,
             memory_usage,
             active_requests: 0, // TODO: 実際のリクエスト数をカウント
+            average_response_time_ms: None,
         };
 
         if let Err(e) = coordinator_client.send_heartbeat(heartbeat_req).await {

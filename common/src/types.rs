@@ -51,6 +51,9 @@ pub struct HealthMetrics {
     pub active_requests: u32,
     /// 累積リクエスト数
     pub total_requests: u64,
+    /// 直近の平均レスポンスタイム (ms)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_response_time_ms: Option<f32>,
     /// タイムスタンプ
     pub timestamp: DateTime<Utc>,
 }
