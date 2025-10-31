@@ -1,0 +1,273 @@
+openapi: 3.0.0
+info:
+  title: Ollama Coordinator Agent Registration API
+  description: エージェント自己登録システムAPI
+  version: 1.0.0
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: ローカル開発環境
+  - url: http://coordinator:8080
+    description: 本番環境
+
+paths:
+  /api/agents:
+    post:
+      summary: エージェント登録
+      description: 新しいエージェントを登録する
+      operationId: registerAgent
+      tags:
+        - Agents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              basicRegistration:
+                summary: 基本登録
+                value:
+                  hostname: "server-01"
+                  ip_address: "192.168.1.10"
+                  port: 11434
+                  ollama_version: "0.1.23"
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              examples:
+                success:
+                  summary: 成功レスポンス
+                  value:
+                    status: "Success"
+                    agent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    message: "Agent registered successfully"
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: エージェント一覧取得
+      description: 登録されたすべてのエージェント情報を取得する
+      operationId: listAgents
+      tags:
+        - Agents
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Agent'
+              examples:
+                multipleAgents:
+                  summary: 複数エージェント
+                  value:
+                    - id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                      hostname: "server-01"
+                      ip_address: "192.168.1.10"
+                      port: 11434
+                      ollama_version: "0.1.23"
+                      status: "Online"
+                      last_heartbeat: "2025-10-30T12:00:00Z"
+                      registered_at: "2025-10-30T10:00:00Z"
+                    - id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                      hostname: "server-02"
+                      ip_address: "192.168.1.11"
+                      port: 11434
+                      ollama_version: "0.1.23"
+                      status: "Offline"
+                      last_heartbeat: "2025-10-30T11:50:00Z"
+                      registered_at: "2025-10-30T11:00:00Z"
+
+  /api/agents/{agent_id}/heartbeat:
+    post:
+      summary: ハートビート送信
+      description: エージェントの稼働状態を通知する
+      operationId: sendHeartbeat
+      tags:
+        - Agents
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          description: エージェントID（UUID）
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+            examples:
+              basicHeartbeat:
+                summary: 基本ハートビート
+                value:
+                  agent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        '204':
+          description: ハートビート受信成功（レスポンスボディなし）
+        '404':
+          description: エージェント未登録
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - hostname
+        - ip_address
+        - port
+        - ollama_version
+      properties:
+        hostname:
+          type: string
+          description: ホスト名
+          example: "server-01"
+          minLength: 1
+        ip_address:
+          type: string
+          description: IPアドレス（IPv4またはIPv6）
+          example: "192.168.1.10"
+          pattern: '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^(?:[A-F0-9]{1,4}:){7}[A-F0-9]{1,4}$'
+        port:
+          type: integer
+          format: int32
+          description: Ollamaポート番号
+          example: 11434
+          minimum: 1
+          maximum: 65535
+        ollama_version:
+          type: string
+          description: Ollamaバージョン
+          example: "0.1.23"
+          minLength: 1
+
+    RegisterResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          enum: [Success, Failure]
+          description: 登録ステータス
+          example: "Success"
+        agent_id:
+          type: string
+          format: uuid
+          description: 割り当てられたエージェントID（成功時のみ）
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        message:
+          type: string
+          description: メッセージ
+          example: "Agent registered successfully"
+
+    Agent:
+      type: object
+      required:
+        - id
+        - hostname
+        - ip_address
+        - port
+        - ollama_version
+        - status
+        - last_heartbeat
+        - registered_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: エージェントID
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        hostname:
+          type: string
+          description: ホスト名
+          example: "server-01"
+        ip_address:
+          type: string
+          description: IPアドレス
+          example: "192.168.1.10"
+        port:
+          type: integer
+          format: int32
+          description: Ollamaポート番号
+          example: 11434
+        ollama_version:
+          type: string
+          description: Ollamaバージョン
+          example: "0.1.23"
+        status:
+          type: string
+          enum: [Online, Offline]
+          description: 稼働状態
+          example: "Online"
+        last_heartbeat:
+          type: string
+          format: date-time
+          description: 最後のハートビート受信時刻（ISO 8601形式）
+          example: "2025-10-30T12:00:00Z"
+        registered_at:
+          type: string
+          format: date-time
+          description: 登録時刻（ISO 8601形式）
+          example: "2025-10-30T10:00:00Z"
+
+    HeartbeatRequest:
+      type: object
+      required:
+        - agent_id
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+          description: エージェントID
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: エラーメッセージ
+          example: "Agent not found"
+        details:
+          type: string
+          description: 詳細な説明
+          example: "No agent found with ID: xxx"
+
+tags:
+  - name: Agents
+    description: エージェント登録・管理API

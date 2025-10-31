@@ -220,7 +220,29 @@ coordinator/
 }
 ```
 
-#### 4. メトリクスAPI（SPEC-589f2df1実装後）
+#### 4. エージェント設定API（FR-023）
+- **エンドポイント**: `PUT /api/agents/:id/settings`
+- **リクエスト**: JSON
+```json
+{
+  "custom_name": "Production Server",
+  "tags": ["production", "high-priority"],
+  "notes": "Primary LLM server"
+}
+```
+- **レスポンス**: 200 OK, 更新されたエージェント情報
+
+#### 5. エージェント削除API（FR-024）
+- **エンドポイント**: `DELETE /api/agents/:id`
+- **レスポンス**: 204 No Content
+- **機能**: エージェントを登録解除
+
+#### 6. エージェント強制切断API（FR-024）
+- **エンドポイント**: `POST /api/agents/:id/disconnect`
+- **レスポンス**: 200 OK
+- **機能**: エージェントを強制的にOffline状態に
+
+#### 7. メトリクスAPI（SPEC-589f2df1実装後）
 - **エンドポイント**: `GET /api/dashboard/metrics/:agent_id`
 - **レスポンス**: JSON
 ```json
