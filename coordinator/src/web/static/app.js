@@ -15,6 +15,11 @@ const state = {
   currentPage: 1,
   pageSize: 50,
   timerId: null,
+  rowCache: new Map(),
+  renderSnapshot: null,
+  statsSignature: "",
+  historySignature: "",
+  selectAllCheckbox: null,
 };
 
 let requestsChart = null;
@@ -57,6 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
   paginationRefs.prev = document.getElementById("page-prev");
   paginationRefs.next = document.getElementById("page-next");
   paginationRefs.info = document.getElementById("page-info");
+  state.selectAllCheckbox = selectAllCheckbox;
 
   Object.assign(modalRefs, {
     modal,
@@ -310,51 +316,121 @@ function renderStats() {
     "last-seen-at": formatTimestamp(state.stats.last_seen_at),
   };
 
-  Object.entries(statsMap).forEach(([key, value]) => {
+  const entries = Object.entries(statsMap);
+  const nextSignature = entries
+    .map(([key, value]) => `${key}:${String(value ?? "-")}`)
+    .join("|");
+  if (state.statsSignature === nextSignature) {
+    return;
+  }
+  state.statsSignature = nextSignature;
+
+  entries.forEach(([key, value]) => {
     const target = document.querySelector(`[data-stat="${key}"]`);
     if (target) {
-      target.textContent = value ?? "-";
+      const displayValue = value ?? "-";
+      if (target.textContent !== String(displayValue)) {
+        target.textContent = displayValue;
+      }
     }
   });
 }
 
 function renderAgents() {
   const tbody = document.getElementById("agents-body");
-
-  tbody.innerHTML = "";
+  if (!tbody) return;
 
   if (!state.agents.length) {
-    const placeholder = document.createElement("tr");
-    placeholder.className = "empty-row";
-    placeholder.innerHTML = `<td colspan="11">エージェントはまだ登録されていません</td>`;
-    tbody.appendChild(placeholder);
+    state.rowCache.clear();
+    state.renderSnapshot = null;
+    state.selectAll = false;
+    if (state.selectAllCheckbox) {
+      state.selectAllCheckbox.checked = false;
+    }
+    tbody.replaceChildren(buildPlaceholderRow("エージェントはまだ登録されていません"));
+    updatePagination(0);
     return;
   }
 
   const filtered = getFilteredAgents();
 
   if (!filtered.length) {
-    const placeholder = document.createElement("tr");
-    placeholder.className = "empty-row";
-    placeholder.innerHTML = `<td colspan="11">条件に一致するエージェントはありません</td>`;
-    tbody.appendChild(placeholder);
+    state.renderSnapshot = null;
+    state.selectAll = false;
+    if (state.selectAllCheckbox) {
+      state.selectAllCheckbox.checked = false;
+    }
+    tbody.replaceChildren(buildPlaceholderRow("条件に一致するエージェントはありません"));
     updatePagination(0);
     return;
   }
 
   state.selectAll = filtered.every((agent) => state.selection.has(agent.id));
-  document.getElementById("select-all").checked = state.selectAll;
+  if (state.selectAllCheckbox) {
+    state.selectAllCheckbox.checked = state.selectAll;
+  }
 
   const sorted = sortAgents(filtered, state.sortKey, state.sortOrder);
   const totalPages = calculateTotalPages(sorted.length);
   state.currentPage = Math.min(Math.max(state.currentPage, 1), totalPages);
   const pageSlice = paginate(sorted, state.currentPage, state.pageSize);
 
-  const fragment = document.createDocumentFragment();
-  pageSlice.forEach((agent) => fragment.appendChild(buildAgentRow(agent)));
+  const pageHash = buildPageSignature(pageSlice);
+  const selectionHash = buildSelectionSignature();
+  const snapshotKey = [
+    pageHash,
+    selectionHash,
+    state.sortKey,
+    state.sortOrder,
+    state.currentPage,
+    state.pageSize,
+    state.filterStatus,
+    state.filterQuery,
+  ].join("#");
 
-  tbody.appendChild(fragment);
+  if (
+    state.renderSnapshot &&
+    state.renderSnapshot.key === snapshotKey &&
+    state.renderSnapshot.totalPages === totalPages
+  ) {
+    updatePagination(totalPages);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  pageSlice.forEach((agent) => {
+    const signature = getAgentSignature(agent);
+    const cached = state.rowCache.get(agent.id);
+    let row = cached?.node;
+    if (!row) {
+      row = document.createElement("tr");
+    }
+
+    if (!cached || cached.signature !== signature) {
+      buildAgentRow(agent, row);
+      state.rowCache.set(agent.id, { node: row, signature });
+    } else {
+      syncAgentRowSelection(row, agent.id);
+      row.classList.toggle("agent-offline", agent.status === "offline");
+    }
+
+    fragment.appendChild(row);
+  });
+
+  tbody.replaceChildren(fragment);
+
+  if (state.rowCache.size > state.agents.length) {
+    const knownIds = new Set(state.agents.map((agent) => agent.id));
+    for (const id of state.rowCache.keys()) {
+      if (!knownIds.has(id)) {
+        state.rowCache.delete(id);
+      }
+    }
+  }
   updatePagination(totalPages);
+
+  state.renderSnapshot = { key: snapshotKey, totalPages };
 }
 
 function renderHistory() {
@@ -363,16 +439,23 @@ function renderHistory() {
     return;
   }
 
-  if (!Array.isArray(state.history) || !state.history.length) {
+  const historyArray = Array.isArray(state.history) ? state.history : [];
+  const nextSignature = JSON.stringify(historyArray);
+  if (state.historySignature === nextSignature && requestsChart) {
+    return;
+  }
+  state.historySignature = nextSignature;
+
+  if (!historyArray.length) {
     const labels = buildHistoryLabels([]);
     const zeroes = new Array(labels.length).fill(0);
     updateHistoryChart(canvas, labels, zeroes, zeroes);
     return;
   }
 
-  const labels = buildHistoryLabels(state.history);
-  const success = state.history.map((point) => point.success ?? 0);
-  const failures = state.history.map((point) => point.error ?? 0);
+  const labels = buildHistoryLabels(historyArray);
+  const success = historyArray.map((point) => point.success ?? 0);
+  const failures = historyArray.map((point) => point.error ?? 0);
   updateHistoryChart(canvas, labels, success, failures);
 }
 
@@ -468,12 +551,9 @@ function buildHistoryLabels(history) {
   return history.map((point) => formatHistoryLabel(new Date(point.minute)));
 }
 
-function buildAgentRow(agent) {
-  const tr = document.createElement("tr");
-  tr.dataset.agentId = agent.id;
-  if (agent.status === "offline") {
-    tr.classList.add("agent-offline");
-  }
+function buildAgentRow(agent, row = document.createElement("tr")) {
+  row.dataset.agentId = agent.id;
+  row.classList.toggle("agent-offline", agent.status === "offline");
 
   const displayName = getDisplayName(agent);
   const secondaryName = agent.custom_name ? agent.machine_name : agent.ollama_version;
@@ -489,7 +569,7 @@ function buildAgentRow(agent) {
   const metricsTimestamp = formatTimestamp(agent.metrics_last_updated_at);
   const metricsDetail = metricsBadge ? `${metricsBadge} ${metricsTimestamp}` : metricsTimestamp;
 
-  tr.innerHTML = `
+  row.innerHTML = `
     <td>
       <input
         type="checkbox"
@@ -526,8 +606,54 @@ function buildAgentRow(agent) {
       <button type="button" data-agent-id="${agent.id}">詳細</button>
     </td>
   `;
+  syncAgentRowSelection(row, agent.id);
 
-  return tr;
+  return row;
+}
+
+function syncAgentRowSelection(row, agentId) {
+  const checkbox = row.querySelector('input[data-agent-id]');
+  if (!checkbox) return;
+  const shouldCheck = state.selection.has(agentId);
+  if (checkbox.checked !== shouldCheck) {
+    checkbox.checked = shouldCheck;
+  }
+}
+
+function buildPlaceholderRow(message) {
+  const row = document.createElement("tr");
+  row.className = "empty-row";
+  row.innerHTML = `<td colspan="11">${escapeHtml(message)}</td>`;
+  return row;
+}
+
+function getAgentSignature(agent) {
+  return [
+    agent.machine_name ?? "",
+    agent.custom_name ?? "",
+    agent.ip_address ?? "",
+    agent.ollama_version ?? "",
+    agent.status ?? "",
+    agent.uptime_seconds ?? 0,
+    agent.cpu_usage ?? 0,
+    agent.memory_usage ?? 0,
+    agent.active_requests ?? 0,
+    agent.total_requests ?? 0,
+    agent.successful_requests ?? 0,
+    agent.failed_requests ?? 0,
+    agent.average_response_time_ms ?? "",
+    agent.last_seen ?? "",
+    agent.metrics_last_updated_at ?? "",
+    agent.metrics_stale ? 1 : 0,
+  ].join("|");
+}
+
+function buildPageSignature(pageSlice) {
+  return pageSlice.map((agent) => `${agent.id}:${getAgentSignature(agent)}`).join("|");
+}
+
+function buildSelectionSignature() {
+  return Array.from(state.selection).sort().join("|");
 }
 
 function getDisplayName(agent) {
