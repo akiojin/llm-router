@@ -103,6 +103,9 @@ async fn main() {
             memory_usage: metrics.memory_usage,
             gpu_usage: metrics.gpu_usage,
             gpu_memory_usage: metrics.gpu_memory_usage,
+            gpu_memory_total_mb: metrics.gpu_memory_total_mb,
+            gpu_memory_used_mb: metrics.gpu_memory_used_mb,
+            gpu_temperature: metrics.gpu_temperature,
             active_requests: 0, // TODO: 実際のリクエスト数をカウント
             average_response_time_ms: None,
             loaded_models: models,
@@ -111,10 +114,14 @@ async fn main() {
         match coordinator_client.send_heartbeat(heartbeat_req).await {
             Err(e) => eprintln!("Failed to send heartbeat: {}", e),
             Ok(_) => {
-                if let (Some(gpu), Some(gpu_mem)) = (metrics.gpu_usage, metrics.gpu_memory_usage) {
+                if let (Some(gpu), Some(gpu_mem), Some(temp)) = (
+                    metrics.gpu_usage,
+                    metrics.gpu_memory_usage,
+                    metrics.gpu_temperature,
+                ) {
                     println!(
-                        "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%, GPU: {:.1}%, GPU Memory: {:.1}%",
-                        metrics.cpu_usage, metrics.memory_usage, gpu, gpu_mem
+                        "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%, GPU: {:.1}%, GPU Memory: {:.1}%, GPU Temp: {:.1}°C",
+                        metrics.cpu_usage, metrics.memory_usage, gpu, gpu_mem, temp
                     );
                 } else {
                     println!(

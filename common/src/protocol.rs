@@ -53,6 +53,15 @@ pub struct HealthCheckRequest {
     /// GPUメモリ使用率 (0.0-100.0)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_memory_usage: Option<f32>,
+    /// GPUメモリ総容量 (MB)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU使用メモリ (MB)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU温度 (℃)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_temperature: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 過去N件の平均レスポンスタイム (ms)
@@ -144,6 +153,9 @@ mod tests {
             memory_usage: 60.2,
             gpu_usage: Some(33.0),
             gpu_memory_usage: Some(71.0),
+            gpu_memory_total_mb: Some(8192),
+            gpu_memory_used_mb: Some(5800),
+            gpu_temperature: Some(72.5),
             active_requests: 3,
             average_response_time_ms: Some(123.4),
             loaded_models: vec!["gpt-oss:20b".to_string()],
