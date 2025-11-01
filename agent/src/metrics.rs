@@ -149,7 +149,7 @@ impl Default for MetricsCollector {
 enum GpuCollector {
     OllamaPs(OllamaPsGpuCollector),
     Env(EnvGpuCollector),
-    Nvidia(NvidiaGpuCollector),
+    Nvidia(Box<NvidiaGpuCollector>),
     #[cfg(target_os = "macos")]
     AppleSilicon(AppleSiliconGpuCollector),
 }
@@ -180,7 +180,7 @@ impl GpuCollector {
         // NVIDIA GPUを試行
         if let Ok(nvidia) = NvidiaGpuCollector::new() {
             debug!("Detected NVIDIA GPU");
-            return Some(GpuCollector::Nvidia(nvidia));
+            return Some(GpuCollector::Nvidia(Box::new(nvidia)));
         }
 
         // macOS: Apple Silicon GPUを試行
@@ -382,7 +382,7 @@ impl OllamaPsGpuCollector {
         // GPUモデル名は環境変数またはシステムから取得を試みる
         let model_name = std::env::var("OLLAMA_GPU_MODEL")
             .ok()
-            .or_else(|| detect_gpu_model_from_system());
+            .or_else(detect_gpu_model_from_system);
 
         Ok(Self { model_name })
     }
@@ -572,13 +572,10 @@ mod tests {
         let has_gpu2 = collector.has_gpu();
         assert_eq!(has_gpu1, has_gpu2, "GPU detection should be consistent");
 
-        // If GPU is detected, gpu_model() should return Some
+        // If GPU is detected, gpu_model() may return Some or None depending on the platform
         if collector.has_gpu() {
-            let model = collector.gpu_model();
-            assert!(
-                model.is_some() || true,
-                "GPU model can be None for some platforms"
-            );
+            let _model = collector.gpu_model();
+            // Note: GPU model can be None for some platforms (e.g., ollama ps detection)
         }
     }
 

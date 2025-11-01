@@ -23,6 +23,9 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             ip_address: mock.address().ip(),
             ollama_version: "0.0.0".into(),
             ollama_port: mock.address().port(),
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         })
         .await
         .unwrap();
