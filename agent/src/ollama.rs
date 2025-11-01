@@ -2,10 +2,15 @@
 //!
 //! Ollamaの自動ダウンロード、起動、停止、状態監視
 
+use flate2::read::GzDecoder;
 use ollama_coordinator_common::error::{AgentError, AgentResult};
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use tar::Archive;
 use tokio::time::{sleep, Duration};
+use zip::ZipArchive;
 
 /// Ollamaマネージャー
 pub struct OllamaManager {
@@ -92,22 +97,7 @@ impl OllamaManager {
             .await
             .map_err(|e| AgentError::Internal(format!("Failed to read Ollama download: {}", e)))?;
 
-        // ファイルに保存
-        std::fs::write(&self.ollama_path, bytes)
-            .map_err(|e| AgentError::Internal(format!("Failed to write Ollama binary: {}", e)))?;
-
-        // Unix系OSでは実行権限を付与
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&self.ollama_path)
-                .map_err(|e| AgentError::Internal(format!("Failed to get file metadata: {}", e)))?
-                .permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(&self.ollama_path, perms).map_err(|e| {
-                AgentError::Internal(format!("Failed to set execute permission: {}", e))
-            })?;
-        }
+        save_ollama_binary(&bytes, &download_url, &self.ollama_path)?;
 
         println!("Ollama downloaded successfully to {:?}", self.ollama_path);
         Ok(())
@@ -187,6 +177,109 @@ impl Drop for OllamaManager {
     fn drop(&mut self) {
         let _ = self.stop();
     }
+}
+
+fn save_ollama_binary(bytes: &[u8], download_url: &str, destination: &Path) -> AgentResult<()> {
+    if download_url.ends_with(".tgz") || download_url.ends_with(".tar.gz") {
+        extract_tar_gz(bytes, destination)
+    } else if download_url.ends_with(".zip") {
+        extract_zip(bytes, destination)
+    } else {
+        write_binary(bytes, destination)
+    }
+}
+
+fn extract_tar_gz(bytes: &[u8], destination: &Path) -> AgentResult<()> {
+    let cursor = Cursor::new(bytes);
+    let decoder = GzDecoder::new(cursor);
+    let mut archive = Archive::new(decoder);
+
+    for entry in archive
+        .entries()
+        .map_err(|e| AgentError::Internal(format!("Failed to read archive: {}", e)))?
+    {
+        let mut entry =
+            entry.map_err(|e| AgentError::Internal(format!("Failed to read entry: {}", e)))?;
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+
+        let path = entry
+            .path()
+            .map_err(|e| AgentError::Internal(format!("Failed to read entry path: {}", e)))?;
+        if path
+            .file_name()
+            .map(|name| name == "ollama")
+            .unwrap_or(false)
+        {
+            let mut file = File::create(destination)
+                .map_err(|e| AgentError::Internal(format!("Failed to create file: {}", e)))?;
+            std::io::copy(&mut entry, &mut file)
+                .map_err(|e| AgentError::Internal(format!("Failed to extract file: {}", e)))?;
+            set_unix_executable(destination)?;
+            return Ok(());
+        }
+    }
+
+    Err(AgentError::Internal(
+        "Failed to locate ollama binary in archive".to_string(),
+    ))
+}
+
+fn extract_zip(bytes: &[u8], destination: &Path) -> AgentResult<()> {
+    let cursor = Cursor::new(bytes);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| AgentError::Internal(format!("Failed to read zip archive: {}", e)))?;
+
+    let expected = if cfg!(windows) {
+        "ollama.exe"
+    } else {
+        "ollama"
+    };
+
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| AgentError::Internal(format!("Failed to access zip entry: {}", e)))?;
+        if !file.is_file() {
+            continue;
+        }
+
+        if file.name().ends_with(expected) {
+            let mut output = File::create(destination)
+                .map_err(|e| AgentError::Internal(format!("Failed to create file: {}", e)))?;
+            std::io::copy(&mut file, &mut output)
+                .map_err(|e| AgentError::Internal(format!("Failed to extract file: {}", e)))?;
+            set_unix_executable(destination)?;
+            return Ok(());
+        }
+    }
+
+    Err(AgentError::Internal(
+        "Failed to locate ollama binary in archive".to_string(),
+    ))
+}
+
+fn write_binary(bytes: &[u8], destination: &Path) -> AgentResult<()> {
+    std::fs::write(destination, bytes)
+        .map_err(|e| AgentError::Internal(format!("Failed to write Ollama binary: {}", e)))?;
+    set_unix_executable(destination)?;
+    Ok(())
+}
+
+fn set_unix_executable(path: &Path) -> AgentResult<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(path)
+            .map_err(|e| AgentError::Internal(format!("Failed to get file metadata: {}", e)))?;
+        let mut perms = metadata.permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(path, perms).map_err(|e| {
+            AgentError::Internal(format!("Failed to set execute permission: {}", e))
+        })?;
+    }
+    Ok(())
 }
 
 /// Ollamaディレクトリを取得
