@@ -57,7 +57,10 @@ pub fn create_router(state: AppState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{balancer::LoadManager, registry::AgentRegistry};
+    use crate::{
+        balancer::{LoadManager, MetricsUpdate},
+        registry::AgentRegistry,
+    };
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use ollama_coordinator_common::protocol::RegisterRequest;
@@ -181,7 +184,15 @@ mod tests {
 
         state
             .load_manager
-            .record_metrics(agent_id, 12.0, 34.0, None, None, 1, Some(90.0))
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 12.0,
+                memory_usage: 34.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                active_requests: 1,
+                average_response_time_ms: Some(90.0),
+            })
             .await
             .unwrap();
 

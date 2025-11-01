@@ -1,6 +1,6 @@
 //! ヘルスチェックAPIハンドラー
 
-use crate::{api::agent::AppError, AppState};
+use crate::{api::agent::AppError, balancer::MetricsUpdate, AppState};
 use axum::{extract::State, Json};
 use ollama_coordinator_common::protocol::HealthCheckRequest;
 
@@ -23,15 +23,15 @@ pub async fn health_check(
     // 最新メトリクスをロードマネージャーに記録
     state
         .load_manager
-        .record_metrics(
-            req.agent_id,
-            req.cpu_usage,
-            req.memory_usage,
-            req.gpu_usage,
-            req.gpu_memory_usage,
-            req.active_requests,
-            req.average_response_time_ms,
-        )
+        .record_metrics(MetricsUpdate {
+            agent_id: req.agent_id,
+            cpu_usage: req.cpu_usage,
+            memory_usage: req.memory_usage,
+            gpu_usage: req.gpu_usage,
+            gpu_memory_usage: req.gpu_memory_usage,
+            active_requests: req.active_requests,
+            average_response_time_ms: req.average_response_time_ms,
+        })
         .await?;
 
     Ok(Json(()))

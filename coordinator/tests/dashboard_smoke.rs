@@ -11,7 +11,7 @@ use axum::{
 use ollama_coordinator_common::protocol::RegisterRequest;
 use ollama_coordinator_coordinator::{
     api,
-    balancer::{LoadManager, RequestOutcome},
+    balancer::{LoadManager, MetricsUpdate, RequestOutcome},
     registry::AgentRegistry,
     AppState,
 };
@@ -84,7 +84,15 @@ async fn dashboard_agents_and_stats_reflect_registry() {
         .agent_id;
 
     load_manager
-        .record_metrics(agent_id, 12.5, 34.0, None, None, 2, Some(110.0))
+        .record_metrics(MetricsUpdate {
+            agent_id,
+            cpu_usage: 12.5,
+            memory_usage: 34.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 2,
+            average_response_time_ms: Some(110.0),
+        })
         .await
         .unwrap();
     load_manager.begin_request(agent_id).await.unwrap();
@@ -263,7 +271,15 @@ async fn dashboard_agent_metrics_endpoint_returns_history() {
         .agent_id;
 
     load_manager
-        .record_metrics(agent_id, 42.0, 55.0, None, None, 2, Some(105.0))
+        .record_metrics(MetricsUpdate {
+            agent_id,
+            cpu_usage: 42.0,
+            memory_usage: 55.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 2,
+            average_response_time_ms: Some(105.0),
+        })
         .await
         .unwrap();
 

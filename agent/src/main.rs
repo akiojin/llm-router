@@ -108,19 +108,20 @@ async fn main() {
             loaded_models: models,
         };
 
-        if let Err(e) = coordinator_client.send_heartbeat(heartbeat_req).await {
-            eprintln!("Failed to send heartbeat: {}", e);
-        } else {
-            if let (Some(gpu), Some(gpu_mem)) = (metrics.gpu_usage, metrics.gpu_memory_usage) {
-                println!(
-                    "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%, GPU: {:.1}%, GPU Memory: {:.1}%",
-                    metrics.cpu_usage, metrics.memory_usage, gpu, gpu_mem
-                );
-            } else {
-                println!(
-                    "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%",
-                    metrics.cpu_usage, metrics.memory_usage
-                );
+        match coordinator_client.send_heartbeat(heartbeat_req).await {
+            Err(e) => eprintln!("Failed to send heartbeat: {}", e),
+            Ok(_) => {
+                if let (Some(gpu), Some(gpu_mem)) = (metrics.gpu_usage, metrics.gpu_memory_usage) {
+                    println!(
+                        "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%, GPU: {:.1}%, GPU Memory: {:.1}%",
+                        metrics.cpu_usage, metrics.memory_usage, gpu, gpu_mem
+                    );
+                } else {
+                    println!(
+                        "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%",
+                        metrics.cpu_usage, metrics.memory_usage
+                    );
+                }
             }
         }
     }
@@ -358,9 +359,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_with_retry_eventual_success() {
-        let _lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         let _guard_retry_secs = EnvGuard::new("COORDINATOR_REGISTER_RETRY_SECS", Some("0"));
         let _guard_retry_limit = EnvGuard::new("COORDINATOR_REGISTER_MAX_RETRIES", Some("0"));
+        drop(lock);
 
         let server = MockServer::start().await;
 
@@ -388,9 +390,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_with_retry_respects_limit() {
-        let _lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         let _guard_retry_secs = EnvGuard::new("COORDINATOR_REGISTER_RETRY_SECS", Some("0"));
         let _guard_retry_limit = EnvGuard::new("COORDINATOR_REGISTER_MAX_RETRIES", Some("2"));
+        drop(lock);
 
         let server = MockServer::start().await;
 

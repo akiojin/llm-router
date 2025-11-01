@@ -264,7 +264,7 @@ async fn collect_history(state: &AppState) -> Vec<RequestHistoryPoint> {
 mod tests {
     use super::*;
     use crate::{
-        balancer::{LoadManager, RequestOutcome},
+        balancer::{LoadManager, MetricsUpdate, RequestOutcome},
         registry::AgentRegistry,
     };
     use ollama_coordinator_common::protocol::RegisterRequest;
@@ -301,7 +301,15 @@ mod tests {
         // メトリクスを記録
         state
             .load_manager
-            .record_metrics(agent_id, 32.5, 48.0, Some(72.0), Some(68.0), 2, Some(110.0))
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 32.5,
+                memory_usage: 48.0,
+                gpu_usage: Some(72.0),
+                gpu_memory_usage: Some(68.0),
+                active_requests: 2,
+                average_response_time_ms: Some(110.0),
+            })
             .await
             .unwrap();
         state.load_manager.begin_request(agent_id).await.unwrap();
@@ -364,7 +372,15 @@ mod tests {
         // 1台分はメトリクスとリクエスト処理を記録
         state
             .load_manager
-            .record_metrics(first_agent, 40.0, 65.0, None, None, 3, Some(95.0))
+            .record_metrics(MetricsUpdate {
+                agent_id: first_agent,
+                cpu_usage: 40.0,
+                memory_usage: 65.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                active_requests: 3,
+                average_response_time_ms: Some(95.0),
+            })
             .await
             .unwrap();
         state.load_manager.begin_request(first_agent).await.unwrap();
@@ -483,12 +499,28 @@ mod tests {
 
         state
             .load_manager
-            .record_metrics(agent_id, 24.0, 45.0, Some(35.0), Some(40.0), 1, Some(110.0))
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 24.0,
+                memory_usage: 45.0,
+                gpu_usage: Some(35.0),
+                gpu_memory_usage: Some(40.0),
+                active_requests: 1,
+                average_response_time_ms: Some(110.0),
+            })
             .await
             .unwrap();
         state
             .load_manager
-            .record_metrics(agent_id, 32.0, 40.0, Some(28.0), Some(30.0), 0, Some(95.0))
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 32.0,
+                memory_usage: 40.0,
+                gpu_usage: Some(28.0),
+                gpu_memory_usage: Some(30.0),
+                active_requests: 0,
+                average_response_time_ms: Some(95.0),
+            })
             .await
             .unwrap();
 

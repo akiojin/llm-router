@@ -116,11 +116,27 @@ mod tests {
             .agent_id;
 
         manager
-            .record_metrics(slow_agent, 20.0, 30.0, None, None, 1, Some(240.0))
+            .record_metrics(MetricsUpdate {
+                agent_id: slow_agent,
+                cpu_usage: 20.0,
+                memory_usage: 30.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                active_requests: 1,
+                average_response_time_ms: Some(240.0),
+            })
             .await
             .unwrap();
         manager
-            .record_metrics(fast_agent, 20.0, 30.0, None, None, 1, Some(120.0))
+            .record_metrics(MetricsUpdate {
+                agent_id: fast_agent,
+                cpu_usage: 20.0,
+                memory_usage: 30.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                active_requests: 1,
+                average_response_time_ms: Some(120.0),
+            })
             .await
             .unwrap();
 
@@ -146,15 +162,15 @@ mod tests {
 
         for i in 0..(METRICS_HISTORY_CAPACITY + 10) {
             manager
-                .record_metrics(
+                .record_metrics(MetricsUpdate {
                     agent_id,
-                    i as f32,
-                    (i * 2) as f32,
-                    Some((i % 100) as f32),
-                    Some(((i * 2) % 100) as f32),
-                    1,
-                    Some(100.0),
-                )
+                    cpu_usage: i as f32,
+                    memory_usage: (i * 2) as f32,
+                    gpu_usage: Some((i % 100) as f32),
+                    gpu_memory_usage: Some(((i * 2) % 100) as f32),
+                    active_requests: 1,
+                    average_response_time_ms: Some(100.0),
+                })
                 .await
                 .unwrap();
         }
@@ -171,7 +187,7 @@ mod tests {
 }
 
 /// エージェントの最新ロード状態
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct AgentLoadState {
     last_metrics: Option<HealthMetrics>,
     assigned_active: u32,
@@ -180,20 +196,6 @@ struct AgentLoadState {
     error_count: u64,
     total_latency_ms: u128,
     metrics_history: VecDeque<HealthMetrics>,
-}
-
-impl Default for AgentLoadState {
-    fn default() -> Self {
-        Self {
-            last_metrics: None,
-            assigned_active: 0,
-            total_assigned: 0,
-            success_count: 0,
-            error_count: 0,
-            total_latency_ms: 0,
-            metrics_history: VecDeque::new(),
-        }
-    }
 }
 
 impl AgentLoadState {
@@ -310,6 +312,25 @@ pub struct LoadManager {
     history: Arc<RwLock<VecDeque<RequestHistoryPoint>>>,
 }
 
+/// ハートビートから記録するメトリクス値
+#[derive(Debug, Clone)]
+pub struct MetricsUpdate {
+    /// 対象エージェントのID
+    pub agent_id: Uuid,
+    /// CPU使用率（パーセンテージ）
+    pub cpu_usage: f32,
+    /// メモリ使用率（パーセンテージ）
+    pub memory_usage: f32,
+    /// GPU使用率（パーセンテージ）
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率（パーセンテージ）
+    pub gpu_memory_usage: Option<f32>,
+    /// アクティブなリクエスト数
+    pub active_requests: u32,
+    /// 平均レスポンスタイム（ミリ秒）
+    pub average_response_time_ms: Option<f32>,
+}
+
 impl LoadManager {
     /// 新しいロードマネージャーを作成
     pub fn new(registry: AgentRegistry) -> Self {
@@ -322,16 +343,17 @@ impl LoadManager {
     }
 
     /// ヘルスメトリクスを記録
-    pub async fn record_metrics(
-        &self,
-        agent_id: Uuid,
-        cpu_usage: f32,
-        memory_usage: f32,
-        gpu_usage: Option<f32>,
-        gpu_memory_usage: Option<f32>,
-        active_requests: u32,
-        average_response_time_ms: Option<f32>,
-    ) -> CoordinatorResult<()> {
+    pub async fn record_metrics(&self, update: MetricsUpdate) -> CoordinatorResult<()> {
+        let MetricsUpdate {
+            agent_id,
+            cpu_usage,
+            memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
+            active_requests,
+            average_response_time_ms,
+        } = update;
+
         // エージェントが存在することを確認
         self.registry.get(agent_id).await?;
 
