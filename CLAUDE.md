@@ -32,6 +32,13 @@
 - 作業（タスク）の開始前には、必ずToDoを登録した後に作業を開始する
 - 作業（タスク）は、忖度なしで進める
 
+### 環境固定ルール（プロジェクトカスタム）
+
+- 勝手にブランチ作成やWorktree作成は禁止（`git branch`, `git worktree add` などを実行しない）
+- 作業ディレクトリの変更は禁止（`cd`による移動を行わない）
+- 現在のブランチの切り替えは禁止（`git switch`, `git checkout` などを実行しない）
+- ブランチやWorktreeの作成・切り替えはリポジトリメンテナが必要時に実施する。作業者は現状の環境を維持してタスクを完了させること。
+
 ### Spec駆動開発ライフサイクル
 
 新機能の開発は、以下の3ステップで進めます：
@@ -39,8 +46,8 @@
 1. **`/speckit.specify`**: 機能仕様書を作成 (`specs/SPEC-[UUID8桁]/spec.md`)
    - ビジネス要件とユーザーストーリーを定義
    - 「何を」「なぜ」に焦点を当てる（「どのように」は含めない）
-   - SPECディレクトリ、featureブランチ、Worktreeを自動作成
-   - 作業は`.worktrees/SPEC-xxx/`内で実施
+   - SPECディレクトリを生成し、仕様を文書化
+   - 本リポジトリではfeatureブランチ／Worktreeの自動作成機能は無効化されているため、現在のブランチ・作業ディレクトリのまま進める
 
 2. **`/speckit.plan`**: 実装計画を作成 (`specs/SPEC-[UUID8桁]/plan.md`)
    - 技術スタック、アーキテクチャ、データモデルを設計
@@ -66,76 +73,15 @@
   - 大文字の使用（UUID部分は小文字のみ）
 - **生成方法**: `uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8` またはオンラインUUID生成ツール
 
-#### Worktree＆ブランチ運用（必須）
+#### Worktree＆ブランチ運用（プロジェクトカスタム）
 
-**すべてのSPEC開発はWorktreeで並行作業**
+本リポジトリでは GitHub Spec Kit を導入していますが、featureブランチや Worktree を自動的に作成する機能はプロジェクト要件により無効化しています。運用方針は以下のとおりです。
 
-本プロジェクトは**Git Worktree**を使用した並行開発フローを採用しています。各SPECは独立したWorktreeで作業し、完了後にGitHub Pull Requestを作成して自動マージします（**GitHub Actions自動マージ**）。
-
-**Worktree配置**:
-
-- **場所**: `.worktrees/[ブランチ名]/`
-- **例**: `.worktrees/feature-admin/`
-- Git管理外（`.gitignore`登録済み）
-- 各Worktreeは完全な作業ツリーを持つ
-
-**新規SPEC作成フロー**:
-
-1. `/speckit.specify` コマンド実行
-   - SPECディレクトリ作成（`specs/SPEC-xxx/`）
-   - Worktree作成（`.worktrees/[ブランチ名]/`）
-   - 初期ファイル生成（`spec.md`）
-
-2. Worktreeに移動して作業開始:
-   ```bash
-   cd .worktrees/[ブランチ名]/
-   ```
-
-3. 独立して開発作業を実行:
-   - TDDサイクル厳守
-   - 各変更をコミット
-   - 他のSPECと完全に独立
-
-**作業完了フロー**:
-
-1. Worktree内で最終コミット完了を確認
-2. finish-featureスクリプト実行:
-   ```bash
-   .specify/scripts/bash/finish-feature.sh
-   # またはドラフトPRとして作成:
-   .specify/scripts/bash/finish-feature.sh --draft
-   ```
-
-3. 自動実行される処理:
-   - featureブランチをリモートにpush
-   - GitHub PRを自動作成（spec.mdからタイトル取得）
-   - GitHub Actions「**Quality Checks**」ワークフローで品質チェック実行（5つのジョブを並列実行）:
-     1. **tasks-check**: tasks.mdの全タスク完了チェック（`.specify/scripts/checks/check-tasks.sh`）
-     2. **rust-test**: Rustテスト実行（`cargo test`, ubuntu-latest + windows-latest）
-     3. **rust-lint**: Rust lintチェック（`cargo fmt --check`, `cargo clippy`）
-     4. **commitlint**: コミットメッセージ検証（Conventional Commits準拠、`.specify/scripts/checks/check-commits.sh`）
-     5. **markdownlint**: マークダウンファイルlint（`npx markdownlint-cli`）
-   - 全チェック成功時、GitHub Actions「**Auto Merge**」ワークフローが起動し、以下の条件を満たす場合に自動的にmainへマージ（MERGEメソッド、履歴保持）:
-     - ✅ 全品質チェックが成功
-     - ✅ PRがドラフトでない
-     - ✅ マージ可能（コンフリクトなし）
-     - ✅ マージ状態が正常（CLEAN または UNSTABLE）
-
-**重要な注意事項**:
-
-- **mainブランチで直接SPEC作業禁止**: 必ずWorktreeを使用
-- **PR自動マージ**: GitHub Actionsで品質チェック後に自動マージ
-- **ドラフトPR**: `--draft`オプションで作成したPRは自動マージ対象外。品質チェックは実行されるが、ドラフト解除するまで自動マージされない
-- **並行開発推奨**: 複数のSPECを同時に異なるWorktreeで作業可能
-- **Worktree間の独立性**: 各Worktreeは完全に独立（相互干渉なし）
-- **コミット**: Worktree内でのコミットはfeatureブランチに記録される
-- **GitHub CLI必須**: `gh auth login`で認証が必要
-
-**スクリプト**:
-
-- `.specify/scripts/bash/create-new-feature.sh`: 新規SPEC＆Worktree作成
-- `.specify/scripts/bash/finish-feature.sh`: PR作成（自動マージトリガー）
-- `.specify/scripts/checks/*.sh`: 品質チェックスクリプト（tasks/tests/compile/commits）
+- 現在割り当てられている作業環境（Codex CLI が示すカレントディレクトリ・ブランチ）のみを使用する。
+- `git branch`, `git checkout`, `git switch`, `git worktree` など環境を変更するコマンドは実行しない。
+- Spec Kit コマンドはドキュメント生成・更新にのみ利用し、Git ブランチや Worktree を変更しない前提で扱う。
+- ブランチ／Worktree の新規作成・削除・切り替えが必要になった場合は、必ずメンテナに相談し指示を受ける。
+- CI やリポジトリ管理スクリプトが環境を制御しているため、手動での操作は重大な不整合を引き起こす可能性がある。
 
 ### TDD遵守（妥協不可）
 
@@ -170,25 +116,22 @@
 **新規機能開発フロー**:
 
 1. `/speckit.specify` - ビジネス要件を定義（技術詳細なし）
-   - 自動的にfeatureブランチ＆Worktree作成
-   - `.worktrees/SPEC-xxx/`に移動して作業開始
+   - 本リポジトリではfeatureブランチ／Worktree自動生成を停止しているため、現在のブランチと作業ディレクトリのまま仕様ファイルを生成・更新する。
 2. `/speckit.plan` - 技術設計を作成（憲章チェック必須）
-   - Worktree内で実行
+   - 現在の作業ディレクトリで実行し、Gitの状態を変えない。
 3. `/speckit.tasks` - 実行可能タスクに分解
    - 実装実行は `/speckit.implement` で補助的に利用可能
-   - Worktree内で実行
+   - 環境を移動せずタスクを細分化する。
 4. タスク実行（TDDサイクル厳守）
-   - Worktree内で独立して作業
-   - 各変更をfeatureブランチにコミット
-5. 完了後、`finish-feature.sh`でmainにマージ＆Worktree削除
+   - 割り当て済みブランチ上で実装し、コミットを積む。ブランチ操作は禁止。
+5. 完了時はメンテナまたはCIが用意した手順に従う。`finish-feature.sh` を含むブランチ／Worktree操作系スクリプトを自己判断で実行しない。
 
 **既存機能のSpec化フロー**:
 
-1. 対応するWorktreeに移動: `cd .worktrees/SPEC-xxx/`
-2. `/speckit.specify` - 実装済み機能のビジネス要件を文書化
-3. `/speckit.plan` - （必要に応じて）技術設計を追記
-4. 既存実装とSpecの整合性確認
-5. 完了後、`finish-feature.sh`でmainにマージ
+1. 作業ディレクトリを移動せず、現在の環境で `/speckit.specify` を実行して実装済み機能のビジネス要件を文書化する。
+2. `/speckit.plan` で必要に応じて技術設計を追記する。
+3. 既存実装とSpecの整合性を確認する。
+4. 完了報告やGit操作が必要な場合はメンテナの指示を待つ。自己判断でブランチやWorktreeを操作しない。
 
 **Spec作成原則**:
 

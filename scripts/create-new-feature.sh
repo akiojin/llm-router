@@ -1,12 +1,10 @@
 #!/bin/bash
 set -e
 
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-SCRIPT="$REPO_ROOT/.specify/scripts/bash/create-new-feature.sh"
-if [ ! -x "$SCRIPT" ]; then
-  echo "Error: Spec Kit script not found at $SCRIPT" >&2
-  exit 1
-fi
+cat <<'EOM' >&2
+Error: create-new-feature.sh は無効化されています。
 
-# Preserve backward compatibility (--json)
-exec "$SCRIPT" "$@"
+このリポジトリではブランチ／Worktreeを開発者が勝手に作成することは禁止されています（CLAUDE.md「環境固定ルール」参照）。
+必要な場合はリポジトリメンテナに依頼してください。
+EOM
+exit 2
