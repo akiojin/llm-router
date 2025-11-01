@@ -1,6 +1,6 @@
 //! ヘルスチェックAPIハンドラー
 
-use crate::{api::agent::AppError, AppState};
+use crate::{api::agent::AppError, balancer::MetricsUpdate, AppState};
 use axum::{extract::State, Json};
 use ollama_coordinator_common::protocol::HealthCheckRequest;
 
@@ -10,18 +10,28 @@ pub async fn health_check(
     Json(req): Json<HealthCheckRequest>,
 ) -> Result<Json<()>, AppError> {
     // エージェントの最終確認時刻を更新
-    state.registry.update_last_seen(req.agent_id).await?;
+    let models = if req.loaded_models.is_empty() {
+        None
+    } else {
+        Some(req.loaded_models.clone())
+    };
+    state
+        .registry
+        .update_last_seen(req.agent_id, models)
+        .await?;
 
     // 最新メトリクスをロードマネージャーに記録
     state
         .load_manager
-        .record_metrics(
-            req.agent_id,
-            req.cpu_usage,
-            req.memory_usage,
-            req.active_requests,
-            req.average_response_time_ms,
-        )
+        .record_metrics(MetricsUpdate {
+            agent_id: req.agent_id,
+            cpu_usage: req.cpu_usage,
+            memory_usage: req.memory_usage,
+            gpu_usage: req.gpu_usage,
+            gpu_memory_usage: req.gpu_memory_usage,
+            active_requests: req.active_requests,
+            average_response_time_ms: req.average_response_time_ms,
+        })
         .await?;
 
     Ok(Json(()))
@@ -62,8 +72,11 @@ mod tests {
             agent_id: register_response.agent_id,
             cpu_usage: 45.5,
             memory_usage: 60.2,
+            gpu_usage: None,
+            gpu_memory_usage: None,
             active_requests: 3,
             average_response_time_ms: Some(110.0),
+            loaded_models: vec!["gpt-oss:20b".into()],
         };
 
         let result = health_check(State(state.clone()), Json(health_req)).await;
@@ -79,6 +92,7 @@ mod tests {
             agent.status,
             ollama_coordinator_common::types::AgentStatus::Online
         );
+        assert_eq!(agent.loaded_models, vec!["gpt-oss:20b"]);
     }
 
     #[tokio::test]
@@ -89,8 +103,11 @@ mod tests {
             agent_id: Uuid::new_v4(),
             cpu_usage: 45.5,
             memory_usage: 60.2,
+            gpu_usage: None,
+            gpu_memory_usage: None,
             active_requests: 3,
             average_response_time_ms: None,
+            loaded_models: Vec::new(),
         };
 
         let result = health_check(State(state), Json(health_req)).await;

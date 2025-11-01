@@ -1,4 +1,10 @@
 const REFRESH_INTERVAL_MS = 5000;
+const PERFORMANCE_THRESHOLDS = Object.freeze({
+  fetch: 2000,
+  render: 100,
+  backend: 100,
+});
+const AGENT_METRICS_LIMIT = 120;
 
 const state = {
   agents: [],
@@ -25,11 +31,18 @@ const state = {
     fetchMs: null,
     renderMs: null,
     usedLegacy: false,
+    backendMs: null,
+    generatedAt: null,
+    severity: "idle",
   },
+  agentMetricsSignature: "",
+  agentMetricsCache: new Map(),
+  agentMetricsAbortController: null,
   fallbackNotified: false,
 };
 
 let requestsChart = null;
+let agentMetricsChart = null;
 const modalRefs = {
   modal: null,
   close: null,
@@ -39,6 +52,7 @@ const modalRefs = {
   machineName: null,
   ipAddress: null,
   ollamaVersion: null,
+  loadedModels: null,
   uptime: null,
   status: null,
   lastSeen: null,
@@ -47,6 +61,10 @@ const modalRefs = {
   customName: null,
   tags: null,
   notes: null,
+  gpuUsage: null,
+  gpuMemory: null,
+  metricsStatus: null,
+  metricsCanvas: null,
 };
 const paginationRefs = { prev: null, next: null, info: null };
 
@@ -80,6 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
     machineName: document.getElementById("detail-machine-name"),
     ipAddress: document.getElementById("detail-ip-address"),
     ollamaVersion: document.getElementById("detail-ollama-version"),
+    loadedModels: document.getElementById("detail-loaded-models"),
     uptime: document.getElementById("detail-uptime"),
     status: document.getElementById("detail-status"),
     lastSeen: document.getElementById("detail-last-seen"),
@@ -88,9 +107,13 @@ document.addEventListener("DOMContentLoaded", () => {
     customName: document.getElementById("detail-custom-name"),
     tags: document.getElementById("detail-tags"),
     notes: document.getElementById("detail-notes"),
+    gpuUsage: document.getElementById("detail-gpu-usage"),
+    gpuMemory: document.getElementById("detail-gpu-memory"),
     save: modalSave,
     delete: modalDelete,
     disconnect: modalDisconnect,
+    metricsStatus: document.getElementById("agent-metrics-status"),
+    metricsCanvas: document.getElementById("agent-metrics-chart"),
   });
 
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
@@ -296,10 +319,14 @@ async function refreshData({ manual = false } = {}) {
     const renderStart = performance.now();
     applyOverviewData(overview);
     const renderMs = performance.now() - renderStart;
-    recordPerformanceMetrics(fetchMs, renderMs, { usedLegacy });
+    const serverMs =
+      typeof overview?.generation_time_ms === "number"
+        ? overview.generation_time_ms
+        : null;
+    recordPerformanceMetrics(fetchMs, renderMs, { usedLegacy, serverMs });
   } catch (error) {
     handleRefreshFailure(error);
-    recordPerformanceMetrics(null, null, { usedLegacy: false });
+    recordPerformanceMetrics(null, null, { usedLegacy: false, serverMs: null });
   }
 }
 
@@ -307,13 +334,16 @@ function applyOverviewData(overview) {
   state.agents = Array.isArray(overview.agents) ? overview.agents : [];
   state.stats = overview.stats ?? null;
   state.history = Array.isArray(overview.history) ? overview.history : [];
+  const generatedAt =
+    typeof overview.generated_at === "string" ? new Date(overview.generated_at) : null;
+  state.metrics.generatedAt = generatedAt;
 
   renderStats();
   renderAgents();
   renderHistory();
   hideError();
   setConnectionStatus("online");
-  updateLastRefreshed(new Date());
+  updateLastRefreshed(new Date(), generatedAt);
 }
 
 async function fetchLegacyOverview() {
@@ -336,10 +366,12 @@ function handleRefreshFailure(error) {
   setConnectionStatus("offline");
 }
 
-function recordPerformanceMetrics(fetchMs, renderMs, { usedLegacy = false } = {}) {
+function recordPerformanceMetrics(fetchMs, renderMs, { usedLegacy = false, serverMs = null } = {}) {
   state.metrics.fetchMs = typeof fetchMs === "number" ? Math.round(fetchMs) : null;
   state.metrics.renderMs = typeof renderMs === "number" ? Math.round(renderMs) : null;
+  state.metrics.backendMs = typeof serverMs === "number" ? Math.round(serverMs) : null;
   state.metrics.usedLegacy = Boolean(usedLegacy);
+  state.metrics.severity = evaluatePerformanceSeverity();
   updatePerformanceIndicator();
 }
 
@@ -347,25 +379,61 @@ function updatePerformanceIndicator() {
   const target = state.performanceIndicator;
   if (!target) return;
 
-  const { fetchMs, renderMs, usedLegacy } = state.metrics;
-  if (fetchMs == null || renderMs == null) {
-    target.textContent = "取得: - / 描画: -";
-    target.classList.toggle("is-legacy", false);
-    return;
-  }
-
+  const { fetchMs, renderMs, backendMs, usedLegacy, severity } = state.metrics;
+  const segments = [
+    `取得: ${fetchMs == null ? "-" : `${fetchMs} ms`}`,
+    `描画: ${renderMs == null ? "-" : `${renderMs} ms`}`,
+    `サーバー集計: ${backendMs == null ? "-" : `${backendMs} ms`}`,
+  ];
   const suffix = usedLegacy ? " (legacy)" : "";
-  target.textContent = `取得: ${fetchMs} ms / 描画: ${renderMs} ms${suffix}`;
+
+  target.textContent = segments.join(" / ") + suffix;
   target.classList.toggle("is-legacy", usedLegacy);
+  target.classList.toggle("is-warning", severity === "warn");
+  target.classList.toggle("is-error", severity === "error");
 }
 
-async function fetchJson(url) {
+function evaluatePerformanceSeverity() {
+  const { fetchMs, renderMs, backendMs, usedLegacy } = state.metrics;
+  const ratios = [];
+
+  if (typeof fetchMs === "number" && PERFORMANCE_THRESHOLDS.fetch > 0) {
+    ratios.push(fetchMs / PERFORMANCE_THRESHOLDS.fetch);
+  }
+  if (typeof renderMs === "number" && PERFORMANCE_THRESHOLDS.render > 0) {
+    ratios.push(renderMs / PERFORMANCE_THRESHOLDS.render);
+  }
+  if (typeof backendMs === "number" && PERFORMANCE_THRESHOLDS.backend > 0) {
+    ratios.push(backendMs / PERFORMANCE_THRESHOLDS.backend);
+  }
+  if (usedLegacy) {
+    ratios.push(1.1);
+  }
+
+  if (!ratios.length) {
+    return "idle";
+  }
+
+  const maxRatio = Math.max(...ratios);
+  if (maxRatio >= 2) {
+    return "error";
+  }
+  if (maxRatio > 1) {
+    return "warn";
+  }
+  return "ok";
+}
+
+async function fetchJson(url, options = {}) {
+  const { headers, ...rest } = options;
   const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
     headers: {
-      "Accept": "application/json",
+      Accept: "application/json",
+      ...(headers ?? {}),
     },
+    ...rest,
   });
 
   if (!response.ok) {
@@ -391,6 +459,8 @@ function renderStats() {
     "failed-requests": state.stats.failed_requests,
     "total-active-requests": state.stats.total_active_requests,
     "average-response-time-ms": formatAverage(state.stats.average_response_time_ms),
+    "average-gpu-usage": formatPercentage(state.stats.average_gpu_usage),
+    "average-gpu-memory-usage": formatPercentage(state.stats.average_gpu_memory_usage),
     "last-metrics-updated-at": formatTimestamp(state.stats.last_metrics_updated_at),
     "last-registered-at": formatTimestamp(state.stats.last_registered_at),
     "last-seen-at": formatTimestamp(state.stats.last_seen_at),
@@ -636,7 +706,9 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
   row.classList.toggle("agent-offline", agent.status === "offline");
 
   const displayName = getDisplayName(agent);
-  const secondaryName = agent.custom_name ? agent.machine_name : agent.ollama_version;
+  const secondaryName = agent.custom_name
+    ? agent.machine_name
+    : agent.ollama_version || agent.machine_name;
 
   const statusLabel =
     agent.status === "online"
@@ -648,6 +720,26 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
     : "";
   const metricsTimestamp = formatTimestamp(agent.metrics_last_updated_at);
   const metricsDetail = metricsBadge ? `${metricsBadge} ${metricsTimestamp}` : metricsTimestamp;
+
+  const cpuDisplay = formatPercentage(agent.cpu_usage);
+  const cpuGpuSub =
+    typeof agent.gpu_usage === "number"
+      ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_usage)}</div>`
+      : "";
+  const memoryDisplay = formatPercentage(agent.memory_usage);
+  const memoryGpuSub =
+    typeof agent.gpu_memory_usage === "number"
+      ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_memory_usage)}</div>`
+      : "";
+  const models = getModelList(agent);
+  const primaryModelDisplay = models.length ? models[0] : "-";
+  const extraModels = models.slice(1, 4).join(", ");
+  const remainderCount = Math.max(0, models.length - 4);
+  const modelSub = extraModels
+    ? `<div class="cell-sub">${escapeHtml(extraModels)}${
+        remainderCount > 0 ? ` 他${remainderCount}件` : ""
+      }</div>`
+    : "";
 
   row.innerHTML = `
     <td>
@@ -667,9 +759,18 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
       <div class="cell-sub">Port ${Number.isFinite(agent.ollama_port) ? escapeHtml(agent.ollama_port) : "-"}</div>
     </td>
     <td>${statusLabel}</td>
-    <td>${formatDuration(agent.uptime_seconds)}</td>
-    <td>${formatPercentage(agent.cpu_usage)}</td>
-    <td>${formatPercentage(agent.memory_usage)}</td>
+    <td>
+      <div class="cell-title">${formatDuration(agent.uptime_seconds)}</div>
+      <div class="cell-sub">${escapeHtml(agent.ollama_version ?? "-")}</div>
+    </td>
+    <td>
+      <div class="cell-title">${cpuDisplay}</div>
+      ${cpuGpuSub}
+    </td>
+    <td>
+      <div class="cell-title">${memoryDisplay}</div>
+      ${memoryGpuSub}
+    </td>
     <td>${agent.active_requests}</td>
     <td>
       <div class="cell-title">${agent.total_requests}</div>
@@ -678,6 +779,10 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
       </div>
     </td>
     <td>${formatAverage(agent.average_response_time_ms)}</td>
+    <td>
+      <div class="cell-title">${escapeHtml(primaryModelDisplay)}</div>
+      ${modelSub}
+    </td>
     <td>
       <div class="cell-title">${formatTimestamp(agent.last_seen)}</div>
       <div class="cell-sub">${metricsDetail}</div>
@@ -703,7 +808,7 @@ function syncAgentRowSelection(row, agentId) {
 function buildPlaceholderRow(message) {
   const row = document.createElement("tr");
   row.className = "empty-row";
-  row.innerHTML = `<td colspan="11">${escapeHtml(message)}</td>`;
+  row.innerHTML = `<td colspan="13">${escapeHtml(message)}</td>`;
   return row;
 }
 
@@ -725,6 +830,7 @@ function getAgentSignature(agent) {
     agent.last_seen ?? "",
     agent.metrics_last_updated_at ?? "",
     agent.metrics_stale ? 1 : 0,
+    getModelList(agent).join("|") ?? "",
   ].join("|");
 }
 
@@ -744,6 +850,14 @@ function getDisplayName(agent) {
   return agent.machine_name ?? "-";
 }
 
+function getModelList(agent) {
+  if (!agent) return [];
+  const list = Array.isArray(agent.loaded_models) ? agent.loaded_models : [];
+  return list
+    .map((model) => (typeof model === "string" ? model.trim() : ""))
+    .filter((model) => model.length);
+}
+
 function filterAgent(agent, statusFilter, query) {
   if (statusFilter === "online" && agent.status !== "online") {
     return false;
@@ -759,7 +873,10 @@ function filterAgent(agent, statusFilter, query) {
   const machine = (agent.machine_name ?? "").toLowerCase();
   const ip = (agent.ip_address ?? "").toLowerCase();
   const custom = (agent.custom_name ?? "").toLowerCase();
-  return machine.includes(query) || ip.includes(query) || custom.includes(query);
+  const models = getModelList(agent).join(" ").toLowerCase();
+  return (
+    machine.includes(query) || ip.includes(query) || custom.includes(query) || models.includes(query)
+  );
 }
 
 function getFilteredAgents() {
@@ -842,10 +959,15 @@ function openAgentModal(agent) {
   state.lastFocused = document.activeElement;
   state.selection = new Set([agent.id]);
   state.currentAgentId = agent.id;
+  prepareAgentMetrics(agent.id);
 
   modalRefs.machineName.textContent = agent.machine_name ?? "-";
   modalRefs.ipAddress.textContent = agent.ip_address ?? "-";
   modalRefs.ollamaVersion.textContent = agent.ollama_version ?? "-";
+  if (modalRefs.loadedModels) {
+    const models = getModelList(agent);
+    modalRefs.loadedModels.textContent = models.length ? models.join(", ") : "-";
+  }
   modalRefs.uptime.textContent = formatDuration(agent.uptime_seconds);
   modalRefs.status.textContent = agent.status === "online" ? "オンライン" : "オフライン";
   modalRefs.lastSeen.textContent = formatTimestamp(agent.last_seen);
@@ -854,6 +976,19 @@ function openAgentModal(agent) {
   modalRefs.customName.value = agent.custom_name ?? "";
   modalRefs.tags.value = Array.isArray(agent.tags) ? agent.tags.join(", ") : "";
   modalRefs.notes.value = agent.notes ?? "";
+  if (modalRefs.gpuUsage) {
+    modalRefs.gpuUsage.textContent = formatPercentage(agent.gpu_usage);
+  }
+  if (modalRefs.gpuMemory) {
+    modalRefs.gpuMemory.textContent = formatPercentage(agent.gpu_memory_usage);
+  }
+
+  const cached = state.agentMetricsCache.get(agent.id);
+  if (cached && Date.now() - cached.fetchedAt.getTime() < 10_000) {
+    updateAgentMetrics(cached.data);
+  } else {
+    loadAgentMetrics(agent.id);
+  }
 
   modalRefs.modal.classList.remove("hidden");
   modalRefs.modal.setAttribute("tabindex", "-1");
@@ -863,10 +998,259 @@ function openAgentModal(agent) {
 function closeAgentModal() {
   if (!modalRefs.modal) return;
   modalRefs.modal.classList.add("hidden");
+  if (state.agentMetricsAbortController) {
+    state.agentMetricsAbortController.abort();
+    state.agentMetricsAbortController = null;
+  }
   if (state.lastFocused && typeof state.lastFocused.focus === "function") {
     state.lastFocused.focus();
   }
   state.currentAgentId = null;
+  destroyAgentMetricsChart();
+}
+
+function prepareAgentMetrics(agentId) {
+  if (state.agentMetricsAbortController) {
+    state.agentMetricsAbortController.abort();
+  }
+  state.agentMetricsAbortController = null;
+  state.agentMetricsSignature = "";
+  destroyAgentMetricsChart();
+  setAgentMetricsStatus("メトリクスを読み込み中…");
+  if (modalRefs.metricsCanvas) {
+    modalRefs.metricsCanvas.dataset.agentId = agentId;
+  }
+}
+
+async function loadAgentMetrics(agentId) {
+  const controller = new AbortController();
+  state.agentMetricsAbortController = controller;
+  try {
+    const metrics = await fetchJson(`/api/dashboard/metrics/${agentId}`, {
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted) {
+      return;
+    }
+    state.agentMetricsAbortController = null;
+    state.agentMetricsCache.set(agentId, { data: metrics, fetchedAt: new Date() });
+    updateAgentMetrics(metrics);
+  } catch (error) {
+    if (controller.signal?.aborted) {
+      return;
+    }
+    state.agentMetricsAbortController = null;
+    destroyAgentMetricsChart();
+    setAgentMetricsStatus(
+      `メトリクスの取得に失敗しました: ${error?.message ?? error}`,
+      { isError: true },
+    );
+  }
+}
+
+function updateAgentMetrics(metrics) {
+  const array = Array.isArray(metrics)
+    ? metrics.slice(Math.max(metrics.length - AGENT_METRICS_LIMIT, 0))
+    : [];
+
+  if (!array.length) {
+    state.agentMetricsSignature = "";
+    destroyAgentMetricsChart();
+    setAgentMetricsStatus("メトリクスはまだありません");
+    return;
+  }
+
+  const signature = buildAgentMetricsSignature(array);
+  if (signature === state.agentMetricsSignature && agentMetricsChart) {
+    setAgentMetricsStatus(buildAgentMetricsSummary(array));
+    return;
+  }
+
+  state.agentMetricsSignature = signature;
+
+  const canvas = modalRefs.metricsCanvas;
+  if (!canvas) return;
+
+  const labels = array.map((point) => formatMetricLabel(new Date(point.timestamp)));
+  const cpu = array.map((point) => toNullableNumber(point.cpu_usage));
+  const memory = array.map((point) => toNullableNumber(point.memory_usage));
+  const gpu = array.map((point) => toNullableNumber(point.gpu_usage));
+  const gpuMemory = array.map((point) => toNullableNumber(point.gpu_memory_usage));
+
+  const datasets = [];
+  if (datasetHasValues(cpu)) {
+    datasets.push({
+      key: "cpu",
+      label: "CPU使用率",
+      data: cpu,
+      borderColor: "rgba(59, 130, 246, 0.85)",
+      backgroundColor: "rgba(59, 130, 246, 0.12)",
+    });
+  }
+  if (datasetHasValues(memory)) {
+    datasets.push({
+      key: "memory",
+      label: "メモリ使用率",
+      data: memory,
+      borderColor: "rgba(168, 85, 247, 0.85)",
+      backgroundColor: "rgba(168, 85, 247, 0.12)",
+    });
+  }
+  if (datasetHasValues(gpu)) {
+    datasets.push({
+      key: "gpu",
+      label: "GPU使用率",
+      data: gpu,
+      borderColor: "rgba(34, 197, 94, 0.85)",
+      backgroundColor: "rgba(34, 197, 94, 0.12)",
+    });
+  }
+  if (datasetHasValues(gpuMemory)) {
+    datasets.push({
+      key: "gpu-memory",
+      label: "GPUメモリ使用率",
+      data: gpuMemory,
+      borderColor: "rgba(248, 113, 113, 0.85)",
+      backgroundColor: "rgba(248, 113, 113, 0.12)",
+    });
+  }
+
+  if (!datasets.length) {
+    destroyAgentMetricsChart();
+    setAgentMetricsStatus("メトリクスは記録されていますが数値を取得できませんでした");
+    return;
+  }
+
+  const shouldRecreate =
+    !agentMetricsChart ||
+    agentMetricsChart.data.datasets.length !== datasets.length ||
+    datasets.some((dataset, index) => agentMetricsChart.data.datasets[index]?.label !== dataset.label);
+
+  if (shouldRecreate) {
+    destroyAgentMetricsChart();
+    agentMetricsChart = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: datasets.map((dataset) => ({
+          label: dataset.label,
+          data: dataset.data,
+          borderColor: dataset.borderColor,
+          backgroundColor: dataset.backgroundColor,
+          fill: true,
+          pointRadius: 0,
+          tension: 0.25,
+        })),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: "index",
+          intersect: false,
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: "var(--text-subtle)",
+              maxRotation: 0,
+            },
+            grid: {
+              color: "rgba(148, 163, 184, 0.08)",
+            },
+          },
+          y: {
+            suggestedMin: 0,
+            suggestedMax: 100,
+            ticks: {
+              color: "var(--text-subtle)",
+              callback: (value) => `${value}%`,
+            },
+            grid: {
+              color: "rgba(148, 163, 184, 0.08)",
+            },
+          },
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: "var(--text-subtle)",
+            },
+          },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const value = context.parsed.y;
+                if (value == null) {
+                  return `${context.dataset.label}: -`;
+                }
+                return `${context.dataset.label}: ${value.toFixed(1)}%`;
+              },
+            },
+          },
+        },
+      },
+    });
+  } else {
+    agentMetricsChart.data.labels = labels;
+    datasets.forEach((dataset, index) => {
+      agentMetricsChart.data.datasets[index].data = dataset.data;
+      agentMetricsChart.data.datasets[index].label = dataset.label;
+    });
+    agentMetricsChart.update("none");
+  }
+
+  setAgentMetricsStatus(buildAgentMetricsSummary(array));
+}
+
+function destroyAgentMetricsChart() {
+  if (agentMetricsChart) {
+    agentMetricsChart.destroy();
+    agentMetricsChart = null;
+  }
+}
+
+function setAgentMetricsStatus(message, { isError = false } = {}) {
+  if (!modalRefs.metricsStatus) return;
+  modalRefs.metricsStatus.textContent = message;
+  modalRefs.metricsStatus.classList.toggle("is-error", isError);
+}
+
+function datasetHasValues(values) {
+  return values.some((value) => typeof value === "number" && !Number.isNaN(value));
+}
+
+function buildAgentMetricsSummary(metrics) {
+  const latest = metrics[metrics.length - 1];
+  const latestTime = formatMetricLabel(new Date(latest.timestamp));
+  const parts = [
+    `CPU ${formatPercentage(latest.cpu_usage)}`,
+    `メモリ ${formatPercentage(latest.memory_usage)}`,
+    `GPU ${formatPercentage(latest.gpu_usage)}`,
+    `GPUメモリ ${formatPercentage(latest.gpu_memory_usage)}`,
+  ];
+  return `データ点: ${metrics.length} / 最新 ${latestTime} | ${parts.join(" / ")}`;
+}
+
+function buildAgentMetricsSignature(metrics) {
+  return metrics
+    .map((point) => {
+      const cpu = typeof point.cpu_usage === "number" ? point.cpu_usage.toFixed(2) : "-";
+      const memory =
+        typeof point.memory_usage === "number" ? point.memory_usage.toFixed(2) : "-";
+      const gpu = typeof point.gpu_usage === "number" ? point.gpu_usage.toFixed(2) : "-";
+      const gpuMemory =
+        typeof point.gpu_memory_usage === "number"
+          ? point.gpu_memory_usage.toFixed(2)
+          : "-";
+      const ts = point.timestamp ?? "";
+      return `${ts}:${cpu}:${memory}:${gpu}:${gpuMemory}`;
+    })
+    .join("|");
+}
+
+function toNullableNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : null;
 }
 
 async function saveAgentSettings(agentId) {
@@ -952,12 +1336,18 @@ function downloadCsv(data, filename) {
     "ip_address",
     "ollama_version",
     "status",
+    "cpu_usage",
+    "memory_usage",
+    "gpu_usage",
+    "gpu_memory_usage",
     "registered_at",
     "last_seen",
+    "loaded_models",
     "tags",
   ];
 
   const rows = data.map((agent) => {
+    const models = getModelList(agent).join("|");
     return [
       agent.id,
       getDisplayName(agent),
@@ -965,8 +1355,13 @@ function downloadCsv(data, filename) {
       agent.ip_address ?? "",
       agent.ollama_version ?? "",
       agent.status ?? "",
+      agent.cpu_usage ?? "",
+      agent.memory_usage ?? "",
+      agent.gpu_usage ?? "",
+      agent.gpu_memory_usage ?? "",
       agent.registered_at ?? "",
       agent.last_seen ?? "",
+      models,
       Array.isArray(agent.tags) ? agent.tags.join("|") : "",
     ]
       .map((value) => `"${String(value).replace(/"/g, '""')}"`)
@@ -1011,10 +1406,15 @@ function setConnectionStatus(mode) {
   }
 }
 
-function updateLastRefreshed(date) {
+function updateLastRefreshed(date, serverDate = null) {
   const label = document.getElementById("last-refreshed");
   if (!label) return;
-  label.textContent = `最終更新: ${formatDate(date)}`;
+  const clientText = formatDate(date);
+  const serverText =
+    serverDate instanceof Date && !Number.isNaN(serverDate.getTime())
+      ? ` / サーバー: ${formatDate(serverDate)}`
+      : "";
+  label.textContent = `最終更新: ${clientText}${serverText}`;
 }
 
 function showError(message) {
@@ -1086,6 +1486,18 @@ function formatDate(date) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatMetricLabel(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return date.toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

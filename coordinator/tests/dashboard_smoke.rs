@@ -11,7 +11,7 @@ use axum::{
 use ollama_coordinator_common::protocol::RegisterRequest;
 use ollama_coordinator_coordinator::{
     api,
-    balancer::{LoadManager, RequestOutcome},
+    balancer::{LoadManager, MetricsUpdate, RequestOutcome},
     registry::AgentRegistry,
     AppState,
 };
@@ -84,7 +84,15 @@ async fn dashboard_agents_and_stats_reflect_registry() {
         .agent_id;
 
     load_manager
-        .record_metrics(agent_id, 12.5, 34.0, 2, Some(110.0))
+        .record_metrics(MetricsUpdate {
+            agent_id,
+            cpu_usage: 12.5,
+            memory_usage: 34.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 2,
+            average_response_time_ms: Some(110.0),
+        })
         .await
         .unwrap();
     load_manager.begin_request(agent_id).await.unwrap();
@@ -120,6 +128,7 @@ async fn dashboard_agents_and_stats_reflect_registry() {
     assert_eq!(agent["status"], "online");
     assert_eq!(agent["total_requests"], 1);
     assert_eq!(agent["successful_requests"], 1);
+    assert!(agent["loaded_models"].is_array());
 
     let stats_response = router
         .clone()
@@ -238,6 +247,60 @@ async fn dashboard_overview_returns_combined_payload() {
     let overview: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(overview["agents"].as_array().unwrap().len(), 1);
+    let agent = overview["agents"].as_array().unwrap().first().unwrap();
+    assert!(agent["loaded_models"].is_array());
     assert_eq!(overview["stats"]["total_agents"], 1);
     assert_eq!(overview["history"].as_array().unwrap().len(), 60);
+    assert!(overview["generated_at"].is_string());
+    assert!(overview["generation_time_ms"].as_u64().is_some());
+}
+
+#[tokio::test]
+async fn dashboard_agent_metrics_endpoint_returns_history() {
+    let (router, registry, load_manager) = build_router();
+
+    let agent_id = registry
+        .register(RegisterRequest {
+            machine_name: "metrics-endpoint".into(),
+            ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 11)),
+            ollama_version: "0.1.0".into(),
+            ollama_port: 11434,
+        })
+        .await
+        .unwrap()
+        .agent_id;
+
+    load_manager
+        .record_metrics(MetricsUpdate {
+            agent_id,
+            cpu_usage: 42.0,
+            memory_usage: 55.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 2,
+            average_response_time_ms: Some(105.0),
+        })
+        .await
+        .unwrap();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/dashboard/metrics/{agent_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let metrics: Value = serde_json::from_slice(&body).unwrap();
+    assert!(metrics.is_array());
+    assert_eq!(metrics.as_array().unwrap().len(), 1);
+    assert_eq!(
+        metrics.as_array().unwrap()[0]["agent_id"].as_str().unwrap(),
+        agent_id.to_string()
+    );
 }

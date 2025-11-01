@@ -35,6 +35,9 @@ pub struct Agent {
     /// メモ
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// ロード済みモデル一覧
+    #[serde(default)]
+    pub loaded_models: Vec<String>,
 }
 
 /// エージェント状態
@@ -56,6 +59,12 @@ pub struct HealthMetrics {
     pub cpu_usage: f32,
     /// メモリ使用率 (0.0-100.0)
     pub memory_usage: f32,
+    /// GPU使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -118,6 +127,7 @@ mod tests {
             custom_name: Some("Custom".to_string()),
             tags: vec!["primary".to_string()],
             notes: Some("memo".to_string()),
+            loaded_models: vec!["gpt-oss:20b".to_string()],
         };
 
         let json = serde_json::to_string(&agent).unwrap();
@@ -143,6 +153,7 @@ mod tests {
         assert!(agent.custom_name.is_none());
         assert!(agent.tags.is_empty());
         assert!(agent.notes.is_none());
+        assert!(agent.loaded_models.is_empty());
     }
 
     #[test]

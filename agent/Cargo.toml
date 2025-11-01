@@ -17,6 +17,10 @@ reqwest = { workspace = true }
 
 # システム監視
 sysinfo = { workspace = true }
+flate2 = "1.0"
+tar = "0.4"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+nvml-wrapper = "0.9"
 
 # シリアライゼーション
 serde = { workspace = true }
@@ -34,3 +38,4 @@ whoami = "1.4"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+wiremock = "0.6.5"

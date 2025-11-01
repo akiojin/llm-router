@@ -26,6 +26,8 @@ use uuid::Uuid;
 const METRICS_STALE_THRESHOLD_SECS: i64 = 120;
 /// リクエスト履歴の保持分数
 const REQUEST_HISTORY_WINDOW_MINUTES: i64 = 60;
+/// エージェントメトリクス履歴の最大保持件数
+const METRICS_HISTORY_CAPACITY: usize = 360;
 
 /// リクエスト結果
 #[derive(Debug, Clone, Copy)]
@@ -73,6 +75,8 @@ mod tests {
                 agent_id: Uuid::new_v4(),
                 cpu_usage: 10.0,
                 memory_usage: 20.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
                 active_requests: 1,
                 total_requests: 5,
                 average_response_time_ms: Some(80.0),
@@ -112,16 +116,73 @@ mod tests {
             .agent_id;
 
         manager
-            .record_metrics(slow_agent, 20.0, 30.0, 1, Some(240.0))
+            .record_metrics(MetricsUpdate {
+                agent_id: slow_agent,
+                cpu_usage: 20.0,
+                memory_usage: 30.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                active_requests: 1,
+                average_response_time_ms: Some(240.0),
+            })
             .await
             .unwrap();
         manager
-            .record_metrics(fast_agent, 20.0, 30.0, 1, Some(120.0))
+            .record_metrics(MetricsUpdate {
+                agent_id: fast_agent,
+                cpu_usage: 20.0,
+                memory_usage: 30.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                active_requests: 1,
+                average_response_time_ms: Some(120.0),
+            })
             .await
             .unwrap();
 
         let selected = manager.select_agent().await.unwrap();
         assert_eq!(selected.id, fast_agent);
+    }
+
+    #[tokio::test]
+    async fn metrics_history_tracks_recent_points() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "history".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        for i in 0..(METRICS_HISTORY_CAPACITY + 10) {
+            manager
+                .record_metrics(MetricsUpdate {
+                    agent_id,
+                    cpu_usage: i as f32,
+                    memory_usage: (i * 2) as f32,
+                    gpu_usage: Some((i % 100) as f32),
+                    gpu_memory_usage: Some(((i * 2) % 100) as f32),
+                    active_requests: 1,
+                    average_response_time_ms: Some(100.0),
+                })
+                .await
+                .unwrap();
+        }
+
+        let history = manager.metrics_history(agent_id).await.unwrap();
+        assert_eq!(history.len(), METRICS_HISTORY_CAPACITY);
+        let last = history.last().unwrap();
+        assert_eq!(last.cpu_usage as usize, METRICS_HISTORY_CAPACITY + 9);
+        assert_eq!(
+            last.memory_usage as usize,
+            (METRICS_HISTORY_CAPACITY + 9) * 2
+        );
     }
 }
 
@@ -134,6 +195,7 @@ struct AgentLoadState {
     success_count: u64,
     error_count: u64,
     total_latency_ms: u128,
+    metrics_history: VecDeque<HealthMetrics>,
 }
 
 impl AgentLoadState {
@@ -172,6 +234,13 @@ impl AgentLoadState {
             .and_then(|m| m.average_response_time_ms)
             .or_else(|| self.average_latency_ms())
     }
+
+    fn push_metrics(&mut self, metrics: HealthMetrics) {
+        self.metrics_history.push_back(metrics);
+        if self.metrics_history.len() > METRICS_HISTORY_CAPACITY {
+            self.metrics_history.pop_front();
+        }
+    }
 }
 
 /// エージェントのロードスナップショット
@@ -187,6 +256,10 @@ pub struct AgentLoadSnapshot {
     pub cpu_usage: Option<f32>,
     /// メモリ使用率
     pub memory_usage: Option<f32>,
+    /// GPU使用率
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数（Coordinator観点+エージェント自己申告）
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -220,6 +293,10 @@ pub struct SystemSummary {
     pub failed_requests: u64,
     /// 平均レスポンスタイム (ms)
     pub average_response_time_ms: Option<f32>,
+    /// 平均GPU使用率 (0-100)
+    pub average_gpu_usage: Option<f32>,
+    /// 平均GPUメモリ使用率 (0-100)
+    pub average_gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト総数
     pub total_active_requests: u32,
     /// 最新メトリクス更新時刻
@@ -235,6 +312,25 @@ pub struct LoadManager {
     history: Arc<RwLock<VecDeque<RequestHistoryPoint>>>,
 }
 
+/// ハートビートから記録するメトリクス値
+#[derive(Debug, Clone)]
+pub struct MetricsUpdate {
+    /// 対象エージェントのID
+    pub agent_id: Uuid,
+    /// CPU使用率（パーセンテージ）
+    pub cpu_usage: f32,
+    /// メモリ使用率（パーセンテージ）
+    pub memory_usage: f32,
+    /// GPU使用率（パーセンテージ）
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率（パーセンテージ）
+    pub gpu_memory_usage: Option<f32>,
+    /// アクティブなリクエスト数
+    pub active_requests: u32,
+    /// 平均レスポンスタイム（ミリ秒）
+    pub average_response_time_ms: Option<f32>,
+}
+
 impl LoadManager {
     /// 新しいロードマネージャーを作成
     pub fn new(registry: AgentRegistry) -> Self {
@@ -247,14 +343,17 @@ impl LoadManager {
     }
 
     /// ヘルスメトリクスを記録
-    pub async fn record_metrics(
-        &self,
-        agent_id: Uuid,
-        cpu_usage: f32,
-        memory_usage: f32,
-        active_requests: u32,
-        average_response_time_ms: Option<f32>,
-    ) -> CoordinatorResult<()> {
+    pub async fn record_metrics(&self, update: MetricsUpdate) -> CoordinatorResult<()> {
+        let MetricsUpdate {
+            agent_id,
+            cpu_usage,
+            memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
+            active_requests,
+            average_response_time_ms,
+        } = update;
+
         // エージェントが存在することを確認
         self.registry.get(agent_id).await?;
 
@@ -262,16 +361,21 @@ impl LoadManager {
         let entry = state.entry(agent_id).or_default();
 
         let derived_average = average_response_time_ms.or_else(|| entry.average_latency_ms());
-
-        entry.last_metrics = Some(HealthMetrics {
+        let timestamp = Utc::now();
+        let metrics = HealthMetrics {
             agent_id,
             cpu_usage,
             memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
             active_requests,
             total_requests: entry.total_assigned,
             average_response_time_ms: derived_average,
-            timestamp: Utc::now(),
-        });
+            timestamp,
+        };
+
+        entry.last_metrics = Some(metrics.clone());
+        entry.push_metrics(metrics);
 
         Ok(())
     }
@@ -317,6 +421,14 @@ impl LoadManager {
             metrics.total_requests = entry.total_assigned;
             if updated_average.is_some() {
                 metrics.average_response_time_ms = updated_average;
+            }
+            if let Some(latest) = entry.metrics_history.back_mut() {
+                latest.total_requests = metrics.total_requests;
+                if let Some(avg) = metrics.average_response_time_ms {
+                    latest.average_response_time_ms = Some(avg);
+                }
+                latest.gpu_usage = metrics.gpu_usage;
+                latest.gpu_memory_usage = metrics.gpu_memory_usage;
             }
         }
 
@@ -402,6 +514,17 @@ impl LoadManager {
             .collect()
     }
 
+    /// 指定されたエージェントのメトリクス履歴を取得
+    pub async fn metrics_history(&self, agent_id: Uuid) -> CoordinatorResult<Vec<HealthMetrics>> {
+        self.registry.get(agent_id).await?;
+        let state = self.state.read().await;
+        let history = state
+            .get(&agent_id)
+            .map(|load_state| load_state.metrics_history.iter().cloned().collect())
+            .unwrap_or_else(Vec::new);
+        Ok(history)
+    }
+
     /// システム全体の統計サマリーを取得
     pub async fn summary(&self) -> SystemSummary {
         let agents = self.registry.list().await;
@@ -425,6 +548,10 @@ impl LoadManager {
         let mut weighted_average_sum = 0f64;
         let mut weighted_average_weight = 0f64;
         let mut latest_timestamp: Option<DateTime<Utc>> = None;
+        let mut gpu_usage_total = 0f64;
+        let mut gpu_usage_samples = 0u64;
+        let mut gpu_memory_total = 0f64;
+        let mut gpu_memory_samples = 0u64;
         let now = Utc::now();
 
         for agent in &agents {
@@ -462,6 +589,16 @@ impl LoadManager {
                         weighted_average_sum += avg as f64 * weight;
                         weighted_average_weight += weight;
                     }
+                    if let Some(metrics) = load_state.last_metrics.as_ref() {
+                        if let Some(gpu) = metrics.gpu_usage {
+                            gpu_usage_total += gpu as f64;
+                            gpu_usage_samples = gpu_usage_samples.saturating_add(1);
+                        }
+                        if let Some(gpu_mem) = metrics.gpu_memory_usage {
+                            gpu_memory_total += gpu_mem as f64;
+                            gpu_memory_samples = gpu_memory_samples.saturating_add(1);
+                        }
+                    }
                 } else if latest_timestamp.is_none() {
                     // フレッシュなメトリクスがない場合でも最も新しい値を保持
                     if let Some(timestamp) = load_state.last_updated() {
@@ -477,6 +614,14 @@ impl LoadManager {
         } else if latency_samples > 0 {
             summary.average_response_time_ms =
                 Some((total_latency_ms as f64 / latency_samples as f64) as f32);
+        }
+
+        if gpu_usage_samples > 0 {
+            summary.average_gpu_usage = Some((gpu_usage_total / gpu_usage_samples as f64) as f32);
+        }
+        if gpu_memory_samples > 0 {
+            summary.average_gpu_memory_usage =
+                Some((gpu_memory_total / gpu_memory_samples as f64) as f32);
         }
 
         summary.last_metrics_updated_at = latest_timestamp;
@@ -521,6 +666,14 @@ impl LoadManager {
             .last_metrics
             .as_ref()
             .map(|metrics| metrics.memory_usage);
+        let gpu_usage = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_usage);
+        let gpu_memory_usage = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_memory_usage);
         let active_requests = load_state.combined_active();
 
         AgentLoadSnapshot {
@@ -529,6 +682,8 @@ impl LoadManager {
             status: agent.status,
             cpu_usage,
             memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
             active_requests,
             total_requests: load_state.total_assigned,
             successful_requests: load_state.success_count,

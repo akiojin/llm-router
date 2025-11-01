@@ -3,7 +3,7 @@
 //! 複数エージェントへのリクエスト分散と負荷ベース選択の検証
 
 use ollama_coordinator_coordinator::{
-    balancer::{LoadManager, RequestOutcome},
+    balancer::{LoadManager, MetricsUpdate, RequestOutcome},
     registry::AgentRegistry,
 };
 use ollama_coordinator_common::protocol::RegisterRequest;
@@ -82,11 +82,27 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
 
     // 高負荷エージェントはCPU 95%、低負荷エージェントはCPU 10%
     load_manager
-        .record_metrics(high_cpu_agent, 95.0, 40.0, 2, None)
+        .record_metrics(MetricsUpdate {
+            agent_id: high_cpu_agent,
+            cpu_usage: 95.0,
+            memory_usage: 40.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 2,
+            average_response_time_ms: None,
+        })
         .await
         .unwrap();
     load_manager
-        .record_metrics(low_cpu_agent, 10.0, 30.0, 0, None)
+        .record_metrics(MetricsUpdate {
+            agent_id: low_cpu_agent,
+            cpu_usage: 10.0,
+            memory_usage: 30.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 0,
+            average_response_time_ms: None,
+        })
         .await
         .unwrap();
 
@@ -137,11 +153,27 @@ async fn test_load_based_balancing_prefers_lower_latency() {
         .agent_id;
 
     load_manager
-        .record_metrics(slow_agent, 50.0, 40.0, 1, Some(250.0))
+        .record_metrics(MetricsUpdate {
+            agent_id: slow_agent,
+            cpu_usage: 50.0,
+            memory_usage: 40.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 1,
+            average_response_time_ms: Some(250.0),
+        })
         .await
         .unwrap();
     load_manager
-        .record_metrics(fast_agent, 50.0, 40.0, 1, Some(120.0))
+        .record_metrics(MetricsUpdate {
+            agent_id: fast_agent,
+            cpu_usage: 50.0,
+            memory_usage: 40.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            active_requests: 1,
+            average_response_time_ms: Some(120.0),
+        })
         .await
         .unwrap();
 

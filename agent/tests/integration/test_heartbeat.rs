@@ -30,8 +30,11 @@ async fn test_heartbeat_sending_after_registration() {
         agent_id,
         cpu_usage: 45.5,
         memory_usage: 60.2,
+        gpu_usage: None,
+        gpu_memory_usage: None,
         active_requests: 0,
         average_response_time_ms: None,
+        loaded_models: Vec::new(),
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -65,20 +68,23 @@ async fn test_heartbeat_with_real_metrics() {
 
     // Act: 実際のメトリクスを収集
     let mut metrics_collector = MetricsCollector::new();
-    let (cpu_usage, memory_usage) = metrics_collector.collect_metrics().unwrap();
+    let metrics = metrics_collector.collect_metrics().unwrap();
 
     println!(
         "Collected metrics - CPU: {}%, Memory: {}%",
-        cpu_usage, memory_usage
+        metrics.cpu_usage, metrics.memory_usage
     );
 
     // Act: ハートビート送信
     let heartbeat_req = HealthCheckRequest {
         agent_id,
-        cpu_usage,
-        memory_usage,
+        cpu_usage: metrics.cpu_usage,
+        memory_usage: metrics.memory_usage,
+        gpu_usage: metrics.gpu_usage,
+        gpu_memory_usage: metrics.gpu_memory_usage,
         active_requests: 0,
         average_response_time_ms: None,
+        loaded_models: Vec::new(),
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -105,8 +111,11 @@ async fn test_heartbeat_unregistered_agent() {
         agent_id: fake_agent_id,
         cpu_usage: 50.0,
         memory_usage: 50.0,
+        gpu_usage: None,
+        gpu_memory_usage: None,
         active_requests: 0,
         average_response_time_ms: None,
+        loaded_models: Vec::new(),
     };
 
     // Act: 未登録エージェントでハートビート送信
@@ -145,8 +154,11 @@ async fn test_multiple_heartbeats() {
             agent_id,
             cpu_usage: 40.0 + i as f32,
             memory_usage: 55.0 + i as f32,
+            gpu_usage: None,
+            gpu_memory_usage: None,
             active_requests: i,
             average_response_time_ms: None,
+            loaded_models: Vec::new(),
         };
 
         let result = client.send_heartbeat(heartbeat_req).await;

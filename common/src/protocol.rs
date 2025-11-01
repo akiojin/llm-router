@@ -47,11 +47,20 @@ pub struct HealthCheckRequest {
     pub cpu_usage: f32,
     /// メモリ使用率 (0.0-100.0)
     pub memory_usage: f32,
+    /// GPU使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 過去N件の平均レスポンスタイム (ms)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub average_response_time_ms: Option<f32>,
+    /// エージェントがロード済みのモデル一覧
+    #[serde(default)]
+    pub loaded_models: Vec<String>,
 }
 
 /// Ollamaチャットリクエスト
@@ -133,8 +142,11 @@ mod tests {
             agent_id: Uuid::new_v4(),
             cpu_usage: 45.5,
             memory_usage: 60.2,
+            gpu_usage: Some(33.0),
+            gpu_memory_usage: Some(71.0),
             active_requests: 3,
             average_response_time_ms: Some(123.4),
+            loaded_models: vec!["gpt-oss:20b".to_string()],
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -142,11 +154,14 @@ mod tests {
 
         assert_eq!(request.cpu_usage, deserialized.cpu_usage);
         assert_eq!(request.memory_usage, deserialized.memory_usage);
+        assert_eq!(request.gpu_usage, deserialized.gpu_usage);
+        assert_eq!(request.gpu_memory_usage, deserialized.gpu_memory_usage);
         assert_eq!(request.active_requests, deserialized.active_requests);
         assert_eq!(
             request.average_response_time_ms,
             deserialized.average_response_time_ms
         );
+        assert_eq!(request.loaded_models, deserialized.loaded_models);
     }
 
     #[test]

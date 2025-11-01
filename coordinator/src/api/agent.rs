@@ -125,10 +125,10 @@ impl IntoResponse for AppError {
 mod tests {
     use super::*;
     use crate::{
-        balancer::{LoadManager, RequestOutcome},
+        balancer::{LoadManager, MetricsUpdate, RequestOutcome},
         registry::AgentRegistry,
     };
-    use ollama_coordinator_common::types::AgentStatus;
+    use ollama_coordinator_common::{protocol::RegisterStatus, types::AgentStatus};
     use std::net::IpAddr;
     use std::time::Duration;
 
@@ -195,6 +195,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_register_same_machine_different_port_creates_multiple_agents() {
+        let state = create_test_state();
+
+        let req1 = RegisterRequest {
+            machine_name: "shared-machine".to_string(),
+            ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 11434,
+        };
+        let res1 = register_agent(State(state.clone()), Json(req1))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(res1.status, RegisterStatus::Registered);
+
+        let req2 = RegisterRequest {
+            machine_name: "shared-machine".to_string(),
+            ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 12434,
+        };
+        let res2 = register_agent(State(state.clone()), Json(req2))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(res2.status, RegisterStatus::Registered);
+
+        let agents = list_agents(State(state)).await.0;
+        assert_eq!(agents.len(), 2);
+    }
+
+    #[tokio::test]
     async fn test_list_agent_metrics_returns_snapshot() {
         let state = create_test_state();
 
@@ -214,7 +246,15 @@ mod tests {
         // メトリクスを記録
         state
             .load_manager
-            .record_metrics(response.agent_id, 42.0, 33.0, 1, None)
+            .record_metrics(MetricsUpdate {
+                agent_id: response.agent_id,
+                cpu_usage: 42.0,
+                memory_usage: 33.0,
+                gpu_usage: Some(55.0),
+                gpu_memory_usage: Some(48.0),
+                active_requests: 1,
+                average_response_time_ms: None,
+            })
             .await
             .unwrap();
 
@@ -225,6 +265,8 @@ mod tests {
         assert_eq!(snapshot.agent_id, response.agent_id);
         assert_eq!(snapshot.cpu_usage.unwrap(), 42.0);
         assert_eq!(snapshot.memory_usage.unwrap(), 33.0);
+        assert_eq!(snapshot.gpu_usage, Some(55.0));
+        assert_eq!(snapshot.gpu_memory_usage, Some(48.0));
         assert_eq!(snapshot.active_requests, 1);
         assert!(!snapshot.is_stale);
     }
@@ -260,7 +302,15 @@ mod tests {
         // ハートビートでメトリクス更新
         state
             .load_manager
-            .record_metrics(response.agent_id, 55.0, 44.0, 2, Some(150.0))
+            .record_metrics(MetricsUpdate {
+                agent_id: response.agent_id,
+                cpu_usage: 55.0,
+                memory_usage: 44.0,
+                gpu_usage: Some(60.0),
+                gpu_memory_usage: Some(62.0),
+                active_requests: 2,
+                average_response_time_ms: Some(150.0),
+            })
             .await
             .unwrap();
 

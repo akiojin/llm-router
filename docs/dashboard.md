@@ -60,6 +60,12 @@ Expose the port as configured (`-p 8080:8080`) and open the dashboard from the h
 | Force disconnect       | In the modal, click “強制切断” to set status offline immediately.                                        |
 | Delete agent           | In the modal, click “削除” and confirm. The agent is removed from memory and storage.                     |
 | Export list            | Use “JSONエクスポート” or “CSVエクスポート” buttons to download the filtered list.                        |
+| View CPU/memory/GPU trend | Open “詳細” and scroll to the “メトリクス” section for CPU/メモリ/GPUの折れ線グラフ (latest 120 samples). |
+| Monitor GPU utilisation | The stats card “平均GPU使用率” displays the current average GPU utilisation and memory usage across all fresh agents. |
+| Override Ollama download | Set `OLLAMA_DOWNLOAD_URL` (and optionally `OLLAMA_PLATFORM` such as `linux-arm64`) when running the agent to force a specific binary. |
+| Auto model preload   | Agents now pull `gpt-oss:20b` automatically once Ollama is up. Override with `OLLAMA_DEFAULT_MODEL`; adjust the pull timeout with `OLLAMA_PULL_TIMEOUT_SECS`. |
+| View loaded models    | The “モデル” column shows each agent’s reported models (top entry + preview). Open “詳細” to see the full, deduplicated list. |
+| Run multiple agents on one host | Launch each agent with a unique `OLLAMA_PORT` (e.g. 11434, 12434…). The coordinator now treats ports on the same machine as distinct agents. |
 
 Pagination is shown once the list exceeds 50 entries; use the arrows below the table to move between pages.
 
@@ -71,9 +77,11 @@ The dashboard calls these coordinator endpoints:
 
 | Method | Path                                 | Purpose                                 |
 |--------|--------------------------------------|-----------------------------------------|
+| GET    | `/api/dashboard/overview`            | Combined agents + stats + history + generation metrics |
 | GET    | `/api/dashboard/agents`              | Agent list with current runtime metrics |
 | GET    | `/api/dashboard/stats`               | Global coordinator summary              |
 | GET    | `/api/dashboard/request-history`     | Recent request history (60 points)      |
+| GET    | `/api/dashboard/metrics/:agent_id`   | CPU/memory/GPU history for a specific agent |
 | PUT    | `/api/agents/:id/settings`           | Update custom name, tags, notes         |
 | DELETE | `/api/agents/:id`                    | Remove agent registration               |
 | POST   | `/api/agents/:id/disconnect`         | Force the agent offline                 |
@@ -104,6 +112,9 @@ To customise:
 - **Dashboard shows “データ取得中…” indefinitely**: Ensure the coordinator process is running and port 8080 is reachable. Check container port mapping (`docker compose ps`).
 - **JSON exports include stale data**: Filters are applied per page; ensure you’re exporting after applying the desired filter.
 - **High latency or many agents**: Adjust `state.pageSize` in `app.js` or implement lazy loading.
+- **Performance indicator shows warning / legacy**: “legacy” means the combined overview endpoint was unavailable and the client fell back to three legacy requests. Warnings appear when fetch (>2s), render (>100ms), or server aggregation (>100ms) exceed the performance budget; investigate coordinator load or reduce agent volume.
+- **Metrics chart is empty**: The agent has not yet reported heartbeat metrics. Once the agent sends CPU/メモリ/GPU情報 (`record_metrics`), up to 360 snapshots are retained server-side and the most recent 120 are graphed in the modal.
+- **GPU values stay at 0%**: Ensure the agent process can access NVIDIA NVML (the `libnvidia-ml` shared library). If unavailable, GPUメトリクスは自動的に省略されます。
 
 ---
 
