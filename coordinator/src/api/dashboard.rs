@@ -310,6 +310,9 @@ mod tests {
             ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
             ollama_version: "0.1.0".into(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let agent_id = state
             .registry
@@ -375,6 +378,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -387,6 +393,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -443,6 +452,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 11)),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -484,6 +496,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 21)),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -517,6 +532,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 31)),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap();

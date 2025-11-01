@@ -25,6 +25,9 @@ async fn test_round_robin_load_balancing() {
                 .unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let response = registry.register(req).await.unwrap();
         agent_ids.push(response.agent_id);
@@ -64,6 +67,9 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             ip_address: "192.168.2.10".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         })
         .await
         .unwrap()
@@ -75,6 +81,9 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             ip_address: "192.168.2.11".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         })
         .await
         .unwrap()
@@ -142,6 +151,9 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             ip_address: "192.168.3.10".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         })
         .await
         .unwrap()
@@ -153,6 +165,9 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             ip_address: "192.168.3.11".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         })
         .await
         .unwrap()

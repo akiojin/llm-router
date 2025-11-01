@@ -41,6 +41,11 @@ impl OllamaManager {
         }
     }
 
+    /// ollamaバイナリのパスを取得
+    pub fn ollama_path(&self) -> &std::path::Path {
+        &self.ollama_path
+    }
+
     /// Ollamaが利用可能か確認し、必要に応じてダウンロード・起動
     pub async fn ensure_running(&mut self) -> AgentResult<()> {
         // Ollamaがインストールされているか確認
@@ -368,6 +373,28 @@ impl OllamaManager {
         Ok(version)
     }
 
+    /// ollama psコマンドを実行してGPU情報を取得
+    pub fn get_gpu_info_from_ps(&self) -> AgentResult<bool> {
+        let output = Command::new(&self.ollama_path)
+            .arg("ps")
+            .output()
+            .map_err(|e| {
+                AgentError::OllamaConnection(format!("Failed to execute ollama ps: {}", e))
+            })?;
+
+        if !output.status.success() {
+            return Err(AgentError::OllamaConnection(format!(
+                "ollama ps command failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let result = parse_ollama_ps_output(&stdout);
+
+        Ok(result.has_gpu)
+    }
+
     /// Ollamaを停止
     pub fn stop(&mut self) -> AgentResult<()> {
         if let Some(mut process) = self.process.take() {
@@ -646,6 +673,43 @@ fn detect_arch() -> String {
     std::env::consts::ARCH.to_string()
 }
 
+/// ollama psコマンドの実行結果
+#[derive(Debug)]
+struct OllamaPsResult {
+    has_gpu: bool,
+}
+
+/// ollama psコマンドの出力をパース
+fn parse_ollama_ps_output(output: &str) -> OllamaPsResult {
+    let mut has_gpu = false;
+
+    for (i, line) in output.lines().enumerate() {
+        // Skip header line
+        if i == 0 {
+            continue;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Split by whitespace and check PROCESSOR column (4th column, index 3+)
+        let columns: Vec<&str> = trimmed.split_whitespace().collect();
+        if columns.len() >= 4 {
+            // PROCESSOR column can be "100% GPU", "100% CPU", "48%/52% CPU/GPU", etc.
+            // Check if any part contains "GPU"
+            let processor_info = columns[3..].join(" ");
+            if processor_info.contains("GPU") {
+                has_gpu = true;
+                break;
+            }
+        }
+    }
+
+    OllamaPsResult { has_gpu }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -807,5 +871,33 @@ mod tests {
 
         let models = manager.list_models().await.unwrap();
         assert_eq!(models, vec!["gpt-oss:20b", "gpt-oss:latest", "phi-3"]);
+    }
+
+    #[test]
+    fn test_parse_ollama_ps_with_gpu() {
+        let output = "NAME          ID            SIZE    PROCESSOR   UNTIL\nllama3:70b    bcfb190ca3a7  42 GB   100% GPU    4 minutes from now\n";
+        let result = parse_ollama_ps_output(output);
+        assert!(result.has_gpu, "Should detect GPU from '100% GPU'");
+    }
+
+    #[test]
+    fn test_parse_ollama_ps_with_mixed_processor() {
+        let output = "NAME          ID            SIZE    PROCESSOR      UNTIL\nllama3:8b     abc123def456  4.7 GB  48%/52% CPU/GPU  Forever\n";
+        let result = parse_ollama_ps_output(output);
+        assert!(result.has_gpu, "Should detect GPU from '48%/52% CPU/GPU'");
+    }
+
+    #[test]
+    fn test_parse_ollama_ps_cpu_only() {
+        let output = "NAME          ID            SIZE    PROCESSOR   UNTIL\nllama3:8b     abc123def456  4.7 GB  100% CPU    Forever\n";
+        let result = parse_ollama_ps_output(output);
+        assert!(!result.has_gpu, "Should not detect GPU from '100% CPU'");
+    }
+
+    #[test]
+    fn test_parse_ollama_ps_empty() {
+        let output = "NAME          ID            SIZE    PROCESSOR   UNTIL\n";
+        let result = parse_ollama_ps_output(output);
+        assert!(!result.has_gpu, "Should not detect GPU from empty output");
     }
 }

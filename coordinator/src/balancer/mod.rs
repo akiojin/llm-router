@@ -102,6 +102,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -113,6 +116,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -164,6 +170,9 @@ mod tests {
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3)),
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()

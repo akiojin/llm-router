@@ -17,6 +17,14 @@ pub struct RegisterRequest {
     pub ollama_version: String,
     /// Ollamaポート番号
     pub ollama_port: u16,
+    /// GPU利用可能フラグ
+    pub gpu_available: bool,
+    /// GPU個数
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_count: Option<u32>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model: Option<String>,
 }
 
 /// エージェント登録レスポンス
@@ -125,6 +133,9 @@ mod tests {
             ip_address: "192.168.1.100".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(2),
+            gpu_model: Some("NVIDIA RTX 4090".to_string()),
         };
 
         let json = serde_json::to_string(&request).unwrap();

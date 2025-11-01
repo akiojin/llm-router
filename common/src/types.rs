@@ -38,6 +38,14 @@ pub struct Agent {
     /// ロード済みモデル一覧
     #[serde(default)]
     pub loaded_models: Vec<String>,
+    /// GPU利用可能フラグ
+    pub gpu_available: bool,
+    /// GPU個数
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_count: Option<u32>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model: Option<String>,
 }
 
 /// エージェント状態
@@ -137,6 +145,9 @@ mod tests {
             tags: vec!["primary".to_string()],
             notes: Some("memo".to_string()),
             loaded_models: vec!["gpt-oss:20b".to_string()],
+            gpu_available: true,
+            gpu_count: Some(2),
+            gpu_model: Some("NVIDIA RTX 4090".to_string()),
         };
 
         let json = serde_json::to_string(&agent).unwrap();
@@ -155,7 +166,8 @@ mod tests {
             "ollama_port": 11434,
             "status": "online",
             "registered_at": "2025-10-31T00:00:00Z",
-            "last_seen": "2025-10-31T00:00:00Z"
+            "last_seen": "2025-10-31T00:00:00Z",
+            "gpu_available": false
         }"#;
 
         let agent: Agent = serde_json::from_str(json).unwrap();
@@ -163,6 +175,9 @@ mod tests {
         assert!(agent.tags.is_empty());
         assert!(agent.notes.is_none());
         assert!(agent.loaded_models.is_empty());
+        assert!(!agent.gpu_available);
+        assert!(agent.gpu_count.is_none());
+        assert!(agent.gpu_model.is_none());
     }
 
     #[test]

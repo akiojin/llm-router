@@ -115,6 +115,9 @@ mod tests {
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         registry.register(req).await.unwrap();
 
