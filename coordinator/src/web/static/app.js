@@ -725,12 +725,12 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
   const cpuGpuSub =
     typeof agent.gpu_usage === "number"
       ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_usage)}</div>`
-      : "";
+      : `<div class="cell-sub">GPU 非対応</div>`;
   const memoryDisplay = formatPercentage(agent.memory_usage);
   const memoryGpuSub =
     typeof agent.gpu_memory_usage === "number"
       ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_memory_usage)}</div>`
-      : "";
+      : `<div class="cell-sub">GPU 非対応</div>`;
   const models = getModelList(agent);
   const primaryModelDisplay = models.length ? models[0] : "-";
   const extraModels = models.slice(1, 4).join(", ");
@@ -977,10 +977,14 @@ function openAgentModal(agent) {
   modalRefs.tags.value = Array.isArray(agent.tags) ? agent.tags.join(", ") : "";
   modalRefs.notes.value = agent.notes ?? "";
   if (modalRefs.gpuUsage) {
-    modalRefs.gpuUsage.textContent = formatPercentage(agent.gpu_usage);
+    modalRefs.gpuUsage.textContent =
+      typeof agent.gpu_usage === "number" ? formatPercentage(agent.gpu_usage) : "非対応";
   }
   if (modalRefs.gpuMemory) {
-    modalRefs.gpuMemory.textContent = formatPercentage(agent.gpu_memory_usage);
+    modalRefs.gpuMemory.textContent =
+      typeof agent.gpu_memory_usage === "number"
+        ? formatPercentage(agent.gpu_memory_usage)
+        : "非対応";
   }
 
   const cached = state.agentMetricsCache.get(agent.id);
