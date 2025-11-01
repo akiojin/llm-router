@@ -759,10 +759,7 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
       <div class="cell-sub">Port ${Number.isFinite(agent.ollama_port) ? escapeHtml(agent.ollama_port) : "-"}</div>
     </td>
     <td>${statusLabel}</td>
-    <td>
-      <div class="cell-title">${formatDuration(agent.uptime_seconds)}</div>
-      <div class="cell-sub">${escapeHtml(agent.ollama_version ?? "-")}</div>
-    </td>
+    <td>${formatDuration(agent.uptime_seconds)}</td>
     <td>
       <div class="cell-title">${cpuDisplay}</div>
       ${cpuGpuSub}
