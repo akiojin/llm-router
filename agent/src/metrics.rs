@@ -150,7 +150,6 @@ enum GpuCollector {
     Env(EnvGpuCollector),
     Nvidia(Box<NvidiaGpuCollector>),
     Amd(AmdGpuCollector),
-    #[cfg(target_os = "macos")]
     AppleSilicon(AppleSiliconGpuCollector),
 }
 
@@ -183,8 +182,7 @@ impl GpuCollector {
             return Some(GpuCollector::Amd(amd));
         }
 
-        // macOS: Apple Silicon GPUを試行
-        #[cfg(target_os = "macos")]
+        // Apple Silicon GPUを試行（Docker for Mac環境でも動作）
         if let Ok(apple) = AppleSiliconGpuCollector::new() {
             debug!("Detected Apple Silicon GPU");
             return Some(GpuCollector::AppleSilicon(apple));
@@ -199,7 +197,6 @@ impl GpuCollector {
             GpuCollector::Env(gpu) => gpu.device_count(),
             GpuCollector::Nvidia(gpu) => gpu.device_count(),
             GpuCollector::Amd(gpu) => gpu.device_count(),
-            #[cfg(target_os = "macos")]
             GpuCollector::AppleSilicon(gpu) => gpu.device_count(),
         }
     }
@@ -209,7 +206,6 @@ impl GpuCollector {
             GpuCollector::Env(gpu) => gpu.model_name(),
             GpuCollector::Nvidia(gpu) => gpu.model_name(),
             GpuCollector::Amd(gpu) => gpu.model_name(),
-            #[cfg(target_os = "macos")]
             GpuCollector::AppleSilicon(gpu) => gpu.model_name(),
         }
     }
@@ -226,7 +222,6 @@ impl GpuCollector {
                 // ROCm SMI would be needed for detailed metrics
                 Err(NvmlError::NotSupported)
             }
-            #[cfg(target_os = "macos")]
             GpuCollector::AppleSilicon(_gpu) => {
                 // Apple Silicon doesn't provide detailed metrics via Metal API
                 Err(NvmlError::NotSupported)
@@ -338,13 +333,11 @@ impl NvidiaGpuCollector {
     }
 }
 
-/// Apple Silicon GPUコレクター
-#[cfg(target_os = "macos")]
+/// Apple Silicon GPUコレクター（Docker for Mac環境でも動作）
 struct AppleSiliconGpuCollector {
     device_name: String,
 }
 
-#[cfg(target_os = "macos")]
 impl AppleSiliconGpuCollector {
     fn new() -> Result<Self, String> {
         // Method 1: lscpu コマンドで "Vendor ID: Apple" を確認（Docker環境でも動作）
@@ -358,6 +351,7 @@ impl AppleSiliconGpuCollector {
         }
 
         // Method 3: Metal API（macOSネイティブのみ）
+        #[cfg(target_os = "macos")]
         if let Some(device) = MetalDevice::system_default() {
             let device_name = device.name().to_string();
             return Ok(Self { device_name });
