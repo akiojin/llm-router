@@ -1,273 +1,84 @@
-# クイックスタート: 自動マージ機能
+# クイックスタート: 自動マージ機能（更新版）
 
-**機能ID**: `SPEC-47c6f44c` | **日付**: 2025-10-30
+**機能ID**: `SPEC-47c6f44c`  
+**最終更新日**: 2025-11-01
+
+> ⚠️ **重要**: プロジェクトのカスタム運用ルールにより、開発者が任意でブランチ／Worktreeを作成したり、作業ディレクトリを変更したりすることはできません。本ドキュメントは、自動マージ機能の検証フローと期待される結果を共有する目的で提供しています。実際のブランチ操作やPR作成はすべてリポジトリメンテナが実施します。
 
 ## 概要
 
-このガイドでは、自動マージ機能の動作を確認する手順を説明します。
+- 自動マージ機能は GitHub Actions（`Quality Checks` → `Auto Merge`）によって制御され、手動操作なしにPRがマージされることを保証します。
+- 開発者は現在の作業環境を変更せず、CIの実行結果を確認・フィードバックする役割を担います。
+- テストデータや検証用PRはメンテナが用意したテンプレートを使用し、自動的にクリーンアップされます。
 
-## 前提条件
+## 運用前提
 
-- [ ] GitHub CLIが認証済み (`gh auth login`)
-- [ ] Rustプロジェクトのビルド環境が構成済み (`cargo`コマンドが利用可能)
-- [ ] リポジトリの`main`ブランチにpush権限がある
-- [ ] `.commitlintrc.json`が作成済み
-- [ ] `.github/workflows/quality-checks.yml`が作成済み
-- [ ] `.github/workflows/auto-merge.yml`が作成済み
+- メンテナは検証が必要になったタイミングで専用のGitHub Actionsワークフローを手動起動し、テスト用PRを生成します（リポジトリルートの`.github/workflows/quality-checks.yml`／`auto-merge.yml`を利用）。
+- テストPRには「Auto Merge QA」というラベルが自動で付与され、完了後にメンテナがクローズ／削除します。
+- 開発者は GitHub Actions ダッシュボードで結果を閲覧し、必要に応じてログを共有します。
 
-## テストシナリオ1: 正常系（全チェック合格 → 自動マージ）
+## テストシナリオ
 
-### ステップ1: テスト用featureブランチ作成
+### シナリオ1: 正常系（全チェック合格 → 自動マージ）
 
-```bash
-# リポジトリルートに移動
-cd /ollama-coordinator
+1. **メンテナ**: テンプレートPR生成用ワークフローを起動し、正常系シナリオを選択する。
+2. **CI**: `Quality Checks` ワークフローが起動し、tasks-check／rust-test／rust-lint／commitlint／markdownlint が順次成功する。
+3. **CI**: `Auto Merge` ワークフローがトリガーされ、PRが自動マージされる。
+4. **開発者**: PRのタイムラインで「Merged automatically by GitHub Actions」を確認し、Slackの品質チャンネルへ完了報告を行う。
 
-# テスト用featureブランチ作成
-git checkout -b feature/test-auto-merge
+### シナリオ2: 異常系（未完了タスク → 自動マージスキップ）
 
-# ダミー変更
-echo "# Test auto-merge" >> TEST_AUTO_MERGE.md
-git add TEST_AUTO_MERGE.md
-git commit -m "feat: テスト用ファイル追加"
-```
+1. **メンテナ**: 検証ワークフローを「未完了タスク」モードで実行し、tasks.mdに未完了タスクを含むPRを生成する。
+2. **CI**: `Quality Checks` ワークフロー内の `tasks-check` ジョブが失敗し、PRは `Auto Merge` に進まない。
+3. **開発者**: Actionsログで `tasks-check` の失敗内容を確認し、対応タスクをIssueに記録する。
 
-### ステップ2: tasks.mdに完了タスク追加（模擬）
+### シナリオ3: ドラフトPR（品質チェック実行 → 自動マージスキップ）
 
-```bash
-# specs/SPEC-47c6f44c/tasks.mdに完了タスクを追加
-cat >> specs/SPEC-47c6f44c/tasks.md <<EOF
-## Test Tasks
-- [x] Test task 1
-- [x] Test task 2
-EOF
+1. **メンテナ**: ドラフト状態のPRを生成するモードでワークフローを起動。
+2. **CI**: `Quality Checks` は実行されるが、PRがドラフトのため `Auto Merge` ワークフローはスキップされる。
+3. **開発者**: PRのステータスが「Draft」であることと、`Auto Merge` ワークフローに「PR is a draft」と記録されていることを確認する。
+4. **メンテナ**: 必要に応じてドラフト解除後に再度ワークフローを起動し、マージ動作を確認する。
 
-git add specs/SPEC-47c6f44c/tasks.md
-git commit -m "test: テストタスク追加"
-```
+### シナリオ4: コミット規約違反（commitlint失敗）
 
-### ステップ3: PR作成
+1. **メンテナ**: commitlintに意図的に違反するメッセージを含んだテストPRを生成する。
+2. **CI**: `Quality Checks` の `commitlint` ジョブが失敗する。
+3. **開発者**: ログを確認し、適切なコミットメッセージ例をPull Requestコメントで共有する。
 
-```bash
-# リモートにpush
-git push -u origin feature/test-auto-merge
+### シナリオ5: コンフリクト検知（Auto Merge スキップ）
 
-# PR作成
-gh pr create --title "feat: 自動マージ機能テスト" --body "自動マージ機能の動作確認用PR
-
-## チェックリスト
-- [x] tasks.md完了
-- [x] テスト実行
-- [x] commitlint準拠"
-```
-
-### ステップ4: 品質チェック確認
-
-```bash
-# GitHub Actionsの実行確認
-gh run list --branch feature/test-auto-merge
-
-# 特定のワークフロー実行ログ確認
-gh run view <RUN_ID>
-```
-
-**期待される結果**:
-
-- Quality Checksワークフローが実行される
-- tasks-check, rust-test, rust-lint, commitlint, markdownlintが並列実行される
-- すべてのジョブが成功する
-
-### ステップ5: 自動マージ確認
-
-```bash
-# Auto Mergeワークフローの実行確認
-gh run list --workflow="Auto Merge"
-
-# PRステータス確認
-gh pr view feature/test-auto-merge
-```
-
-**期待される結果**:
-
-- Auto Mergeワークフローが起動する
-- PRが自動的にmainにマージされる
-- featureブランチが削除される
-
-## テストシナリオ2: 異常系（未完了タスク → 自動マージスキップ）
-
-### ステップ1: テスト用featureブランチ作成
-
-```bash
-git checkout -b feature/test-tasks-fail
-
-# ダミー変更
-echo "# Test tasks fail" >> TEST_TASKS_FAIL.md
-git add TEST_TASKS_FAIL.md
-git commit -m "feat: 未完了タスクテスト"
-```
-
-### ステップ2: tasks.mdに未完了タスク追加
-
-```bash
-# 未完了タスクを追加
-cat >> specs/SPEC-47c6f44c/tasks.md <<EOF
-## Test Tasks (Incomplete)
-- [ ] Incomplete task 1
-- [ ] Incomplete task 2
-EOF
-
-git add specs/SPEC-47c6f44c/tasks.md
-git commit -m "test: 未完了タスク追加"
-```
-
-### ステップ3: PR作成
-
-```bash
-git push -u origin feature/test-tasks-fail
-gh pr create --title "test: 未完了タスクテスト" --body "未完了タスクがある場合の動作確認"
-```
-
-### ステップ4: 品質チェック確認
-
-```bash
-gh run list --branch feature/test-tasks-fail
-```
-
-**期待される結果**:
-
-- Quality Checksワークフローが実行される
-- tasks-checkジョブが**失敗**する
-- 他のジョブは成功する
-- 全体の結論は**failure**
-
-### ステップ5: 自動マージスキップ確認
-
-```bash
-gh run list --workflow="Auto Merge"
-gh pr view feature/test-tasks-fail
-```
-
-**期待される結果**:
-
-- Auto Mergeワークフローは**起動しない**（条件不一致）
-- PRはマージされない
-- 開発者がtasks.mdを完了させる必要がある
-
-## テストシナリオ3: ドラフトPR（品質チェック実行 → 自動マージスキップ）
-
-### ステップ1: ドラフトPR作成
-
-```bash
-git checkout -b feature/test-draft
-echo "# Test draft" >> TEST_DRAFT.md
-git add TEST_DRAFT.md
-git commit -m "feat: ドラフトPRテスト"
-
-git push -u origin feature/test-draft
-
-# ドラフトPR作成
-gh pr create --title "feat: ドラフトPRテスト" --body "ドラフトPRの動作確認" --draft
-```
-
-### ステップ2: 品質チェック確認
-
-```bash
-gh run list --branch feature/test-draft
-```
-
-**期待される結果**:
-
-- Quality Checksワークフローが実行される
-- すべてのジョブが成功する
-
-### ステップ3: 自動マージスキップ確認
-
-```bash
-gh run list --workflow="Auto Merge"
-```
-
-**期待される結果**:
-
-- Auto Mergeワークフローは起動する
-- しかし、`isDraft == true`のため**マージスキップ**される
-- ログに「PR is a draft」と記録される
-
-### ステップ4: ドラフト解除 → 自動マージ
-
-```bash
-# ドラフト解除
-gh pr ready feature/test-draft
-
-# 品質チェック再実行（自動）
-gh run list --branch feature/test-draft
-
-# 自動マージ確認
-gh pr view feature/test-draft
-```
-
-**期待される結果**:
-
-- 品質チェック再実行後、Auto Mergeが起動
-- 今度は`isDraft == false`なのでマージ実行される
+1. **メンテナ**: `main` と競合する変更を含むテストPRを生成。
+2. **CI**: `Quality Checks` は成功するが、`Auto Merge` で「Mergeable state: dirty」と表示され、マージが停止する。
+3. **開発者**: コンフリクト箇所の検討結果をメンテナに共有し、解消方針をIssueに記録する。
 
 ## トラブルシューティング
 
-### 問題1: Auto Mergeワークフローが起動しない
+### Auto Mergeワークフローが起動しない
 
-**原因**: `workflow_run`トリガーはデフォルトブランチ（main）のワークフローファイルを使用
+- `auto-merge.yml` が `main` ブランチに存在するかを確認。
+- テストPRに `Auto Merge QA` ラベルが自動付与されているかを確認（付与されない場合はメンテナに再実行を依頼）。
 
-**解決策**:
+### commitlintが失敗した場合
 
-1. `.github/workflows/auto-merge.yml`がmainブランチに存在することを確認
-2. quality-checks.ymlのワークフロー名が正確に「Quality Checks」であることを確認
+- 違反したコミットメッセージを確認し、Conventional Commitsフォーマットの例をPRコメントに残す。
+- メンテナがテストPRを再生成するまで待機する。開発者はローカルで`git commit --amend`等を実行しない。
 
-### 問題2: commitlintが失敗する
+### tasks-checkが失敗した場合
 
-**原因**: コミットメッセージが規約違反
-
-**解決策**:
-
-```bash
-# コミットメッセージを修正
-git commit --amend -m "feat: 正しい形式のコミットメッセージ"
-git push --force-with-lease
-```
-
-### 問題3: tasks-checkが失敗する
-
-**原因**: tasks.mdに未完了タスク（`- [ ]`）が存在
-
-**解決策**:
-
-```bash
-# tasks.mdを編集して全タスクを完了にする
-vim specs/SPEC-47c6f44c/tasks.md
-# - [ ] → - [x] に変更
-
-git add specs/SPEC-47c6f44c/tasks.md
-git commit -m "chore: タスク完了"
-git push
-```
+- Actionsログの失敗箇所を確認し、未完了タスクの抜け漏れをIssueに転記する。
+- 対応方針を整理し、メンテナに再検証のタイミングを依頼する。
 
 ## 検証チェックリスト
 
-- [ ] 正常系: 全チェック合格 → 自動マージ成功
-- [ ] 異常系: 未完了タスク → tasks-check失敗
-- [ ] 異常系: 規約違反コミット → commitlint失敗
-- [ ] ドラフトPR: 品質チェック実行 → 自動マージスキップ
-- [ ] ドラフト解除: 自動マージ実行
-- [ ] コンフリクト: 自動マージスキップ
-- [ ] マージ後: featureブランチ削除確認
+- [ ] 正常系: `Quality Checks` 成功後に `Auto Merge` が自動マージする
+- [ ] 未完了タスク: `tasks-check` 失敗により `Auto Merge` が起動しない
+- [ ] コミット規約違反: `commitlint` が失敗し、メンテナ再実行待ちになる
+- [ ] ドラフトPR: `Auto Merge` がドラフト状態を検知してスキップする
+- [ ] コンフリクト: `Auto Merge` が「dirty」ステータスで停止し、手動解消が必要になる
+- [ ] 検証後: メンテナがPR/ブランチをクリーンアップし、ログが共有される
 
 ## 次のステップ
 
-検証が完了したら、以下を実行：
-
-1. テスト用PRをすべてクローズ
-2. テスト用ブランチを削除
-3. `CLAUDE.md`の自動マージセクションを更新
-4. `finish-feature.sh`のPRボディを更新
-
----
-
-**クイックスタート完了日**: 2025-10-30
+1. Actions実行ログと結果サマリを `docs/qa/auto-merge-report.md` に追記する（必要に応じて新規作成可）。
+2. 追加のテストシナリオが必要な場合は `specs/SPEC-47c6f44c/tasks.md` にタスクとして記載し、メンテナに依頼する。
+3. 自動マージの挙動に変更が入った場合は、本クイックスタートの更新日と変更内容を明記する。

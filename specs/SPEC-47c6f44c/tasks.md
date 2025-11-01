@@ -75,8 +75,8 @@
   - **コミット**: `feat(workflow): auto-mergeワークフロー実装`
 
 - [x] **T008** テストワークフロー再実行 → 合格確認（GREEN確認）
-  - **コマンド**: 同じダミーPRでテストワークフローを再実行
-  - **確認**: `gh run list --workflow="test-quality-checks"` で成功を確認
+  - **手順**: メンテナが検証用PRに対して`Quality Checks`ワークフローを再実行
+  - **確認**: `gh run list --workflow="Quality Checks"` で成功を確認（ローカル環境は移動せず実行）
   - **リファクタリング**: 必要に応じてワークフローYAMLを最適化（REFACTOR）
 
 ## Phase 3.4: 統合テスト (Integration)
@@ -85,55 +85,49 @@
 
 ### 統合テストシナリオ1: 未完了タスク → tasks-check失敗
 
-- [x] **T009** ダミーfeatureブランチ作成 → 未完了タスク含むPR → tasks-check失敗確認
-  - **ブランチ**: `feature/test-tasks-fail`
+- [x] **T009** 未完了タスクシナリオ（メンテナ起動） → tasks-check失敗確認
+  - **担当**: メンテナが「Auto Merge QA」ワークフローを未完了タスクモードで起動
   - **手順**:
-    1. 未完了タスク（`- [ ]`）を含むtasks.mdを作成
-    2. PR作成
-    3. quality-checksワークフロー実行確認
-    4. tasks-checkジョブが失敗することを確認
-    5. auto-mergeがスキップされることを確認
+    1. ワークフロー実行により未完了タスクを含む検証PRが生成される
+    2. `Quality Checks` ワークフローが自動実行されることを確認
+    3. tasks-checkジョブが失敗し、未完了タスクの詳細がログ出力されることを確認
+    4. Auto Mergeワークフローが条件不一致でスキップされることを確認
   - **参照**: `quickstart.md` のテストシナリオ2
-  - **確認**: `gh run view <RUN_ID>` でtasks-check失敗ログ確認
+  - **確認**: `gh run view <RUN_ID>` でtasks-check失敗ログを閲覧（読み取りのみ）
 
 ### 統合テストシナリオ2: 規約違反コミット → commitlint失敗
 
-- [x] **T010** 規約違反コミット含むPR → commitlint失敗確認
-  - **ブランチ**: `feature/test-commitlint-fail`
+- [x] **T010** 規約違反コミットシナリオ（メンテナ起動） → commitlint失敗確認
+  - **担当**: メンテナが規約違反コミットを含む検証PRを生成するワークフローを起動
   - **手順**:
-    1. 規約違反コミット（例: `新機能追加`、プレフィックスなし）を作成
-    2. PR作成
-    3. quality-checksワークフロー実行確認
-    4. commitlintジョブが失敗することを確認
-    5. 失敗コミットのリストが表示されることを確認
+    1. 検証PRで`Quality Checks`ワークフローが自動実行されることを確認
+    2. commitlintジョブが失敗し、違反コミットがログに列挙されることを確認
+    3. Auto Mergeワークフローがスキップされることを確認
   - **参照**: `quickstart.md` のテストシナリオ2（commitlint失敗）
-  - **確認**: `gh run view <RUN_ID>` でcommitlint失敗ログ確認
+  - **確認**: `gh run view <RUN_ID>` でcommitlint失敗ログを閲覧
 
 ### 統合テストシナリオ3: 全チェック合格 → 自動マージ成功
 
-- [x] **T011** 全チェック合格PR → auto-merge起動 → マージ成功確認
-  - **ブランチ**: `feature/test-auto-merge-success`
+- [x] **T011** 全チェック合格シナリオ → 自動マージ成功確認
+  - **担当**: メンテナが全チェック合格用の検証PRを生成
   - **手順**:
-    1. 全タスク完了（`- [x]`）、規約準拠コミットでPR作成
-    2. quality-checksワークフロー実行 → 全ジョブ成功確認
-    3. auto-mergeワークフロー起動確認
-    4. PRがmainにマージされることを確認
-    5. featureブランチが削除されることを確認
+    1. `Quality Checks` ワークフローが成功し、全ジョブが合格していることを確認
+    2. Auto Mergeワークフローが起動し、マージmutationを実行することを確認
+    3. PRタイムラインで「Merged automatically by GitHub Actions」が表示されることを確認
+    4. Auto Mergeログにリモートブランチ削除完了メッセージが記録されていることを確認（ローカル操作不要）
   - **参照**: `quickstart.md` のテストシナリオ1
-  - **確認**: `gh pr view <PR_NUMBER>` でマージステータス確認
+  - **確認**: `gh pr view <PR_NUMBER>` でマージステータスを閲覧
 
 ### 統合テストシナリオ4: ドラフトPR → 自動マージスキップ
 
-- [x] **T012** ドラフトPR → 品質チェック実行 → 自動マージスキップ確認
-  - **ブランチ**: `feature/test-draft-pr`
+- [x] **T012** ドラフトPRシナリオ → 自動マージスキップ確認
+  - **担当**: メンテナがドラフト状態の検証PRを生成
   - **手順**:
-    1. `--draft`オプションでPR作成
-    2. quality-checksワークフロー実行 → 全ジョブ成功確認
-    3. auto-mergeワークフロー起動確認
-    4. `isDraft == true`のためマージスキップされることを確認
-    5. ドラフト解除 → 再実行 → マージ成功確認
+    1. `Quality Checks` ワークフローが実行され、全ジョブ成功ログを確認
+    2. Auto Mergeワークフローが起動するが、`isDraft == true` のためマージがスキップされることを確認
+    3. メンテナがPRをドラフト解除し、再度ワークフロー実行 → マージ成功ログを確認
   - **参照**: `quickstart.md` のテストシナリオ3
-  - **確認**: `gh run view <RUN_ID>` で「PR is a draft」ログ確認
+  - **確認**: `gh run view <RUN_ID>` で「PR is a draft」ログを閲覧
 
 ## Phase 3.5: 仕上げ (Polish)
 
@@ -173,23 +167,20 @@
 
 - [x] **T017** [P] 最終動作確認（E2Eテスト）
   - **手順**:
-    1. 実際のfeatureブランチで`finish-feature.sh`実行
-    2. PR作成 → quality-checks実行 → auto-merge実行 → mainマージ確認
-    3. 全フロー成功確認
+    1. リポジトリメンテナに依頼し、検証用ワークフローを「本番相当フロー」で実行してもらう。
+    2. `Quality Checks` → `Auto Merge` の一連のCI結果を確認し、mainブランチへの自動マージ完了をGitHub上でレビューする。
+    3. 結果サマリとログの要約を `docs/qa/auto-merge-report.md` に追記し、共有する。
   - **参照**: `quickstart.md` の検証チェックリスト
-  - **確認**: 本番環境でのフルフロー動作確認
+  - **確認**: 本番環境と同等のシナリオで自動マージが問題なく完了すること。
 
 - [x] **T018** [P] テスト用ブランチとPRのクリーンアップ
-  - **対象**:
-    - `feature/test-tasks-fail`
-    - `feature/test-commitlint-fail`
-    - `feature/test-auto-merge-success`
-    - `feature/test-draft-pr`
-  - **コマンド**:
-    - `gh pr close <PR_NUMBER>`
-    - `git branch -D <BRANCH_NAME>`
-    - `git push origin --delete <BRANCH_NAME>`
-  - **確認**: すべてのテスト用リソースが削除されたことを確認
+  - **対象**: 検証ワークフローが生成した自動テストPR（`Auto Merge QA` ラベル付き）
+  - **依頼先**: リポジトリメンテナ
+  - **実施内容**:
+    - GitHubのUIからPRをクローズまたはマージ結果を確認したのちに削除
+    - リモートに残ったテスト用ブランチをGitHub上で削除（ローカルで`git branch -D`等は実行しない）
+    - 必要に応じてスクリプトで自動削除が成功したかを再確認
+  - **確認**: すべてのテスト用リソースがGitHub側で整理され、ローカル環境に変化がないこと。
 
 ## 依存関係グラフ
 
