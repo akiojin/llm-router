@@ -58,6 +58,13 @@
           </p>
         </article>
         <article class="stat-card">
+          <h2>平均GPU使用率</h2>
+          <p class="stat-value" data-stat="average-gpu-usage">-</p>
+          <p class="stat-caption">
+            メモリ: <span data-stat="average-gpu-memory-usage">-</span>
+          </p>
+        </article>
+        <article class="stat-card">
           <h2>アクティブリクエスト</h2>
           <p class="stat-value" data-stat="total-active-requests">-</p>
           <p class="stat-caption">
@@ -97,6 +104,21 @@
 
         <div class="table-wrapper">
           <table class="agents-table">
+            <colgroup>
+              <col class="col-select" />
+              <col class="col-name" />
+              <col class="col-address" />
+              <col class="col-status" />
+              <col class="col-uptime" />
+              <col class="col-cpu" />
+              <col class="col-memory" />
+              <col class="col-active" />
+              <col class="col-total" />
+              <col class="col-average" />
+              <col class="col-models" />
+              <col class="col-last-seen" />
+              <col class="col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>
@@ -118,21 +140,22 @@
                   <span>稼働時間</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
-                <th>CPU</th>
-                <th>メモリ</th>
+                <th>CPU / GPU</th>
+                <th>メモリ / GPU</th>
                 <th>処理中</th>
                 <th data-sort="total" class="sortable">
                   <span>累積</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
                 <th>平均応答</th>
+                <th>モデル</th>
                 <th>最終確認</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody id="agents-body">
               <tr class="empty-row">
-                <td colspan="11">データ取得中…</td>
+                <td colspan="13">データ取得中…</td>
               </tr>
             </tbody>
           </table>
@@ -193,6 +216,10 @@
               <dd id="detail-ollama-version">-</dd>
             </div>
             <div>
+              <dt>モデル</dt>
+              <dd id="detail-loaded-models">-</dd>
+            </div>
+            <div>
               <dt>稼働時間</dt>
               <dd id="detail-uptime">-</dd>
             </div>
@@ -212,7 +239,26 @@
               <dt>直近平均応答</dt>
               <dd id="detail-average-response">-</dd>
             </div>
+            <div>
+              <dt>GPU使用率</dt>
+              <dd id="detail-gpu-usage">-</dd>
+            </div>
+            <div>
+              <dt>GPUメモリ使用率</dt>
+              <dd id="detail-gpu-memory">-</dd>
+            </div>
           </form>
+          <section class="modal__metrics" aria-label="エージェントメトリクス">
+            <h3>メトリクス</h3>
+            <p id="agent-metrics-status" class="metrics-status">メトリクスを読み込み中…</p>
+            <div class="metrics-chart">
+              <canvas
+                id="agent-metrics-chart"
+                aria-label="CPUとメモリの推移"
+                role="img"
+              ></canvas>
+            </div>
+          </section>
         </section>
         <footer class="modal__footer">
           <button type="button" id="agent-modal-disconnect" class="btn">強制切断</button>

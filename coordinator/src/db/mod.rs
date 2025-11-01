@@ -231,6 +231,7 @@ mod tests {
             custom_name: None,
             tags: Vec::new(),
             notes: None,
+            loaded_models: Vec::new(),
         };
 
         // 保存
@@ -267,6 +268,7 @@ mod tests {
             custom_name: None,
             tags: Vec::new(),
             notes: None,
+            loaded_models: Vec::new(),
         };
 
         save_agent(&agent).await.unwrap();
@@ -301,6 +303,7 @@ mod tests {
             custom_name: None,
             tags: Vec::new(),
             notes: None,
+            loaded_models: Vec::new(),
         };
 
         save_agent(&agent1).await.unwrap();
@@ -318,6 +321,7 @@ mod tests {
             custom_name: Some("Updated".into()),
             tags: vec!["primary".into()],
             notes: None,
+            loaded_models: vec!["gpt-oss:7b".into()],
         };
 
         save_agent(&agent2).await.unwrap();

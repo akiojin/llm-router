@@ -117,4 +117,4 @@ jobs:
       - name: Run markdownlint
         run: |
           echo "📄 Checking Markdown files..."
-          npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git --ignore .github
+          npx --yes markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github"

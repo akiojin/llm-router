@@ -272,6 +272,10 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 #### Agent
 - `COORDINATOR_URL`: CoordinatorのURL（デフォルト: `http://localhost:8080`）
 - `OLLAMA_PORT`: Ollamaポート番号（デフォルト: `11434`）
+- `OLLAMA_AGENT_MACHINE_NAME`: Coordinator登録時に使用するマシン名。未設定時は `OLLAMA_MACHINE_NAME` → `HOSTNAME` → `whoami::hostname()` の順で自動判定されます。
+- `OLLAMA_PULL_TIMEOUT_SECS`: モデル自動ダウンロード時のHTTPタイムアウト秒数。未設定または `0` の場合はタイムアウトなしで待機します。
+- `COORDINATOR_REGISTER_RETRY_SECS`: 登録リトライ間隔（秒）。未設定時は `5` 秒、`0` を指定すると即座に再試行します。
+- `COORDINATOR_REGISTER_MAX_RETRIES`: 登録リトライ上限回数。未設定または `0` の場合は成功するまで無制限に再試行します。
 
 ## 開発
 

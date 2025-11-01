@@ -101,6 +101,16 @@ body {
   font-weight: 600;
 }
 
+.last-refreshed.is-warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.last-refreshed.is-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .refresh-button {
   appearance: none;
   border: 1px solid rgba(56, 189, 248, 0.4);
@@ -255,7 +265,8 @@ body {
 .agents-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 800px;
+  min-width: 880px;
+  table-layout: fixed;
 }
 
 .agents-table thead {
@@ -268,11 +279,14 @@ body {
   text-align: left;
   font-size: 0.95rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  vertical-align: top;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .agents-table th:first-child,
 .agents-table td:first-child {
-  width: 40px;
+  width: 52px;
   text-align: center;
 }
 
@@ -284,15 +298,15 @@ body {
 }
 
 .agents-table td:last-child {
-  text-align: right;
+  text-align: center;
 }
 
 .agents-table th.sortable {
   cursor: pointer;
   user-select: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  position: relative;
+  padding-right: 20px;
+  white-space: nowrap;
 }
 
 .agents-table th.sortable:hover {
@@ -302,8 +316,10 @@ body {
 .sort-indicator {
   font-size: 0.75rem;
   color: var(--text-subtle);
-  min-width: 10px;
-  display: inline-block;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .sortable--active {
@@ -321,6 +337,12 @@ body {
 .cell-sub {
   font-size: 0.8rem;
   color: var(--text-subtle);
+}
+
+.agents-table th.sortable span:first-child {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agents-table tbody tr:last-child td {
@@ -532,12 +554,95 @@ body {
   border-color: rgba(56, 189, 248, 0.35);
 }
 
+.modal__metrics {
+  margin-top: 24px;
+}
+
+.modal__metrics h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.metrics-status {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+.metrics-status.is-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.metrics-chart {
+  position: relative;
+  height: 220px;
+  background: rgba(15, 23, 42, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.metrics-chart canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .page-footer {
   margin-top: 40px;
   padding: 20px 3vw 40px;
   color: rgba(148, 163, 184, 0.8);
   font-size: 0.85rem;
   text-align: center;
+}
+
+.agents-table col.col-select {
+  width: 52px;
+}
+
+.agents-table col.col-name {
+  width: 14%;
+}
+
+.agents-table col.col-address {
+  width: 12%;
+}
+
+.agents-table col.col-status {
+  width: 7%;
+}
+
+.agents-table col.col-uptime {
+  width: 7%;
+}
+
+.agents-table col.col-cpu,
+.agents-table col.col-memory {
+  width: 8%;
+}
+
+.agents-table col.col-active {
+  width: 5%;
+}
+
+.agents-table col.col-total {
+  width: 8%;
+}
+
+.agents-table col.col-average {
+  width: 7%;
+}
+
+.agents-table col.col-models {
+  width: 8%;
+}
+
+.agents-table col.col-last-seen {
+  width: 10%;
+}
+
+.agents-table col.col-actions {
+  width: 6%;
 }
 
 @media (max-width: 900px) {

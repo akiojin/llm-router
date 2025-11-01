@@ -8,7 +8,7 @@ use ollama_coordinator_common::{
     protocol::{RegisterRequest, RegisterResponse, RegisterStatus},
     types::{Agent, AgentStatus},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -79,7 +79,7 @@ impl AgentRegistry {
         // 同じマシン名のエージェントが既に存在するか確認
         let existing = agents
             .values()
-            .find(|a| a.machine_name == req.machine_name)
+            .find(|a| a.machine_name == req.machine_name && a.ollama_port == req.ollama_port)
             .map(|a| a.id);
 
         let (agent_id, status, agent) = if let Some(id) = existing {
@@ -107,6 +107,7 @@ impl AgentRegistry {
                 custom_name: None,
                 tags: Vec::new(),
                 notes: None,
+                loaded_models: Vec::new(),
             };
             agents.insert(agent_id, agent.clone());
             (agent_id, RegisterStatus::Registered, agent)
@@ -137,7 +138,11 @@ impl AgentRegistry {
     }
 
     /// エージェントの最終確認時刻を更新
-    pub async fn update_last_seen(&self, agent_id: Uuid) -> CoordinatorResult<()> {
+    pub async fn update_last_seen(
+        &self,
+        agent_id: Uuid,
+        loaded_models: Option<Vec<String>>,
+    ) -> CoordinatorResult<()> {
         let agent_to_save = {
             let mut agents = self.agents.write().await;
             let agent = agents
@@ -145,6 +150,9 @@ impl AgentRegistry {
                 .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
             agent.last_seen = Utc::now();
             agent.status = AgentStatus::Online;
+            if let Some(models) = loaded_models {
+                agent.loaded_models = normalize_models(models);
+            }
             agent.clone()
         };
 
@@ -255,6 +263,25 @@ impl Default for AgentRegistry {
     }
 }
 
+fn normalize_models(models: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+
+    for model in models {
+        let trimmed = model.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let canonical = trimmed.to_string();
+        if seen.insert(canonical.clone()) {
+            normalized.push(canonical);
+        }
+    }
+
+    normalized
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,6 +303,7 @@ mod tests {
         let agent = registry.get(response.agent_id).await.unwrap();
         assert_eq!(agent.machine_name, "test-machine");
         assert_eq!(agent.status, AgentStatus::Online);
+        assert!(agent.loaded_models.is_empty());
     }
 
     #[tokio::test]
@@ -294,6 +322,9 @@ mod tests {
         let second_response = registry.register(req).await.unwrap();
         assert_eq!(second_response.status, RegisterStatus::Updated);
         assert_eq!(first_response.agent_id, second_response.agent_id);
+
+        let agent = registry.get(first_response.agent_id).await.unwrap();
+        assert!(agent.loaded_models.is_empty());
     }
 
     #[tokio::test]
@@ -335,6 +366,7 @@ mod tests {
 
         let agent = registry.get(response.agent_id).await.unwrap();
         assert_eq!(agent.status, AgentStatus::Offline);
+        assert!(agent.loaded_models.is_empty());
     }
 
     #[tokio::test]
@@ -364,6 +396,7 @@ mod tests {
         assert_eq!(updated.custom_name.as_deref(), Some("Display"));
         assert_eq!(updated.tags, vec!["primary", "gpu"]);
         assert_eq!(updated.notes.as_deref(), Some("Important"));
+        assert!(updated.loaded_models.is_empty());
     }
 
     #[tokio::test]
@@ -382,5 +415,53 @@ mod tests {
 
         registry.delete(agent_id).await.unwrap();
         assert!(registry.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_update_last_seen_updates_models() {
+        let registry = AgentRegistry::new();
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "models".into(),
+                ip_address: "127.0.0.1".parse().unwrap(),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        registry
+            .update_last_seen(
+                agent_id,
+                Some(vec![
+                    " gpt-oss:20b ".into(),
+                    "gpt-oss:20b".into(),
+                    "".into(),
+                    "phi-3".into(),
+                ]),
+            )
+            .await
+            .unwrap();
+
+        let agent = registry.get(agent_id).await.unwrap();
+        assert_eq!(agent.loaded_models, vec!["gpt-oss:20b", "phi-3"]);
+    }
+
+    #[test]
+    fn test_normalize_models_removes_duplicates() {
+        let models = vec![
+            "a ".into(),
+            "b".into(),
+            "a".into(),
+            " ".into(),
+            "".into(),
+            "c".into(),
+            "b".into(),
+        ];
+        assert_eq!(
+            normalize_models(models),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
     }
 }
