@@ -195,6 +195,9 @@ For a deeper walkthrough, including API references and customisation tips, see [
 
 - **Coordinator**: Linux / Windows 10+ / macOS 12+, Rust 1.70+
 - **Agent**: Windows 10+ / macOS 12+ (CLI-based application), Rust 1.70+
+- **GPU**: NVIDIA / AMD / Apple Silicon GPU required for agent registration
+  - Automatically detected on startup
+  - Docker for Mac: Apple Silicon detection supported
 - **Ollama**: Pre-installation recommended (automatic download is a future enhancement)
 - **Management**: Browser-based WebUI dashboard for agent settings and monitoring
 
@@ -229,6 +232,30 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 ```
 
 **Note**: Ensure Ollama is installed and running on the agent machine before starting the agent. Download Ollama from [ollama.ai](https://ollama.ai).
+
+#### GPU Detection
+
+Agents automatically detect GPU on startup. **GPU is required** for agent registration.
+
+**Supported GPUs:**
+- **NVIDIA**: Detected via NVML library or device files (`/dev/nvidia0`)
+- **AMD**: Detected via sysfs KFD Topology (`/sys/class/kfd/kfd/topology/nodes`)
+- **Apple Silicon**: Detected via `lscpu`, `/proc/cpuinfo`, or Metal API (M1/M2/M3/M4)
+
+**Docker for Mac Support:**
+- Apple Silicon is automatically detected in Docker containers
+- No additional configuration required
+
+**Manual Configuration (Fallback):**
+
+If automatic detection fails, set environment variables:
+
+```bash
+OLLAMA_GPU_AVAILABLE=true \
+OLLAMA_GPU_MODEL="Your GPU Model" \
+OLLAMA_GPU_COUNT=1 \
+./target/release/ollama-coordinator-agent
+```
 
 ## Usage
 
@@ -290,6 +317,9 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 #### Agent
 - `COORDINATOR_URL`: Coordinator URL (default: `http://localhost:8080`)
 - `OLLAMA_PORT`: Ollama port number (default: `11434`)
+- `OLLAMA_GPU_AVAILABLE`: Manual GPU availability flag (optional, auto-detected)
+- `OLLAMA_GPU_MODEL`: Manual GPU model name (optional, auto-detected)
+- `OLLAMA_GPU_COUNT`: Manual GPU count (optional, auto-detected)
 
 ## Development
 

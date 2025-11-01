@@ -82,6 +82,14 @@ pub struct DashboardAgent {
     pub metrics_last_updated_at: Option<DateTime<Utc>>,
     /// メトリクスが古いか
     pub metrics_stale: bool,
+    /// GPU利用可能フラグ
+    pub gpu_available: Option<bool>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model: Option<String>,
+    /// GPU個数
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_count: Option<u32>,
 }
 
 /// システム統計レスポンス
@@ -263,6 +271,9 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 average_response_time_ms,
                 metrics_last_updated_at,
                 metrics_stale,
+                gpu_available: Some(agent.gpu_available),
+                gpu_model: agent.gpu_model.clone(),
+                gpu_count: agent.gpu_count,
             }
         })
         .collect::<Vec<DashboardAgent>>()
