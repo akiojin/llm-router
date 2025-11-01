@@ -43,6 +43,10 @@ pub fn create_router(state: AppState) -> Router {
             get(dashboard::get_request_history),
         )
         .route("/api/dashboard/overview", get(dashboard::get_overview))
+        .route(
+            "/api/dashboard/metrics/:agent_id",
+            get(dashboard::get_agent_metrics),
+        )
         .route("/api/health", post(health::health_check))
         .route("/api/chat", post(proxy::proxy_chat))
         .route("/api/generate", post(proxy::proxy_generate))
@@ -157,5 +161,49 @@ mod tests {
         assert!(overview["agents"].is_array());
         assert!(overview["stats"].is_object());
         assert!(overview["history"].is_array());
+        assert!(overview["generated_at"].is_string());
+        assert!(overview["generation_time_ms"].as_u64().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_metrics_endpoint_returns_history() {
+        let (state, registry) = test_state();
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "metrics-route".into(),
+                ip_address: "127.0.0.1".parse().unwrap(),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        state
+            .load_manager
+            .record_metrics(agent_id, 12.0, 34.0, 1, Some(90.0))
+            .await
+            .unwrap();
+
+        let mut router = create_router(state);
+        let response = router
+            .call(
+                Request::builder()
+                    .uri(format!("/api/dashboard/metrics/{agent_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+        let metrics: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(metrics.is_array());
+        assert_eq!(metrics.as_array().unwrap().len(), 1);
+        assert_eq!(
+            metrics.as_array().unwrap()[0]["agent_id"].as_str().unwrap(),
+            agent_id.to_string()
+        );
     }
 }

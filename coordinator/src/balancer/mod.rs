@@ -26,6 +26,8 @@ use uuid::Uuid;
 const METRICS_STALE_THRESHOLD_SECS: i64 = 120;
 /// リクエスト履歴の保持分数
 const REQUEST_HISTORY_WINDOW_MINUTES: i64 = 60;
+/// エージェントメトリクス履歴の最大保持件数
+const METRICS_HISTORY_CAPACITY: usize = 360;
 
 /// リクエスト結果
 #[derive(Debug, Clone, Copy)]
@@ -123,10 +125,43 @@ mod tests {
         let selected = manager.select_agent().await.unwrap();
         assert_eq!(selected.id, fast_agent);
     }
+
+    #[tokio::test]
+    async fn metrics_history_tracks_recent_points() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "history".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        for i in 0..(METRICS_HISTORY_CAPACITY + 10) {
+            manager
+                .record_metrics(agent_id, i as f32, (i * 2) as f32, 1, Some(100.0))
+                .await
+                .unwrap();
+        }
+
+        let history = manager.metrics_history(agent_id).await.unwrap();
+        assert_eq!(history.len(), METRICS_HISTORY_CAPACITY);
+        let last = history.last().unwrap();
+        assert_eq!(last.cpu_usage as usize, METRICS_HISTORY_CAPACITY + 9);
+        assert_eq!(
+            last.memory_usage as usize,
+            (METRICS_HISTORY_CAPACITY + 9) * 2
+        );
+    }
 }
 
 /// エージェントの最新ロード状態
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct AgentLoadState {
     last_metrics: Option<HealthMetrics>,
     assigned_active: u32,
@@ -134,6 +169,21 @@ struct AgentLoadState {
     success_count: u64,
     error_count: u64,
     total_latency_ms: u128,
+    metrics_history: VecDeque<HealthMetrics>,
+}
+
+impl Default for AgentLoadState {
+    fn default() -> Self {
+        Self {
+            last_metrics: None,
+            assigned_active: 0,
+            total_assigned: 0,
+            success_count: 0,
+            error_count: 0,
+            total_latency_ms: 0,
+            metrics_history: VecDeque::new(),
+        }
+    }
 }
 
 impl AgentLoadState {
@@ -171,6 +221,13 @@ impl AgentLoadState {
             .as_ref()
             .and_then(|m| m.average_response_time_ms)
             .or_else(|| self.average_latency_ms())
+    }
+
+    fn push_metrics(&mut self, metrics: HealthMetrics) {
+        self.metrics_history.push_back(metrics);
+        if self.metrics_history.len() > METRICS_HISTORY_CAPACITY {
+            self.metrics_history.pop_front();
+        }
     }
 }
 
@@ -262,16 +319,19 @@ impl LoadManager {
         let entry = state.entry(agent_id).or_default();
 
         let derived_average = average_response_time_ms.or_else(|| entry.average_latency_ms());
-
-        entry.last_metrics = Some(HealthMetrics {
+        let timestamp = Utc::now();
+        let metrics = HealthMetrics {
             agent_id,
             cpu_usage,
             memory_usage,
             active_requests,
             total_requests: entry.total_assigned,
             average_response_time_ms: derived_average,
-            timestamp: Utc::now(),
-        });
+            timestamp,
+        };
+
+        entry.last_metrics = Some(metrics.clone());
+        entry.push_metrics(metrics);
 
         Ok(())
     }
@@ -317,6 +377,12 @@ impl LoadManager {
             metrics.total_requests = entry.total_assigned;
             if updated_average.is_some() {
                 metrics.average_response_time_ms = updated_average;
+            }
+            if let Some(latest) = entry.metrics_history.back_mut() {
+                latest.total_requests = metrics.total_requests;
+                if let Some(avg) = metrics.average_response_time_ms {
+                    latest.average_response_time_ms = Some(avg);
+                }
             }
         }
 
@@ -400,6 +466,17 @@ impl LoadManager {
                 self.build_snapshot(agent, load_state, now)
             })
             .collect()
+    }
+
+    /// 指定されたエージェントのメトリクス履歴を取得
+    pub async fn metrics_history(&self, agent_id: Uuid) -> CoordinatorResult<Vec<HealthMetrics>> {
+        self.registry.get(agent_id).await?;
+        let state = self.state.read().await;
+        let history = state
+            .get(&agent_id)
+            .map(|load_state| load_state.metrics_history.iter().cloned().collect())
+            .unwrap_or_else(Vec::new);
+        Ok(history)
     }
 
     /// システム全体の統計サマリーを取得

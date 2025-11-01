@@ -3,15 +3,19 @@
 //! `/api/dashboard/*` 系のエンドポイントを提供し、エージェントの状態および
 //! システム統計を返却する。
 
+use super::agent::AppError;
 use crate::{
     balancer::{AgentLoadSnapshot, RequestHistoryPoint},
     AppState,
 };
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use chrono::{DateTime, Utc};
-use ollama_coordinator_common::types::AgentStatus;
+use ollama_coordinator_common::types::{AgentStatus, HealthMetrics};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 use uuid::Uuid;
 
 /// エージェントのダッシュボード表示用サマリー
@@ -91,6 +95,10 @@ pub struct DashboardOverview {
     pub stats: DashboardStats,
     /// リクエスト履歴
     pub history: Vec<RequestHistoryPoint>,
+    /// レスポンス生成時刻
+    pub generated_at: DateTime<Utc>,
+    /// 集計に要した時間（ミリ秒）
+    pub generation_time_ms: u64,
 }
 
 /// GET /api/dashboard/agents
@@ -110,14 +118,28 @@ pub async fn get_request_history(State(state): State<AppState>) -> Json<Vec<Requ
 
 /// GET /api/dashboard/overview
 pub async fn get_overview(State(state): State<AppState>) -> Json<DashboardOverview> {
+    let started = Instant::now();
     let agents = collect_agents(&state).await;
     let stats = collect_stats(&state).await;
     let history = collect_history(&state).await;
+    let generation_time_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    let generated_at = Utc::now();
     Json(DashboardOverview {
         agents,
         stats,
         history,
+        generated_at,
+        generation_time_ms,
     })
+}
+
+/// GET /api/dashboard/metrics/:agent_id
+pub async fn get_agent_metrics(
+    Path(agent_id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<HealthMetrics>>, AppError> {
+    let history = state.load_manager.metrics_history(agent_id).await?;
+    Ok(Json(history))
 }
 
 async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
@@ -416,5 +438,42 @@ mod tests {
         assert_eq!(overview.agents.len(), 1);
         assert_eq!(overview.stats.total_agents, 1);
         assert_eq!(overview.history.len(), 60);
+    }
+
+    #[tokio::test]
+    async fn test_get_agent_metrics_returns_history() {
+        let state = create_state();
+
+        let response = state
+            .registry
+            .register(RegisterRequest {
+                machine_name: "metrics-agent".into(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 31)),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap();
+
+        let agent_id = response.agent_id;
+
+        state
+            .load_manager
+            .record_metrics(agent_id, 24.0, 45.0, 1, Some(110.0))
+            .await
+            .unwrap();
+        state
+            .load_manager
+            .record_metrics(agent_id, 32.0, 40.0, 0, Some(95.0))
+            .await
+            .unwrap();
+
+        let metrics = get_agent_metrics(Path(agent_id), State(state))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(metrics.len(), 2);
+        assert_eq!(metrics[0].agent_id, agent_id);
+        assert!(metrics[1].timestamp >= metrics[0].timestamp);
     }
 }
