@@ -69,7 +69,14 @@ impl OllamaManager {
         }
 
         // Ollamaをダウンロード
-        let response = reqwest::get(&download_url)
+        let client = reqwest::Client::builder()
+            .user_agent("ollama-coordinator-agent/0.1")
+            .build()
+            .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
+
+        let response = client
+            .get(&download_url)
+            .send()
             .await
             .map_err(|e| AgentError::Internal(format!("Failed to download Ollama: {}", e)))?;
 
@@ -228,8 +235,7 @@ fn get_ollama_download_url() -> String {
                 .to_string()
         }
     } else {
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64"
-            .to_string()
+        "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64".to_string()
     }
 }
 
