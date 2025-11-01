@@ -63,6 +63,7 @@ Expose the port as configured (`-p 8080:8080`) and open the dashboard from the h
 | View CPU/memory/GPU trend | Open “詳細” and scroll to the “メトリクス” section for CPU/メモリ/GPUの折れ線グラフ (latest 120 samples). |
 | Monitor GPU utilisation | The stats card “平均GPU使用率” displays the current average GPU utilisation and memory usage across all fresh agents. |
 | Override Ollama download | Set `OLLAMA_DOWNLOAD_URL` (and optionally `OLLAMA_PLATFORM` such as `linux-arm64`) when running the agent to force a specific binary. |
+| Run multiple agents on one host | Launch each agent with a unique `OLLAMA_PORT` (e.g. 11434, 12434…). The coordinator now treats ports on the same machine as distinct agents. |
 
 Pagination is shown once the list exceeds 50 entries; use the arrows below the table to move between pages.
 

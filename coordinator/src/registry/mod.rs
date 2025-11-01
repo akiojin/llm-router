@@ -79,7 +79,7 @@ impl AgentRegistry {
         // 同じマシン名のエージェントが既に存在するか確認
         let existing = agents
             .values()
-            .find(|a| a.machine_name == req.machine_name)
+            .find(|a| a.machine_name == req.machine_name && a.ollama_port == req.ollama_port)
             .map(|a| a.id);
 
         let (agent_id, status, agent) = if let Some(id) = existing {
