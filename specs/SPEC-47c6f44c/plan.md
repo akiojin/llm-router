@@ -80,7 +80,7 @@ GitHub Actionsを使用して、PR作成後の品質チェック（tests、lint�
 - 順序: Contract→Integration→E2E→Unitを厳密に遵守? Yes ✅
   - Contract: ワークフローYAML構造定義
   - Integration: 実際のPRでの動作テスト
-  - E2E: finish-feature.sh → PR作成 → 自動マージまでのフルフロー
+- E2E: メンテナがCIワークフローを起動 → PR生成 → 自動マージ完了までのフルフロー
 - 実依存関係を使用? Yes (実際のGitHub Actions、実際のPR) ✅
 - Integration testの対象: 新しいワークフロー、既存スクリプトとの統合 ✅
 - 禁止: テスト前の実装、REDフェーズのスキップ ✅
@@ -131,7 +131,7 @@ specs/SPEC-47c6f44c/
 └── check-compile.sh
 
 .specify/scripts/bash/
-└── finish-feature.sh    # 既存: PRボディ更新
+└── finish-feature.sh    # 既存: PRボディ更新（メンテナ／CI専用）
 ```
 
 **構造決定**: 既存のRustプロジェクトに設定ファイル追加（オプション1: 単一プロジェクト）
@@ -265,12 +265,12 @@ Analyze "existing .github/workflows/ci.yml" for "quality-checks.ymlへの統合�
    - テスト実行 → 合格確認
 
 4. **Integrationタスク**:
-   - ダミーfeatureブランチ作成 → 未完了タスク含むPR → tasks-check失敗確認
-   - 規約違反コミット含むPR → commitlint失敗確認
-   - 全チェック合格PR → auto-merge起動確認
+   - メンテナが提供する検証用ワークフローを「未完了タスク」モードで実行 → tasks-check失敗をCIログで確認
+   - 規約違反コミットを含む検証PRをメンテナが生成 → commitlint失敗をCIログで確認
+   - 全チェック合格PRをCI上で再現 → auto-merge起動と成功ログを確認
 
 5. **Polishタスク**:
-   - `finish-feature.sh`のPRボディ更新
+   - `finish-feature.sh`のPRボディ更新（メンテナ／CI実行前提で文面調整）
    - `CLAUDE.md`の自動マージセクション更新
    - `ci.yml`削除または統合
    - ドキュメント最終確認
@@ -282,7 +282,7 @@ Analyze "existing .github/workflows/ci.yml" for "quality-checks.ymlへの統合�
 
 - `.commitlintrc.json` → commitlintジョブ
 - `quality-checks.yml` → `auto-merge.yml`
-- 実装完了 → `finish-feature.sh`更新
+- 実装完了 → メンテナ用 `finish-feature.sh` メッセージ更新
 
 **並列実行マーク [P]**:
 

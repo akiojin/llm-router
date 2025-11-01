@@ -13,8 +13,7 @@
 ### 1. コーディネーター起動
 
 ```bash
-cd /ollama-coordinator
-cargo run --bin coordinator
+cargo run --manifest-path coordinator/Cargo.toml --bin coordinator
 ```
 
 **期待される出力**:
@@ -138,9 +137,8 @@ curl -X POST http://localhost:8080/api/agents/${AGENT_ID}/heartbeat \
 ## 統合テスト実行
 
 ```bash
-# 統合テストを実行
-cd /ollama-coordinator/coordinator
-cargo test --test agent_test
+# 統合テストを実行（作業ディレクトリを変更せずに実行するため --manifest-path を指定）
+cargo test --manifest-path coordinator/Cargo.toml --test agent_test
 ```
 
 **期待される出力**:

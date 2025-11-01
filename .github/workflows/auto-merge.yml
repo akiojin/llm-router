@@ -44,19 +44,54 @@ jobs:
         id: check
         run: |
           echo "🔍 Checking PR status for PR #${{ steps.pr.outputs.number }}"
-          PR_STATUS=$(gh pr view ${{ steps.pr.outputs.number }} --json isDraft,mergeable,mergeStateStatus --jq '{isDraft, mergeable, mergeStateStatus}')
 
-          echo "📊 PR status: $PR_STATUS"
+          MAX_ATTEMPTS=20
+          SLEEP_SECONDS=15
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            PR_STATUS=$(gh pr view ${{ steps.pr.outputs.number }} --json isDraft,mergeable,mergeStateStatus --jq '{isDraft, mergeable, mergeStateStatus}')
+
+            IS_DRAFT=$(echo "$PR_STATUS" | jq -r '.isDraft')
+            MERGEABLE=$(echo "$PR_STATUS" | jq -r '.mergeable')
+            MERGE_STATE=$(echo "$PR_STATUS" | jq -r '.mergeStateStatus')
+
+            echo "📊 Attempt $ATTEMPT PR status: $PR_STATUS"
+            echo "  - isDraft: $IS_DRAFT"
+            echo "  - mergeable: $MERGEABLE"
+            echo "  - mergeStateStatus: $MERGE_STATE"
+
+            if [ "$IS_DRAFT" = "true" ]; then
+              echo "🚫 PR is draft. Skipping wait."
+              break
+            fi
+
+            if [ "$MERGEABLE" != "MERGEABLE" ]; then
+              echo "🚫 PR is not mergeable (status: $MERGEABLE). Skipping wait."
+              break
+            fi
+
+            if [ "$MERGE_STATE" = "CLEAN" ] || [ "$MERGE_STATE" = "UNSTABLE" ]; then
+              echo "✅ PR merge state is $MERGE_STATE. Continuing."
+              break
+            fi
+
+            if [ "$MERGE_STATE" != "BLOCKED" ]; then
+              echo "⚠️ Unexpected merge state: $MERGE_STATE. Skipping wait."
+              break
+            fi
+
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo "::warning::Timed out waiting for merge state to become CLEAN/UNSTABLE (still $MERGE_STATE)."
+              break
+            fi
+
+            echo "⏳ Required checks still running (merge state: $MERGE_STATE). Waiting ${SLEEP_SECONDS}s before retry..."
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep $SLEEP_SECONDS
+          done
+
           echo "status=$PR_STATUS" >> $GITHUB_OUTPUT
-
-          # Parse and display each condition
-          IS_DRAFT=$(echo "$PR_STATUS" | jq -r '.isDraft')
-          MERGEABLE=$(echo "$PR_STATUS" | jq -r '.mergeable')
-          MERGE_STATE=$(echo "$PR_STATUS" | jq -r '.mergeStateStatus')
-
-          echo "  - isDraft: $IS_DRAFT"
-          echo "  - mergeable: $MERGEABLE"
-          echo "  - mergeStateStatus: $MERGE_STATE"
         env:
           GH_TOKEN: ${{ github.token }}
 

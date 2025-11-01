@@ -163,7 +163,7 @@
     ↓ (全条件true)
 8. PRマージ (GraphQL API, MERGE method)
     ↓
-9. featureブランチ削除
+9. AutoMergeWorkflowログでリモートブランチ削除完了を記録（GitHub自動処理、ローカル操作不要）
 ```
 
 ## エラーシナリオ
