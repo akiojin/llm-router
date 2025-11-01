@@ -39,6 +39,20 @@
 - 現在のブランチの切り替えは禁止（`git switch`, `git checkout` などを実行しない）
 - ブランチやWorktreeの作成・切り替えはリポジトリメンテナが必要時に実施する。作業者は現状の環境を維持してタスクを完了させること。
 
+### ローカル検証（絶対厳守）
+
+GitHub Actions が実行する検証を**全てローカルで事前に成功させてから**コミットすること。例外は認めない。
+
+- 下記コマンド群を現在の作業環境で順番に実行し、すべて成功（終了コード0）を確認すること
+  - `cargo fmt --check`
+  - `cargo clippy -- -D warnings`
+  - `cargo test`
+  - `.specify/scripts/checks/check-tasks.sh`
+  - `npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git`
+  - コミット対象に応じて `.specify/scripts/checks/check-commits.sh` やその他ワークフロー相当のスクリプト
+- いずれかが失敗した状態でコミットすることを固く禁止する。失敗原因を解消し、再実行→合格を確認してからコミットせよ。
+- ローカル検証結果を残すため、必要に応じて実行ログをメモし、レビュー時に提示できるようにすること。
+
 ### Spec駆動開発ライフサイクル
 
 新機能の開発は、以下の3ステップで進めます：
