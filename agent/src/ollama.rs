@@ -317,18 +317,14 @@ fn get_ollama_download_url() -> String {
     }
 
     if cfg!(windows) {
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.exe"
+        "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip"
             .to_string()
     } else if cfg!(target_os = "macos") {
-        if cfg!(target_arch = "aarch64") {
-            "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin-arm64"
-                .to_string()
-        } else {
-            "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin-amd64"
-                .to_string()
-        }
+        "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz"
+            .to_string()
     } else {
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64".to_string()
+        "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tgz"
+            .to_string()
     }
 }
 
