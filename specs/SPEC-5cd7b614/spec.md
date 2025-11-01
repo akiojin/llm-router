@@ -95,12 +95,13 @@ Ollamaコーディネーターの運用管理者として、コーディネー�
 ## 技術制約 *(該当する場合)*
 
 - 以下のGPUベンダーをサポート:
-  - **NVIDIA GPU**: NVML (NVIDIA Management Library) 経由で検出
-  - **Apple Silicon**: Metal API経由で検出 (M1/M2/M3/M4シリーズ)
-  - **AMD GPU**: ROCm/sysinfo経由で検出（Linuxのみ）
+  - **NVIDIA GPU**: NVML (NVIDIA Management Library) 経由で検出、またはデバイスファイル (`/dev/nvidia0`) で検出
+  - **Apple Silicon**: Metal API、`lscpu`コマンド、または `/proc/cpuinfo` で検出 (M1/M2/M3/M4シリーズ)
+  - **AMD GPU**: sysfs KFD Topology (`/sys/class/kfd/kfd/topology/nodes`) で検出（Linuxのみ）
   - **Intel GPU**: sysinfo経由で検出（Linuxのみ）
 - Linux、Windows、macOS環境でのGPU検出をサポート
-- GPUベンダー検出の優先順位: NVIDIA → Apple Silicon → AMD → Intel → その他
+- **Docker for Mac対応**: Linuxコンテナ内でもApple Siliconを自動検出（`lscpu`と`/proc/cpuinfo`を使用）
+- GPUベンダー検出の優先順位: 環境変数 → NVIDIA → AMD → Apple Silicon
 
 ---
 
