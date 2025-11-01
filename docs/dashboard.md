@@ -62,6 +62,7 @@ Expose the port as configured (`-p 8080:8080`) and open the dashboard from the h
 | Export list            | Use “JSONエクスポート” or “CSVエクスポート” buttons to download the filtered list.                        |
 | View CPU/memory/GPU trend | Open “詳細” and scroll to the “メトリクス” section for CPU/メモリ/GPUの折れ線グラフ (latest 120 samples). |
 | Monitor GPU utilisation | The stats card “平均GPU使用率” displays the current average GPU utilisation and memory usage across all fresh agents. |
+| Override Ollama download | Set `OLLAMA_DOWNLOAD_URL` to point at a custom binary or architecture build when running the agent. |
 
 Pagination is shown once the list exceeds 50 entries; use the arrows below the table to move between pages.
 
