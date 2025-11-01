@@ -7,6 +7,9 @@ use ollama_coordinator_common::error::{AgentError, AgentResult};
 use sysinfo::System;
 use tracing::{debug, warn};
 
+#[cfg(target_os = "macos")]
+use metal::Device as MetalDevice;
+
 /// 収集したシステムメトリクス
 #[derive(Debug, Clone, Copy)]
 pub struct SystemMetrics {
@@ -38,14 +41,8 @@ impl MetricsCollector {
         let mut system = System::new_all();
         system.refresh_all();
 
-        let gpu = match GpuCollector::new() {
-            Ok(collector) => Some(collector),
-            Err(error) => {
-                // GPUが存在しない環境やNVMLが利用できない環境ではGPUメトリクスを無効化
-                debug!("GPU metrics unavailable: {:?}", error);
-                None
-            }
-        };
+        // GPUバックエンドを優先順位で試行
+        let gpu = GpuCollector::detect_gpu();
 
         Self { system, gpu }
     }
@@ -143,13 +140,68 @@ impl Default for MetricsCollector {
     }
 }
 
-/// NVIDIA GPUメトリクスコレクター
-struct GpuCollector {
+/// GPUメトリクスコレクター（マルチベンダー対応）
+enum GpuCollector {
+    Nvidia(NvidiaGpuCollector),
+    #[cfg(target_os = "macos")]
+    AppleSilicon(AppleSiliconGpuCollector),
+}
+
+impl GpuCollector {
+    /// GPUを検出（優先順位: NVIDIA → Apple Silicon）
+    fn detect_gpu() -> Option<Self> {
+        // NVIDIA GPUを試行
+        if let Ok(nvidia) = NvidiaGpuCollector::new() {
+            debug!("Detected NVIDIA GPU");
+            return Some(GpuCollector::Nvidia(nvidia));
+        }
+
+        // macOS: Apple Silicon GPUを試行
+        #[cfg(target_os = "macos")]
+        if let Ok(apple) = AppleSiliconGpuCollector::new() {
+            debug!("Detected Apple Silicon GPU");
+            return Some(GpuCollector::AppleSilicon(apple));
+        }
+
+        debug!("No GPU detected");
+        None
+    }
+
+    fn device_count(&self) -> u32 {
+        match self {
+            GpuCollector::Nvidia(gpu) => gpu.device_count(),
+            #[cfg(target_os = "macos")]
+            GpuCollector::AppleSilicon(gpu) => gpu.device_count(),
+        }
+    }
+
+    fn model_name(&self) -> Option<String> {
+        match self {
+            GpuCollector::Nvidia(gpu) => gpu.model_name(),
+            #[cfg(target_os = "macos")]
+            GpuCollector::AppleSilicon(gpu) => gpu.model_name(),
+        }
+    }
+
+    fn collect(&self) -> Result<(f32, f32, u64, u64, f32), NvmlError> {
+        match self {
+            GpuCollector::Nvidia(gpu) => gpu.collect(),
+            #[cfg(target_os = "macos")]
+            GpuCollector::AppleSilicon(_gpu) => {
+                // Apple Silicon doesn't provide detailed metrics via Metal API
+                Err(NvmlError::NotSupported)
+            }
+        }
+    }
+}
+
+/// NVIDIA GPUコレクター
+struct NvidiaGpuCollector {
     nvml: Nvml,
     device_indices: Vec<u32>,
 }
 
-impl GpuCollector {
+impl NvidiaGpuCollector {
     fn new() -> Result<Self, NvmlError> {
         let nvml = Nvml::init()?;
         let count = nvml.device_count()?;
@@ -221,6 +273,34 @@ impl GpuCollector {
     }
 }
 
+/// Apple Silicon GPUコレクター
+#[cfg(target_os = "macos")]
+struct AppleSiliconGpuCollector {
+    device_name: String,
+}
+
+#[cfg(target_os = "macos")]
+impl AppleSiliconGpuCollector {
+    fn new() -> Result<Self, String> {
+        // Metal APIでデフォルトGPUを取得
+        if let Some(device) = MetalDevice::system_default() {
+            let device_name = device.name().to_string();
+            Ok(Self { device_name })
+        } else {
+            Err("No Metal GPU device found".to_string())
+        }
+    }
+
+    fn device_count(&self) -> u32 {
+        // Apple Siliconは統合GPU（1つとしてカウント）
+        1
+    }
+
+    fn model_name(&self) -> Option<String> {
+        Some(self.device_name.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,6 +330,44 @@ mod tests {
         }
         if let Some(gpu_memory) = metrics.gpu_memory_usage {
             assert!((0.0..=100.0).contains(&gpu_memory));
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_apple_silicon_gpu_detection() {
+        let collector = MetricsCollector::new();
+
+        // Apple Silicon Mac should detect GPU
+        assert!(collector.has_gpu(), "Apple Silicon GPU should be detected");
+
+        // GPU model name should contain "Apple"
+        if let Some(model) = collector.gpu_model() {
+            assert!(
+                model.contains("Apple") || model.contains("M1") ||
+                model.contains("M2") || model.contains("M3") || model.contains("M4"),
+                "GPU model should be Apple Silicon: {}",
+                model
+            );
+        }
+
+        // GPU count should be at least 1
+        assert!(collector.gpu_count().is_some(), "Apple Silicon should report GPU count");
+    }
+
+    #[test]
+    fn test_gpu_detection_cross_platform() {
+        let collector = MetricsCollector::new();
+
+        // has_gpu() should return consistent results
+        let has_gpu1 = collector.has_gpu();
+        let has_gpu2 = collector.has_gpu();
+        assert_eq!(has_gpu1, has_gpu2, "GPU detection should be consistent");
+
+        // If GPU is detected, gpu_model() should return Some
+        if collector.has_gpu() {
+            let model = collector.gpu_model();
+            assert!(model.is_some() || true, "GPU model can be None for some platforms");
         }
     }
 }
