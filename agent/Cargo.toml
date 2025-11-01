@@ -36,6 +36,11 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 whoami = "1.4"
 
+# GPU検出 (プラットフォーム別)
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.29"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 wiremock = "0.6.5"
+once_cell = "1.21"

@@ -20,6 +20,9 @@ async fn test_agent_registration_to_coordinator() {
         ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     // Act: エージェント登録
@@ -59,6 +62,9 @@ async fn test_agent_re_registration() {
         ip_address: "192.168.1.101".parse().unwrap(),
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     // Act: 初回登録
@@ -92,6 +98,9 @@ async fn test_agent_registration_invalid_coordinator() {
         ip_address: "192.168.1.100".parse().unwrap(),
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     // Act: 登録試行

@@ -232,6 +232,9 @@ mod tests {
             tags: Vec::new(),
             notes: None,
             loaded_models: Vec::new(),
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         // 保存
@@ -269,6 +272,9 @@ mod tests {
             tags: Vec::new(),
             notes: None,
             loaded_models: Vec::new(),
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         save_agent(&agent).await.unwrap();
@@ -304,6 +310,9 @@ mod tests {
             tags: Vec::new(),
             notes: None,
             loaded_models: Vec::new(),
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         save_agent(&agent1).await.unwrap();
@@ -322,6 +331,9 @@ mod tests {
             tags: vec!["primary".into()],
             notes: None,
             loaded_models: vec!["gpt-oss:7b".into()],
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         save_agent(&agent2).await.unwrap();

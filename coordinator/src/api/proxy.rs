@@ -204,6 +204,9 @@ mod tests {
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         state.registry.register(register_req).await.unwrap();
 
@@ -224,6 +227,9 @@ mod tests {
             ip_address: "192.168.1.100".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let response1 = state.registry.register(register_req1).await.unwrap();
 
@@ -240,6 +246,9 @@ mod tests {
             ip_address: "192.168.1.101".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         state.registry.register(register_req2).await.unwrap();
 

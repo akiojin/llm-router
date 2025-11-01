@@ -41,6 +41,11 @@ impl OllamaManager {
         }
     }
 
+    /// ollamaバイナリのパスを取得
+    pub fn ollama_path(&self) -> &std::path::Path {
+        &self.ollama_path
+    }
+
     /// Ollamaが利用可能か確認し、必要に応じてダウンロード・起動
     pub async fn ensure_running(&mut self) -> AgentResult<()> {
         // Ollamaがインストールされているか確認
@@ -646,6 +651,7 @@ fn detect_arch() -> String {
     std::env::consts::ARCH.to_string()
 }
 
+/// ollama psコマンドの実行結果
 #[cfg(test)]
 mod tests {
     use super::*;

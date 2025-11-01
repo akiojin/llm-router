@@ -1,0 +1,10 @@
+[package]
+name = "gpu-detection-poc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glob = "0.3"
+
+# This is a standalone PoC, not part of the workspace
+[workspace]

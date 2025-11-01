@@ -112,6 +112,9 @@ mod tests {
                 ip_address: "127.0.0.1".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap();
@@ -143,6 +146,9 @@ mod tests {
                 ip_address: "127.0.0.1".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap();
@@ -177,6 +183,9 @@ mod tests {
                 ip_address: "127.0.0.1".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()

@@ -20,6 +20,9 @@ async fn test_heartbeat_sending_after_registration() {
         ip_address: "192.168.1.102".parse::<IpAddr>().unwrap(),
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     let register_response = client.register(register_req).await.unwrap();
@@ -67,6 +70,9 @@ async fn test_heartbeat_with_real_metrics() {
         ip_address: "192.168.1.103".parse().unwrap(),
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     let register_response = client.register(register_req).await.unwrap();
@@ -161,6 +167,9 @@ async fn test_multiple_heartbeats() {
         ip_address: "192.168.1.104".parse().unwrap(),
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     let register_response = client.register(register_req).await.unwrap();

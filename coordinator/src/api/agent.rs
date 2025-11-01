@@ -18,6 +18,15 @@ pub async fn register_agent(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
+    // GPU必須チェック
+    if !req.gpu_available {
+        return Err(AppError(CoordinatorError::Common(
+            ollama_coordinator_common::error::CommonError::Validation(
+                "GPU is required for agent registration".to_string(),
+            ),
+        )));
+    }
+
     let response = state.registry.register(req).await?;
     Ok(Json(response))
 }
@@ -101,7 +110,7 @@ impl From<CoordinatorError> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let (status, message) = match self.0 {
+        let (status, message) = match &self.0 {
             CoordinatorError::AgentNotFound(_) => (StatusCode::NOT_FOUND, self.0.to_string()),
             CoordinatorError::NoAgentsAvailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
@@ -114,7 +123,14 @@ impl IntoResponse for AppError {
             CoordinatorError::Internal(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
             }
-            CoordinatorError::Common(_) => (StatusCode::BAD_REQUEST, self.0.to_string()),
+            CoordinatorError::Common(err) => {
+                // GPU必須エラーの場合は403 Forbiddenを返す
+                if err.to_string().contains("GPU is required") {
+                    (StatusCode::FORBIDDEN, self.0.to_string())
+                } else {
+                    (StatusCode::BAD_REQUEST, self.0.to_string())
+                }
+            }
         };
 
         (status, message).into_response()
@@ -149,6 +165,9 @@ mod tests {
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         let result = register_agent(State(state), Json(req)).await;
@@ -175,6 +194,9 @@ mod tests {
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let _ = register_agent(State(state.clone()), Json(req1))
             .await
@@ -185,6 +207,9 @@ mod tests {
             ip_address: "192.168.1.101".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let _ = register_agent(State(state.clone()), Json(req2))
             .await
@@ -203,6 +228,9 @@ mod tests {
             ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let res1 = register_agent(State(state.clone()), Json(req1))
             .await
@@ -215,6 +243,9 @@ mod tests {
             ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 12434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let res2 = register_agent(State(state.clone()), Json(req2))
             .await
@@ -236,6 +267,9 @@ mod tests {
             ip_address: "192.168.1.150".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         let response = register_agent(State(state.clone()), Json(req))
@@ -299,6 +333,9 @@ mod tests {
             ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         let response = register_agent(State(state.clone()), Json(register_req))
             .await
@@ -380,6 +417,9 @@ mod tests {
                 ip_address: "10.0.0.5".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             }),
         )
         .await
@@ -417,6 +457,9 @@ mod tests {
                 ip_address: "10.0.0.7".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             }),
         )
         .await
@@ -442,6 +485,9 @@ mod tests {
                 ip_address: "10.0.0.8".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             }),
         )
         .await

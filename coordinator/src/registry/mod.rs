@@ -54,11 +54,25 @@ impl AgentRegistry {
         let loaded_agents = crate::db::load_agents().await?;
         let mut agents = self.agents.write().await;
 
+        let mut removed_count = 0;
         for agent in loaded_agents {
+            // GPU非搭載エージェントは自動削除
+            if !agent.gpu_available {
+                println!(
+                    "Removing GPU-less agent: {} (ID: {})",
+                    agent.machine_name, agent.id
+                );
+                removed_count += 1;
+                continue;
+            }
             agents.insert(agent.id, agent);
         }
 
-        println!("Loaded {} agents from storage", agents.len());
+        println!(
+            "Loaded {} agents from storage ({} GPU-less agents removed)",
+            agents.len(),
+            removed_count
+        );
 
         Ok(())
     }
@@ -88,6 +102,9 @@ impl AgentRegistry {
             agent.ip_address = req.ip_address;
             agent.ollama_version = req.ollama_version.clone();
             agent.ollama_port = req.ollama_port;
+            agent.gpu_available = req.gpu_available;
+            agent.gpu_count = req.gpu_count;
+            agent.gpu_model = req.gpu_model.clone();
             agent.status = AgentStatus::Online;
             agent.last_seen = Utc::now();
             (id, RegisterStatus::Updated, agent.clone())
@@ -108,6 +125,9 @@ impl AgentRegistry {
                 tags: Vec::new(),
                 notes: None,
                 loaded_models: Vec::new(),
+                gpu_available: req.gpu_available,
+                gpu_count: req.gpu_count,
+                gpu_model: req.gpu_model,
             };
             agents.insert(agent_id, agent.clone());
             (agent_id, RegisterStatus::Registered, agent)
@@ -295,6 +315,9 @@ mod tests {
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         let response = registry.register(req).await.unwrap();
@@ -314,6 +337,9 @@ mod tests {
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         let first_response = registry.register(req.clone()).await.unwrap();
@@ -336,6 +362,9 @@ mod tests {
             ip_address: "192.168.1.100".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         registry.register(req1).await.unwrap();
 
@@ -344,6 +373,9 @@ mod tests {
             ip_address: "192.168.1.101".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
         registry.register(req2).await.unwrap();
 
@@ -359,6 +391,9 @@ mod tests {
             ip_address: "192.168.1.100".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         let response = registry.register(req).await.unwrap();
@@ -377,6 +412,9 @@ mod tests {
             ip_address: "192.168.1.150".parse().unwrap(),
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
+            gpu_available: true,
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
         };
 
         let agent_id = registry.register(req).await.unwrap().agent_id;
@@ -408,6 +446,9 @@ mod tests {
                 ip_address: "127.0.0.1".parse().unwrap(),
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
@@ -426,6 +467,9 @@ mod tests {
                 ip_address: "127.0.0.1".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             })
             .await
             .unwrap()
