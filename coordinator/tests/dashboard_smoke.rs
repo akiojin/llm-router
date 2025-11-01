@@ -240,4 +240,48 @@ async fn dashboard_overview_returns_combined_payload() {
     assert_eq!(overview["agents"].as_array().unwrap().len(), 1);
     assert_eq!(overview["stats"]["total_agents"], 1);
     assert_eq!(overview["history"].as_array().unwrap().len(), 60);
+    assert!(overview["generated_at"].is_string());
+    assert!(overview["generation_time_ms"].as_u64().is_some());
+}
+
+#[tokio::test]
+async fn dashboard_agent_metrics_endpoint_returns_history() {
+    let (router, registry, load_manager) = build_router();
+
+    let agent_id = registry
+        .register(RegisterRequest {
+            machine_name: "metrics-endpoint".into(),
+            ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 11)),
+            ollama_version: "0.1.0".into(),
+            ollama_port: 11434,
+        })
+        .await
+        .unwrap()
+        .agent_id;
+
+    load_manager
+        .record_metrics(agent_id, 42.0, 55.0, 2, Some(105.0))
+        .await
+        .unwrap();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/dashboard/metrics/{agent_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let metrics: Value = serde_json::from_slice(&body).unwrap();
+    assert!(metrics.is_array());
+    assert_eq!(metrics.as_array().unwrap().len(), 1);
+    assert_eq!(
+        metrics.as_array().unwrap()[0]["agent_id"].as_str().unwrap(),
+        agent_id.to_string()
+    );
 }
