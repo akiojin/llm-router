@@ -720,6 +720,8 @@ mod tests {
     fn test_apple_silicon_detection_via_lscpu() {
         use std::process::Command;
 
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+
         // lscpuコマンドが利用可能かチェック
         if Command::new("lscpu").output().is_err() {
             println!("lscpu not available, skipping test");
@@ -752,6 +754,8 @@ mod tests {
     #[cfg_attr(not(target_arch = "aarch64"), ignore)]
     fn test_apple_silicon_detection_via_cpuinfo() {
         use std::fs;
+
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
 
         // /proc/cpuinfoが存在するかチェック
         if fs::read_to_string("/proc/cpuinfo").is_err() {
