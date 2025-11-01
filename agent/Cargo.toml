@@ -17,6 +17,7 @@ reqwest = { workspace = true }
 
 # システム監視
 sysinfo = { workspace = true }
+nvml-wrapper = "0.9"
 
 # シリアライゼーション
 serde = { workspace = true }

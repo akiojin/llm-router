@@ -43,6 +43,10 @@ pub struct DashboardAgent {
     pub cpu_usage: Option<f32>,
     /// メモリ使用率
     pub memory_usage: Option<f32>,
+    /// GPU使用率
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -164,6 +168,8 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
             let (
                 cpu_usage,
                 memory_usage,
+                gpu_usage,
+                gpu_memory_usage,
                 active_requests,
                 total_requests,
                 successful_requests,
@@ -175,6 +181,8 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 (
                     snapshot.cpu_usage,
                     snapshot.memory_usage,
+                    snapshot.gpu_usage,
+                    snapshot.gpu_memory_usage,
                     snapshot.active_requests,
                     snapshot.total_requests,
                     snapshot.successful_requests,
@@ -184,7 +192,7 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                     snapshot.is_stale,
                 )
             } else {
-                (None, None, 0, 0, 0, 0, None, None, true)
+                (None, None, None, None, 0, 0, 0, 0, None, None, true)
             };
 
             DashboardAgent {
@@ -199,6 +207,8 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 uptime_seconds,
                 cpu_usage,
                 memory_usage,
+                gpu_usage,
+                gpu_memory_usage,
                 active_requests,
                 total_requests,
                 successful_requests,
@@ -281,7 +291,7 @@ mod tests {
         // メトリクスを記録
         state
             .load_manager
-            .record_metrics(agent_id, 32.5, 48.0, 2, Some(110.0))
+            .record_metrics(agent_id, 32.5, 48.0, Some(72.0), Some(68.0), 2, Some(110.0))
             .await
             .unwrap();
         state.load_manager.begin_request(agent_id).await.unwrap();
@@ -309,6 +319,8 @@ mod tests {
         assert_eq!(agent.average_response_time_ms, Some(120.0));
         assert!(agent.cpu_usage.is_some());
         assert!(agent.memory_usage.is_some());
+        assert_eq!(agent.gpu_usage, Some(72.0));
+        assert_eq!(agent.gpu_memory_usage, Some(68.0));
     }
 
     #[tokio::test]
@@ -342,7 +354,7 @@ mod tests {
         // 1台分はメトリクスとリクエスト処理を記録
         state
             .load_manager
-            .record_metrics(first_agent, 40.0, 65.0, 3, Some(95.0))
+            .record_metrics(first_agent, 40.0, 65.0, None, None, 3, Some(95.0))
             .await
             .unwrap();
         state.load_manager.begin_request(first_agent).await.unwrap();
@@ -459,12 +471,12 @@ mod tests {
 
         state
             .load_manager
-            .record_metrics(agent_id, 24.0, 45.0, 1, Some(110.0))
+            .record_metrics(agent_id, 24.0, 45.0, Some(35.0), Some(40.0), 1, Some(110.0))
             .await
             .unwrap();
         state
             .load_manager
-            .record_metrics(agent_id, 32.0, 40.0, 0, Some(95.0))
+            .record_metrics(agent_id, 32.0, 40.0, Some(28.0), Some(30.0), 0, Some(95.0))
             .await
             .unwrap();
 
@@ -475,5 +487,7 @@ mod tests {
         assert_eq!(metrics.len(), 2);
         assert_eq!(metrics[0].agent_id, agent_id);
         assert!(metrics[1].timestamp >= metrics[0].timestamp);
+        assert_eq!(metrics[0].gpu_usage, Some(35.0));
+        assert_eq!(metrics[1].gpu_memory_usage, Some(30.0));
     }
 }

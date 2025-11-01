@@ -181,7 +181,7 @@ mod tests {
 
         state
             .load_manager
-            .record_metrics(agent_id, 12.0, 34.0, 1, Some(90.0))
+            .record_metrics(agent_id, 12.0, 34.0, None, None, 1, Some(90.0))
             .await
             .unwrap();
 

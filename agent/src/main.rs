@@ -74,7 +74,7 @@ async fn main() {
         heartbeat_timer.tick().await;
 
         // メトリクス収集
-        let (cpu_usage, memory_usage) = match metrics_collector.collect_metrics() {
+        let metrics = match metrics_collector.collect_metrics() {
             Ok(metrics) => metrics,
             Err(e) => {
                 eprintln!("Failed to collect metrics: {}", e);
@@ -85,8 +85,10 @@ async fn main() {
         // ハートビート送信
         let heartbeat_req = HealthCheckRequest {
             agent_id,
-            cpu_usage,
-            memory_usage,
+            cpu_usage: metrics.cpu_usage,
+            memory_usage: metrics.memory_usage,
+            gpu_usage: metrics.gpu_usage,
+            gpu_memory_usage: metrics.gpu_memory_usage,
             active_requests: 0, // TODO: 実際のリクエスト数をカウント
             average_response_time_ms: None,
         };
@@ -94,10 +96,17 @@ async fn main() {
         if let Err(e) = coordinator_client.send_heartbeat(heartbeat_req).await {
             eprintln!("Failed to send heartbeat: {}", e);
         } else {
-            println!(
-                "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%",
-                cpu_usage, memory_usage
-            );
+            if let (Some(gpu), Some(gpu_mem)) = (metrics.gpu_usage, metrics.gpu_memory_usage) {
+                println!(
+                    "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%, GPU: {:.1}%, GPU Memory: {:.1}%",
+                    metrics.cpu_usage, metrics.memory_usage, gpu, gpu_mem
+                );
+            } else {
+                println!(
+                    "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%",
+                    metrics.cpu_usage, metrics.memory_usage
+                );
+            }
         }
     }
 }

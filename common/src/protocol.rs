@@ -47,6 +47,12 @@ pub struct HealthCheckRequest {
     pub cpu_usage: f32,
     /// メモリ使用率 (0.0-100.0)
     pub memory_usage: f32,
+    /// GPU使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 過去N件の平均レスポンスタイム (ms)
@@ -133,6 +139,8 @@ mod tests {
             agent_id: Uuid::new_v4(),
             cpu_usage: 45.5,
             memory_usage: 60.2,
+            gpu_usage: Some(33.0),
+            gpu_memory_usage: Some(71.0),
             active_requests: 3,
             average_response_time_ms: Some(123.4),
         };
@@ -142,6 +150,8 @@ mod tests {
 
         assert_eq!(request.cpu_usage, deserialized.cpu_usage);
         assert_eq!(request.memory_usage, deserialized.memory_usage);
+        assert_eq!(request.gpu_usage, deserialized.gpu_usage);
+        assert_eq!(request.gpu_memory_usage, deserialized.gpu_memory_usage);
         assert_eq!(request.active_requests, deserialized.active_requests);
         assert_eq!(
             request.average_response_time_ms,

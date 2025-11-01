@@ -75,6 +75,8 @@ mod tests {
                 agent_id: Uuid::new_v4(),
                 cpu_usage: 10.0,
                 memory_usage: 20.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
                 active_requests: 1,
                 total_requests: 5,
                 average_response_time_ms: Some(80.0),
@@ -114,11 +116,11 @@ mod tests {
             .agent_id;
 
         manager
-            .record_metrics(slow_agent, 20.0, 30.0, 1, Some(240.0))
+            .record_metrics(slow_agent, 20.0, 30.0, None, None, 1, Some(240.0))
             .await
             .unwrap();
         manager
-            .record_metrics(fast_agent, 20.0, 30.0, 1, Some(120.0))
+            .record_metrics(fast_agent, 20.0, 30.0, None, None, 1, Some(120.0))
             .await
             .unwrap();
 
@@ -144,7 +146,15 @@ mod tests {
 
         for i in 0..(METRICS_HISTORY_CAPACITY + 10) {
             manager
-                .record_metrics(agent_id, i as f32, (i * 2) as f32, 1, Some(100.0))
+                .record_metrics(
+                    agent_id,
+                    i as f32,
+                    (i * 2) as f32,
+                    Some((i % 100) as f32),
+                    Some(((i * 2) % 100) as f32),
+                    1,
+                    Some(100.0),
+                )
                 .await
                 .unwrap();
         }
@@ -244,6 +254,10 @@ pub struct AgentLoadSnapshot {
     pub cpu_usage: Option<f32>,
     /// メモリ使用率
     pub memory_usage: Option<f32>,
+    /// GPU使用率
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数（Coordinator観点+エージェント自己申告）
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -309,6 +323,8 @@ impl LoadManager {
         agent_id: Uuid,
         cpu_usage: f32,
         memory_usage: f32,
+        gpu_usage: Option<f32>,
+        gpu_memory_usage: Option<f32>,
         active_requests: u32,
         average_response_time_ms: Option<f32>,
     ) -> CoordinatorResult<()> {
@@ -324,6 +340,8 @@ impl LoadManager {
             agent_id,
             cpu_usage,
             memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
             active_requests,
             total_requests: entry.total_assigned,
             average_response_time_ms: derived_average,
@@ -383,6 +401,8 @@ impl LoadManager {
                 if let Some(avg) = metrics.average_response_time_ms {
                     latest.average_response_time_ms = Some(avg);
                 }
+                latest.gpu_usage = metrics.gpu_usage;
+                latest.gpu_memory_usage = metrics.gpu_memory_usage;
             }
         }
 
@@ -598,6 +618,14 @@ impl LoadManager {
             .last_metrics
             .as_ref()
             .map(|metrics| metrics.memory_usage);
+        let gpu_usage = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_usage);
+        let gpu_memory_usage = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_memory_usage);
         let active_requests = load_state.combined_active();
 
         AgentLoadSnapshot {
@@ -606,6 +634,8 @@ impl LoadManager {
             status: agent.status,
             cpu_usage,
             memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
             active_requests,
             total_requests: load_state.total_assigned,
             successful_requests: load_state.success_count,

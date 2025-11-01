@@ -19,6 +19,8 @@ pub async fn health_check(
             req.agent_id,
             req.cpu_usage,
             req.memory_usage,
+            req.gpu_usage,
+            req.gpu_memory_usage,
             req.active_requests,
             req.average_response_time_ms,
         )
@@ -62,6 +64,8 @@ mod tests {
             agent_id: register_response.agent_id,
             cpu_usage: 45.5,
             memory_usage: 60.2,
+            gpu_usage: None,
+            gpu_memory_usage: None,
             active_requests: 3,
             average_response_time_ms: Some(110.0),
         };
@@ -89,6 +93,8 @@ mod tests {
             agent_id: Uuid::new_v4(),
             cpu_usage: 45.5,
             memory_usage: 60.2,
+            gpu_usage: None,
+            gpu_memory_usage: None,
             active_requests: 3,
             average_response_time_ms: None,
         };

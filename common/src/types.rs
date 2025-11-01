@@ -56,6 +56,12 @@ pub struct HealthMetrics {
     pub cpu_usage: f32,
     /// メモリ使用率 (0.0-100.0)
     pub memory_usage: f32,
+    /// GPU使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_usage: Option<f32>,
+    /// GPUメモリ使用率 (0.0-100.0)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_usage: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 累積リクエスト数
