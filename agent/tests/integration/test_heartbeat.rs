@@ -38,9 +38,9 @@ async fn test_heartbeat_sending_after_registration() {
         active_requests: 0,
         average_response_time_ms: None,
         loaded_models: Vec::new(),
-            gpu_available: true,
-            gpu_count: Some(1),
-            gpu_model: Some("Test GPU".to_string()),
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -94,9 +94,9 @@ async fn test_heartbeat_with_real_metrics() {
         active_requests: 0,
         average_response_time_ms: None,
         loaded_models: Vec::new(),
-            gpu_available: true,
-            gpu_count: Some(1),
-            gpu_model: Some("Test GPU".to_string()),
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -131,9 +131,9 @@ async fn test_heartbeat_unregistered_agent() {
         active_requests: 0,
         average_response_time_ms: None,
         loaded_models: Vec::new(),
-            gpu_available: true,
-            gpu_count: Some(1),
-            gpu_model: Some("Test GPU".to_string()),
+        gpu_available: true,
+        gpu_count: Some(1),
+        gpu_model: Some("Test GPU".to_string()),
     };
 
     // Act: 未登録エージェントでハートビート送信

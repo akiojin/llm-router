@@ -411,9 +411,9 @@ mod tests {
                 ip_address: "10.0.0.5".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
-            gpu_available: true,
-            gpu_count: Some(1),
-            gpu_model: Some("Test GPU".to_string()),
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             }),
         )
         .await
@@ -451,9 +451,9 @@ mod tests {
                 ip_address: "10.0.0.7".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
-            gpu_available: true,
-            gpu_count: Some(1),
-            gpu_model: Some("Test GPU".to_string()),
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             }),
         )
         .await
@@ -479,9 +479,9 @@ mod tests {
                 ip_address: "10.0.0.8".parse().unwrap(),
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
-            gpu_available: true,
-            gpu_count: Some(1),
-            gpu_model: Some("Test GPU".to_string()),
+                gpu_available: true,
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
             }),
         )
         .await
