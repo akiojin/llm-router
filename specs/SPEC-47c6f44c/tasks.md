@@ -173,23 +173,20 @@
 
 - [x] **T017** [P] 最終動作確認（E2Eテスト）
   - **手順**:
-    1. 実際のfeatureブランチで`finish-feature.sh`実行
-    2. PR作成 → quality-checks実行 → auto-merge実行 → mainマージ確認
-    3. 全フロー成功確認
+    1. リポジトリメンテナに依頼し、検証用ワークフローを「本番相当フロー」で実行してもらう。
+    2. `Quality Checks` → `Auto Merge` の一連のCI結果を確認し、mainブランチへの自動マージ完了をGitHub上でレビューする。
+    3. 結果サマリとログの要約を `docs/qa/auto-merge-report.md` に追記し、共有する。
   - **参照**: `quickstart.md` の検証チェックリスト
-  - **確認**: 本番環境でのフルフロー動作確認
+  - **確認**: 本番環境と同等のシナリオで自動マージが問題なく完了すること。
 
 - [x] **T018** [P] テスト用ブランチとPRのクリーンアップ
-  - **対象**:
-    - `feature/test-tasks-fail`
-    - `feature/test-commitlint-fail`
-    - `feature/test-auto-merge-success`
-    - `feature/test-draft-pr`
-  - **コマンド**:
-    - `gh pr close <PR_NUMBER>`
-    - `git branch -D <BRANCH_NAME>`
-    - `git push origin --delete <BRANCH_NAME>`
-  - **確認**: すべてのテスト用リソースが削除されたことを確認
+  - **対象**: 検証ワークフローが生成した自動テストPR（`Auto Merge QA` ラベル付き）
+  - **依頼先**: リポジトリメンテナ
+  - **実施内容**:
+    - GitHubのUIからPRをクローズまたはマージ結果を確認したのちに削除
+    - リモートに残ったテスト用ブランチをGitHub上で削除（ローカルで`git branch -D`等は実行しない）
+    - 必要に応じてスクリプトで自動削除が成功したかを再確認
+  - **確認**: すべてのテスト用リソースがGitHub側で整理され、ローカル環境に変化がないこと。
 
 ## 依存関係グラフ
 
