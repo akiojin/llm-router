@@ -10,7 +10,7 @@
   - 参考ログを `/tmp/spec-5cd7b614/gpu-sample.json` に保存
   - コミットしない一時ファイルとする
 
-- [ ] **T002** [P] テスト用ストレージ準備
+- [x] **T002** [P] テスト用ストレージ準備
   - `coordinator/tests/support/fixtures/agents/gpu_missing.json` を追加（GPU無しエージェントデータ）
   - `coordinator/tests/support/fixtures/agents/gpu_valid.json` を追加（GPU有エージェントデータ）
 
