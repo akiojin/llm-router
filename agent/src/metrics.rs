@@ -18,6 +18,12 @@ pub struct SystemMetrics {
     pub gpu_usage: Option<f32>,
     /// GPU memory usage percentage (0.0-100.0)
     pub gpu_memory_usage: Option<f32>,
+    /// GPU memory total (MB)
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU memory used (MB)
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU temperature (℃)
+    pub gpu_temperature: Option<f32>,
 }
 
 /// システムメトリクスコレクター
@@ -85,23 +91,33 @@ impl MetricsCollector {
         let cpu_usage = self.get_cpu_usage()?;
         let memory_usage = self.get_memory_usage()?;
 
-        let (gpu_usage, gpu_memory_usage) = if let Some(gpu) = &self.gpu {
-            match gpu.collect() {
-                Ok((usage, memory)) => (Some(usage), Some(memory)),
-                Err(error) => {
-                    warn!("Failed to collect GPU metrics: {:?}", error);
-                    (None, None)
+        let (gpu_usage, gpu_memory_usage, gpu_memory_total_mb, gpu_memory_used_mb, gpu_temperature) =
+            if let Some(gpu) = &self.gpu {
+                match gpu.collect() {
+                    Ok((usage, memory, total_mb, used_mb, temp)) => (
+                        Some(usage),
+                        Some(memory),
+                        Some(total_mb),
+                        Some(used_mb),
+                        Some(temp),
+                    ),
+                    Err(error) => {
+                        warn!("Failed to collect GPU metrics: {:?}", error);
+                        (None, None, None, None, None)
+                    }
                 }
-            }
-        } else {
-            (None, None)
-        };
+            } else {
+                (None, None, None, None, None)
+            };
 
         Ok(SystemMetrics {
             cpu_usage,
             memory_usage,
             gpu_usage,
             gpu_memory_usage,
+            gpu_memory_total_mb,
+            gpu_memory_used_mb,
+            gpu_temperature,
         })
     }
 }
@@ -132,12 +148,16 @@ impl GpuCollector {
         })
     }
 
-    fn collect(&self) -> Result<(f32, f32), NvmlError> {
+    fn collect(&self) -> Result<(f32, f32, u64, u64, f32), NvmlError> {
         let mut total_usage = 0f32;
-        let mut total_memory = 0f32;
+        let mut total_memory_percent = 0f32;
+        let mut total_memory_total = 0u64;
+        let mut total_memory_used = 0u64;
+        let mut total_temperature = 0f32;
 
         for index in &self.device_indices {
             let device = self.nvml.device_by_index(*index)?;
+
             let utilization = device.utilization_rates()?;
             total_usage += utilization.gpu as f32;
 
@@ -147,7 +167,13 @@ impl GpuCollector {
             } else {
                 (memory.used as f64 / memory.total as f64 * 100.0) as f32
             };
-            total_memory += percent;
+            total_memory_percent += percent;
+            total_memory_total += memory.total / (1024 * 1024); // Convert to MB
+            total_memory_used += memory.used / (1024 * 1024); // Convert to MB
+
+            let temperature =
+                device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)?;
+            total_temperature += temperature as f32;
         }
 
         let device_count = self.device_indices.len() as f32;
@@ -155,7 +181,13 @@ impl GpuCollector {
             return Err(NvmlError::NotSupported);
         }
 
-        Ok((total_usage / device_count, total_memory / device_count))
+        Ok((
+            total_usage / device_count,
+            total_memory_percent / device_count,
+            total_memory_total,
+            total_memory_used,
+            total_temperature / device_count,
+        ))
     }
 }
 
