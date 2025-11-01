@@ -77,6 +77,9 @@ mod tests {
                 memory_usage: 20.0,
                 gpu_usage: None,
                 gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
                 active_requests: 1,
                 total_requests: 5,
                 average_response_time_ms: Some(80.0),
@@ -122,6 +125,9 @@ mod tests {
                 memory_usage: 30.0,
                 gpu_usage: None,
                 gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
                 active_requests: 1,
                 average_response_time_ms: Some(240.0),
             })
@@ -134,6 +140,9 @@ mod tests {
                 memory_usage: 30.0,
                 gpu_usage: None,
                 gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
                 active_requests: 1,
                 average_response_time_ms: Some(120.0),
             })
@@ -168,6 +177,9 @@ mod tests {
                     memory_usage: (i * 2) as f32,
                     gpu_usage: Some((i % 100) as f32),
                     gpu_memory_usage: Some(((i * 2) % 100) as f32),
+                    gpu_memory_total_mb: None,
+                    gpu_memory_used_mb: None,
+                    gpu_temperature: None,
                     active_requests: 1,
                     average_response_time_ms: Some(100.0),
                 })
@@ -260,6 +272,15 @@ pub struct AgentLoadSnapshot {
     pub gpu_usage: Option<f32>,
     /// GPUメモリ使用率
     pub gpu_memory_usage: Option<f32>,
+    /// GPUメモリ総容量 (MB)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU使用メモリ (MB)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU温度 (℃)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_temperature: Option<f32>,
     /// 処理中リクエスト数（Coordinator観点+エージェント自己申告）
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -325,6 +346,12 @@ pub struct MetricsUpdate {
     pub gpu_usage: Option<f32>,
     /// GPUメモリ使用率（パーセンテージ）
     pub gpu_memory_usage: Option<f32>,
+    /// GPUメモリ総容量 (MB)
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU使用メモリ (MB)
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU温度 (℃)
+    pub gpu_temperature: Option<f32>,
     /// アクティブなリクエスト数
     pub active_requests: u32,
     /// 平均レスポンスタイム（ミリ秒）
@@ -350,6 +377,9 @@ impl LoadManager {
             memory_usage,
             gpu_usage,
             gpu_memory_usage,
+            gpu_memory_total_mb,
+            gpu_memory_used_mb,
+            gpu_temperature,
             active_requests,
             average_response_time_ms,
         } = update;
@@ -368,6 +398,9 @@ impl LoadManager {
             memory_usage,
             gpu_usage,
             gpu_memory_usage,
+            gpu_memory_total_mb,
+            gpu_memory_used_mb,
+            gpu_temperature,
             active_requests,
             total_requests: entry.total_assigned,
             average_response_time_ms: derived_average,
@@ -674,6 +707,18 @@ impl LoadManager {
             .last_metrics
             .as_ref()
             .and_then(|metrics| metrics.gpu_memory_usage);
+        let gpu_memory_total_mb = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_memory_total_mb);
+        let gpu_memory_used_mb = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_memory_used_mb);
+        let gpu_temperature = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_temperature);
         let active_requests = load_state.combined_active();
 
         AgentLoadSnapshot {
@@ -684,6 +729,9 @@ impl LoadManager {
             memory_usage,
             gpu_usage,
             gpu_memory_usage,
+            gpu_memory_total_mb,
+            gpu_memory_used_mb,
+            gpu_temperature,
             active_requests,
             total_requests: load_state.total_assigned,
             successful_requests: load_state.success_count,

@@ -190,6 +190,9 @@ mod tests {
                 memory_usage: 34.0,
                 gpu_usage: None,
                 gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
                 active_requests: 1,
                 average_response_time_ms: Some(90.0),
             })
