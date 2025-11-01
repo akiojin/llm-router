@@ -238,6 +238,31 @@ async fn register_with_retry(
         match client.register(req.clone()).await {
             Ok(response) => return Ok(response),
             Err(err) => {
+                // Check for 403 Forbidden (GPU not available)
+                let err_msg = err.to_string();
+                if err_msg.contains("403") || err_msg.contains("Forbidden") {
+                    eprintln!("\n========================================");
+                    eprintln!("ERROR: GPU Required");
+                    eprintln!("========================================");
+                    eprintln!("This coordinator requires agents to have GPU available.");
+                    eprintln!("GPU was not detected on this machine.");
+                    eprintln!();
+                    eprintln!("To run in Docker or environments where GPU detection fails,");
+                    eprintln!("set the following environment variables:");
+                    eprintln!();
+                    eprintln!("  OLLAMA_GPU_AVAILABLE=true");
+                    eprintln!("  OLLAMA_GPU_MODEL=\"Your GPU Model Name\"");
+                    eprintln!("  OLLAMA_GPU_COUNT=1");
+                    eprintln!();
+                    eprintln!("Example:");
+                    eprintln!("  docker run -e OLLAMA_GPU_AVAILABLE=true \\");
+                    eprintln!("             -e OLLAMA_GPU_MODEL=\"Apple M4\" \\");
+                    eprintln!("             -e OLLAMA_GPU_COUNT=1 \\");
+                    eprintln!("             your-agent-image");
+                    eprintln!("========================================\n");
+                    return Err(err);
+                }
+
                 let target = max_attempts
                     .map(|limit| limit.to_string())
                     .unwrap_or_else(|| "∞".to_string());
