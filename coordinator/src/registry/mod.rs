@@ -8,7 +8,7 @@ use ollama_coordinator_common::{
     protocol::{RegisterRequest, RegisterResponse, RegisterStatus},
     types::{Agent, AgentStatus},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -17,6 +17,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct AgentRegistry {
     agents: Arc<RwLock<HashMap<Uuid, Agent>>>,
+    storage_enabled: bool,
 }
 
 impl AgentRegistry {
@@ -24,6 +25,7 @@ impl AgentRegistry {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            storage_enabled: false,
         }
     }
 
@@ -34,6 +36,7 @@ impl AgentRegistry {
 
         let registry = Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            storage_enabled: true,
         };
 
         // 起動時にストレージからエージェント情報を読み込み
@@ -44,6 +47,10 @@ impl AgentRegistry {
 
     /// ストレージからエージェント情報を読み込み
     async fn load_from_storage(&self) -> CoordinatorResult<()> {
+        if !self.storage_enabled {
+            return Ok(());
+        }
+
         let loaded_agents = crate::db::load_agents().await?;
         let mut agents = self.agents.write().await;
 
@@ -58,6 +65,10 @@ impl AgentRegistry {
 
     /// エージェントをストレージに保存
     async fn save_to_storage(&self, agent: &Agent) -> CoordinatorResult<()> {
+        if !self.storage_enabled {
+            return Ok(());
+        }
+
         crate::db::save_agent(agent).await
     }
 
@@ -68,7 +79,7 @@ impl AgentRegistry {
         // 同じマシン名のエージェントが既に存在するか確認
         let existing = agents
             .values()
-            .find(|a| a.machine_name == req.machine_name)
+            .find(|a| a.machine_name == req.machine_name && a.ollama_port == req.ollama_port)
             .map(|a| a.id);
 
         let (agent_id, status, agent) = if let Some(id) = existing {
@@ -93,6 +104,10 @@ impl AgentRegistry {
                 status: AgentStatus::Online,
                 registered_at: now,
                 last_seen: now,
+                custom_name: None,
+                tags: Vec::new(),
+                notes: None,
+                loaded_models: Vec::new(),
             };
             agents.insert(agent_id, agent.clone());
             (agent_id, RegisterStatus::Registered, agent)
@@ -117,11 +132,17 @@ impl AgentRegistry {
     /// 全エージェントを取得
     pub async fn list(&self) -> Vec<Agent> {
         let agents = self.agents.read().await;
-        agents.values().cloned().collect()
+        let mut list: Vec<Agent> = agents.values().cloned().collect();
+        list.sort_by(|a, b| a.registered_at.cmp(&b.registered_at));
+        list
     }
 
     /// エージェントの最終確認時刻を更新
-    pub async fn update_last_seen(&self, agent_id: Uuid) -> CoordinatorResult<()> {
+    pub async fn update_last_seen(
+        &self,
+        agent_id: Uuid,
+        loaded_models: Option<Vec<String>>,
+    ) -> CoordinatorResult<()> {
         let agent_to_save = {
             let mut agents = self.agents.write().await;
             let agent = agents
@@ -129,6 +150,9 @@ impl AgentRegistry {
                 .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
             agent.last_seen = Utc::now();
             agent.status = AgentStatus::Online;
+            if let Some(models) = loaded_models {
+                agent.loaded_models = normalize_models(models);
+            }
             agent.clone()
         };
 
@@ -154,10 +178,108 @@ impl AgentRegistry {
     }
 }
 
+/// エージェント設定更新用ペイロード
+pub struct AgentSettingsUpdate {
+    /// カスタム表示名（Noneで未指定, Some(None)でリセット）
+    pub custom_name: Option<Option<String>>,
+    /// タグ配列
+    pub tags: Option<Vec<String>>,
+    /// メモ（Noneで未指定, Some(None)でリセット）
+    pub notes: Option<Option<String>>,
+}
+
+impl AgentRegistry {
+    /// エージェント設定を更新
+    pub async fn update_settings(
+        &self,
+        agent_id: Uuid,
+        settings: AgentSettingsUpdate,
+    ) -> CoordinatorResult<Agent> {
+        let updated_agent = {
+            let mut agents = self.agents.write().await;
+            let agent = agents
+                .get_mut(&agent_id)
+                .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
+
+            if let Some(custom_name) = settings.custom_name {
+                agent.custom_name = custom_name.and_then(|name| {
+                    let trimmed = name.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                });
+            }
+
+            if let Some(tags) = settings.tags {
+                agent.tags = tags
+                    .into_iter()
+                    .map(|tag| tag.trim().to_string())
+                    .filter(|tag| !tag.is_empty())
+                    .collect();
+            }
+
+            if let Some(notes) = settings.notes {
+                agent.notes = notes.and_then(|note| {
+                    let trimmed = note.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                });
+            }
+
+            agent.clone()
+        };
+
+        self.save_to_storage(&updated_agent).await?;
+        Ok(updated_agent)
+    }
+
+    /// エージェントを削除
+    pub async fn delete(&self, agent_id: Uuid) -> CoordinatorResult<()> {
+        let existed = {
+            let mut agents = self.agents.write().await;
+            agents.remove(&agent_id)
+        };
+
+        if existed.is_none() {
+            return Err(CoordinatorError::AgentNotFound(agent_id));
+        }
+
+        if self.storage_enabled {
+            crate::db::delete_agent(agent_id).await
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl Default for AgentRegistry {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn normalize_models(models: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+
+    for model in models {
+        let trimmed = model.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let canonical = trimmed.to_string();
+        if seen.insert(canonical.clone()) {
+            normalized.push(canonical);
+        }
+    }
+
+    normalized
 }
 
 #[cfg(test)]
@@ -181,6 +303,7 @@ mod tests {
         let agent = registry.get(response.agent_id).await.unwrap();
         assert_eq!(agent.machine_name, "test-machine");
         assert_eq!(agent.status, AgentStatus::Online);
+        assert!(agent.loaded_models.is_empty());
     }
 
     #[tokio::test]
@@ -199,6 +322,9 @@ mod tests {
         let second_response = registry.register(req).await.unwrap();
         assert_eq!(second_response.status, RegisterStatus::Updated);
         assert_eq!(first_response.agent_id, second_response.agent_id);
+
+        let agent = registry.get(first_response.agent_id).await.unwrap();
+        assert!(agent.loaded_models.is_empty());
     }
 
     #[tokio::test]
@@ -240,5 +366,102 @@ mod tests {
 
         let agent = registry.get(response.agent_id).await.unwrap();
         assert_eq!(agent.status, AgentStatus::Offline);
+        assert!(agent.loaded_models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_update_settings() {
+        let registry = AgentRegistry::new();
+        let req = RegisterRequest {
+            machine_name: "settings-machine".to_string(),
+            ip_address: "192.168.1.150".parse().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 11434,
+        };
+
+        let agent_id = registry.register(req).await.unwrap().agent_id;
+
+        let updated = registry
+            .update_settings(
+                agent_id,
+                AgentSettingsUpdate {
+                    custom_name: Some(Some("Display".into())),
+                    tags: Some(vec!["primary".into(), "gpu".into()]),
+                    notes: Some(Some("Important".into())),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.custom_name.as_deref(), Some("Display"));
+        assert_eq!(updated.tags, vec!["primary", "gpu"]);
+        assert_eq!(updated.notes.as_deref(), Some("Important"));
+        assert!(updated.loaded_models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_delete_agent_removes_from_registry() {
+        let registry = AgentRegistry::new();
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "delete-me".to_string(),
+                ip_address: "127.0.0.1".parse().unwrap(),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        registry.delete(agent_id).await.unwrap();
+        assert!(registry.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_update_last_seen_updates_models() {
+        let registry = AgentRegistry::new();
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "models".into(),
+                ip_address: "127.0.0.1".parse().unwrap(),
+                ollama_version: "0.1.0".into(),
+                ollama_port: 11434,
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        registry
+            .update_last_seen(
+                agent_id,
+                Some(vec![
+                    " gpt-oss:20b ".into(),
+                    "gpt-oss:20b".into(),
+                    "".into(),
+                    "phi-3".into(),
+                ]),
+            )
+            .await
+            .unwrap();
+
+        let agent = registry.get(agent_id).await.unwrap();
+        assert_eq!(agent.loaded_models, vec!["gpt-oss:20b", "phi-3"]);
+    }
+
+    #[test]
+    fn test_normalize_models_removes_duplicates() {
+        let models = vec![
+            "a ".into(),
+            "b".into(),
+            "a".into(),
+            " ".into(),
+            "".into(),
+            "c".into(),
+            "b".into(),
+        ];
+        assert_eq!(
+            normalize_models(models),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
     }
 }

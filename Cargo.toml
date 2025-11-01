@@ -23,7 +23,7 @@ reqwest = { version = "0.11", features = ["json"] }
 
 # Coordinator専用
 axum = "0.7"
-tower = "0.4"
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 
 # Agent専用

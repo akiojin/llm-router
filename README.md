@@ -12,10 +12,11 @@ Ollama Coordinator is a system that provides unified management and a single API
 
 - **Unified API Endpoint**: Access multiple Ollama instances through a single URL
 - **Automatic Load Balancing**: Automatically distribute requests across available agents
-- **Automatic Ollama Management**: Agents automatically download and start Ollama (no manual installation required)
 - **Automatic Failure Detection**: Detect offline agents and exclude them from distribution
 - **Real-time Monitoring**: Visualize all agent states via web dashboard
 - **Self-registering Agents**: Agents automatically register with the Coordinator
+- **WebUI Management**: Manage agent settings, monitoring, and control through browser-based dashboard
+- **Cross-Platform Support**: Works on Windows 10+, macOS 12+, and Linux
 
 ## Architecture
 
@@ -170,13 +171,32 @@ ollama-coordinator/
         └── tasks.md     # Task breakdown
 ```
 
+## Dashboard
+
+The dashboard ships with the coordinator process. Once the server is running you can supervise all registered agents, review recent request history, and manage metadata from your browser.
+
+### Quick usage
+
+1. Start the coordinator (inside Docker or on the host):
+   ```bash
+   cargo run -p ollama-coordinator-coordinator
+   ```
+2. Open the dashboard in your browser:
+   ```
+   http://localhost:8080/dashboard
+   ```
+3. Filter, search, sort, and page through the agent list. Click “詳細” to edit display name, tags, or notes, or to force-disconnect / delete an agent. Use the export buttons above the table to download the current view as JSON or CSV.
+
+For a deeper walkthrough, including API references and customisation tips, see [docs/dashboard.md](./docs/dashboard.md).
+
 ## Installation
 
 ### Requirements
 
-- **Coordinator**: Linux/macOS/Windows, Rust 1.70+
-- **Agent**: Windows 10+, Rust 1.70+
-- **Ollama**: Automatically downloaded and started by Agent (no manual installation required)
+- **Coordinator**: Linux / Windows 10+ / macOS 12+, Rust 1.70+
+- **Agent**: Windows 10+ / macOS 12+ (CLI-based application), Rust 1.70+
+- **Ollama**: Pre-installation recommended (automatic download is a future enhancement)
+- **Management**: Browser-based WebUI dashboard for agent settings and monitoring
 
 ### Coordinator Setup
 
@@ -201,14 +221,14 @@ cargo build --release
 cd agent
 cargo build --release
 
-# Start Agent (Ollama will be automatically downloaded/started)
+# Start Agent
 COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator-agent
 
 # Or start without environment variable (default: http://localhost:8080)
 ./target/release/ollama-coordinator-agent
 ```
 
-**Important**: When you start the Agent, Ollama will be automatically downloaded, installed, and started if not already present. No manual installation required.
+**Note**: Ensure Ollama is installed and running on the agent machine before starting the agent. Download Ollama from [ollama.ai](https://ollama.ai).
 
 ## Usage
 

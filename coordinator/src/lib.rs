@@ -8,9 +8,7 @@
 pub mod api;
 
 /// ロードバランサー（ラウンドロビン、負荷ベースのロードバランシング）
-pub mod balancer {
-    // TODO: T037で実装
-}
+pub mod balancer;
 
 /// ヘルスチェック監視
 pub mod health;
@@ -31,4 +29,6 @@ pub mod config {
 pub struct AppState {
     /// エージェントレジストリ
     pub registry: registry::AgentRegistry,
+    /// ロードマネージャー
+    pub load_manager: balancer::LoadManager,
 }

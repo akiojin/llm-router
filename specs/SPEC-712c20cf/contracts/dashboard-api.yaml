@@ -1,0 +1,351 @@
+openapi: 3.0.3
+info:
+  title: Ollama Coordinator Dashboard API
+  description: |
+    管理ダッシュボードのREST API仕様。
+    エージェント情報とシステム統計をJSON形式で提供します。
+  version: 1.0.0
+  contact:
+    name: Ollama Coordinator Team
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: http://coordinator:8080
+    description: Production server
+
+paths:
+  /dashboard:
+    get:
+      summary: ダッシュボードページを取得
+      description: 管理ダッシュボードのHTMLページを返却
+      operationId: getDashboardPage
+      tags:
+        - Dashboard UI
+      responses:
+        '200':
+          description: ダッシュボードHTMLページ
+          content:
+            text/html:
+              schema:
+                type: string
+                example: |
+                  <!DOCTYPE html>
+                  <html>...
+
+</html>
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/dashboard/agents:
+    get:
+      summary: エージェント一覧を取得
+      description: 登録済みの全エージェント情報をJSON配列で返却
+      operationId: getAgents
+      tags:
+        - Dashboard API
+      responses:
+        '200':
+          description: エージェント一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentWithUptime'
+              examples:
+                multipleAgents:
+                  summary: 複数のエージェント
+                  value:
+                    - id: "123e4567-e89b-12d3-a456-426614174000"
+                      machine_name: "server-01"
+                      ip_address: "192.168.1.100"
+                      status: "Online"
+                      ollama_version: "0.1.0"
+                      registered_at: "2025-10-31T10:00:00Z"
+                      last_seen: "2025-10-31T12:30:00Z"
+                      uptime_seconds: 9000
+                    - id: "234e5678-e89b-12d3-a456-426614174001"
+                      machine_name: "server-02"
+                      ip_address: "192.168.1.101"
+                      status: "Online"
+                      ollama_version: "0.1.0"
+                      registered_at: "2025-10-31T09:00:00Z"
+                      last_seen: "2025-10-31T12:30:00Z"
+                      uptime_seconds: 12600
+                emptyList:
+                  summary: エージェントなし
+                  value: []
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/dashboard/stats:
+    get:
+      summary: システム統計を取得
+      description: システム全体の統計情報をJSON形式で返却
+      operationId: getSystemStats
+      tags:
+        - Dashboard API
+      responses:
+        '200':
+          description: システム統計
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStats'
+              examples:
+                normalStats:
+                  summary: 通常の統計
+                  value:
+                    total_agents: 10
+                    online_agents: 8
+                    offline_agents: 2
+                    total_requests: 0
+                    avg_response_time_ms: 0
+                    errors_count: 0
+                noAgents:
+                  summary: エージェントなし
+                  value:
+                    total_agents: 0
+                    online_agents: 0
+                    offline_agents: 0
+                    total_requests: 0
+                    avg_response_time_ms: 0
+                    errors_count: 0
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/dashboard/metrics/{agent_id}:
+    get:
+      summary: エージェントメトリクスを取得（将来拡張）
+      description: |
+        特定のエージェントのパフォーマンスメトリクスを取得。
+        **注**: SPEC-589f2df1実装後に有効化
+      operationId: getAgentMetrics
+      tags:
+        - Dashboard API (Future)
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          description: エージェントID（UUID）
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: エージェントメトリクス
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentMetrics'
+        '404':
+          description: エージェントが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '501':
+          description: 未実装（初期バージョン）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    AgentWithUptime:
+      type: object
+      description: エージェント情報（稼働時間付き）
+      required:
+        - id
+        - machine_name
+        - ip_address
+        - status
+        - ollama_version
+        - registered_at
+        - last_seen
+        - uptime_seconds
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: エージェントID（UUID v4）
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        machine_name:
+          type: string
+          description: マシン名
+          example: "server-01"
+          minLength: 1
+          maxLength: 255
+        ip_address:
+          type: string
+          description: IPアドレス（IPv4またはIPv6）
+          example: "192.168.1.100"
+          pattern: "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$|^([0-9a-fA-F]{0,4}:){7}[0-9a-fA-F]{0,4}$"
+        status:
+          type: string
+          enum: [Online, Offline]
+          description: エージェントステータス
+          example: "Online"
+        ollama_version:
+          type: string
+          description: Ollamaバージョン（セマンティックバージョニング）
+          example: "0.1.0"
+          pattern: "^\\d+\\.\\d+\\.\\d+$"
+        registered_at:
+          type: string
+          format: date-time
+          description: 登録日時（ISO 8601形式）
+          example: "2025-10-31T10:00:00Z"
+        last_seen:
+          type: string
+          format: date-time
+          description: 最終確認日時（ISO 8601形式）
+          example: "2025-10-31T12:30:00Z"
+        uptime_seconds:
+          type: integer
+          format: int64
+          description: 稼働時間（秒）
+          example: 9000
+          minimum: 0
+
+    SystemStats:
+      type: object
+      description: システム統計情報
+      required:
+        - total_agents
+        - online_agents
+        - offline_agents
+        - total_requests
+        - avg_response_time_ms
+        - errors_count
+      properties:
+        total_agents:
+          type: integer
+          description: 登録エージェント総数
+          example: 10
+          minimum: 0
+        online_agents:
+          type: integer
+          description: オンラインエージェント数
+          example: 8
+          minimum: 0
+        offline_agents:
+          type: integer
+          description: オフラインエージェント数
+          example: 2
+          minimum: 0
+        total_requests:
+          type: integer
+          format: int64
+          description: 総リクエスト処理数（将来拡張）
+          example: 0
+          minimum: 0
+        avg_response_time_ms:
+          type: integer
+          format: int32
+          description: 平均レスポンスタイム（ミリ秒、将来拡張）
+          example: 0
+          minimum: 0
+        errors_count:
+          type: integer
+          format: int64
+          description: エラー総数（将来拡張）
+          example: 0
+          minimum: 0
+
+    AgentMetrics:
+      type: object
+      description: エージェントメトリクス（SPEC-589f2df1実装後）
+      required:
+        - agent_id
+        - cpu_usage
+        - memory_usage
+        - active_requests
+        - request_history
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+          description: エージェントID
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        cpu_usage:
+          type: number
+          format: float
+          description: CPU使用率（%）
+          example: 45.2
+          minimum: 0
+          maximum: 100
+        memory_usage:
+          type: number
+          format: float
+          description: メモリ使用率（%）
+          example: 60.5
+          minimum: 0
+          maximum: 100
+        active_requests:
+          type: integer
+          description: 処理中のリクエスト数
+          example: 3
+          minimum: 0
+        request_history:
+          type: array
+          description: リクエスト履歴（1分単位）
+          items:
+            type: object
+            required:
+              - timestamp
+              - count
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+                description: タイムスタンプ
+                example: "2025-10-31T12:25:00Z"
+              count:
+                type: integer
+                description: リクエスト数
+                example: 10
+                minimum: 0
+
+    Error:
+      type: object
+      description: エラーレスポンス
+      required:
+        - error
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: エラーメッセージ
+          example: "Internal server error"
+        details:
+          type: string
+          description: 詳細な説明（オプション）
+          example: "Failed to read agents.json"
+        timestamp:
+          type: string
+          format: date-time
+          description: エラー発生日時
+          example: "2025-10-31T12:30:00Z"
+
+tags:
+  - name: Dashboard UI
+    description: ダッシュボードページ（HTML）
+  - name: Dashboard API
+    description: ダッシュボードデータAPI（JSON）
+  - name: Dashboard API (Future)
+    description: 将来拡張予定のAPI
