@@ -316,15 +316,47 @@ fn get_ollama_download_url() -> String {
         return url;
     }
 
-    if cfg!(windows) {
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip"
-            .to_string()
+    let arch = std::env::consts::ARCH;
+
+    if cfg!(target_os = "windows") {
+        match arch {
+            "x86_64" | "amd64" => {
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip"
+                    .to_string()
+            }
+            "aarch64" => {
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-arm64.zip"
+                    .to_string()
+            }
+            _ => "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip"
+                .to_string(),
+        }
     } else if cfg!(target_os = "macos") {
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz"
-            .to_string()
+        match arch {
+            "aarch64" | "arm64" => {
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz"
+                    .to_string()
+            }
+            "x86_64" | "amd64" => {
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz"
+                    .to_string()
+            }
+            _ => "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz"
+                .to_string(),
+        }
     } else {
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tgz"
-            .to_string()
+        match arch {
+            "x86_64" | "amd64" => {
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tgz"
+                    .to_string()
+            }
+            "aarch64" | "arm64" => {
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-arm64.tgz"
+                    .to_string()
+            }
+            _ => "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tgz"
+                .to_string(),
+        }
     }
 }
 
