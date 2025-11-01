@@ -63,6 +63,9 @@ const modalRefs = {
   notes: null,
   gpuUsage: null,
   gpuMemory: null,
+  gpuCapabilityScore: null,
+  gpuModel: null,
+  gpuCompute: null,
   metricsStatus: null,
   metricsCanvas: null,
 };
@@ -109,6 +112,9 @@ document.addEventListener("DOMContentLoaded", () => {
     notes: document.getElementById("detail-notes"),
     gpuUsage: document.getElementById("detail-gpu-usage"),
     gpuMemory: document.getElementById("detail-gpu-memory"),
+    gpuCapabilityScore: document.getElementById("detail-gpu-capability-score"),
+    gpuModel: document.getElementById("detail-gpu-model"),
+    gpuCompute: document.getElementById("detail-gpu-compute"),
     save: modalSave,
     delete: modalDelete,
     disconnect: modalDisconnect,
@@ -722,9 +728,13 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
   const metricsDetail = metricsBadge ? `${metricsBadge} ${metricsTimestamp}` : metricsTimestamp;
 
   const cpuDisplay = formatPercentage(agent.cpu_usage);
+  const gpuScoreText =
+    typeof agent.gpu_capability_score === "number"
+      ? ` / スコア ${agent.gpu_capability_score}`
+      : "";
   const cpuGpuSub =
     typeof agent.gpu_usage === "number"
-      ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_usage)}</div>`
+      ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_usage)}${gpuScoreText}</div>`
       : `<div class="cell-sub">GPU 非対応</div>`;
   const memoryDisplay = formatPercentage(agent.memory_usage);
   const memoryGpuSub =
@@ -819,6 +829,11 @@ function getAgentSignature(agent) {
     agent.uptime_seconds ?? 0,
     agent.cpu_usage ?? 0,
     agent.memory_usage ?? 0,
+    agent.gpu_usage ?? 0,
+    agent.gpu_memory_usage ?? 0,
+    agent.gpu_capability_score ?? "",
+    agent.gpu_model_name ?? "",
+    agent.gpu_compute_capability ?? "",
     agent.active_requests ?? 0,
     agent.total_requests ?? 0,
     agent.successful_requests ?? 0,
@@ -982,6 +997,18 @@ function openAgentModal(agent) {
       typeof agent.gpu_memory_usage === "number"
         ? formatPercentage(agent.gpu_memory_usage)
         : "非対応";
+  }
+  if (modalRefs.gpuCapabilityScore) {
+    modalRefs.gpuCapabilityScore.textContent =
+      typeof agent.gpu_capability_score === "number"
+        ? agent.gpu_capability_score.toString()
+        : "-";
+  }
+  if (modalRefs.gpuModel) {
+    modalRefs.gpuModel.textContent = agent.gpu_model_name ?? "-";
+  }
+  if (modalRefs.gpuCompute) {
+    modalRefs.gpuCompute.textContent = agent.gpu_compute_capability ?? "-";
   }
 
   const cached = state.agentMetricsCache.get(agent.id);
