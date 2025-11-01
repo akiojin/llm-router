@@ -50,8 +50,9 @@ Ollamaコーディネーターの運用管理者として、コーディネー�
 **受け入れシナリオ**:
 
 1. **前提** NVIDIA RTX 4090を1枚搭載したエージェントが登録されている、**実行** ダッシュボードを開く、**結果** エージェント詳細に「GPU: NVIDIA RTX 4090 (1枚)」と表示される
-2. **前提** NVIDIA A100を4枚搭載したエージェントが登録されている、**実行** ダッシュボードを開く、**結果** エージェント詳細に「GPU: NVIDIA A100 (4枚)」と表示される
-3. **前提** 複数の異なるGPUモデルを持つエージェントが登録されている、**実行** ダッシュボードを開く、**結果** 各エージェントのGPU情報が個別に正しく表示される
+2. **前提** Apple M3 Maxチップ搭載Macでエージェントが登録されている、**実行** ダッシュボードを開く、**結果** エージェント詳細に「GPU: Apple M3 Max」と表示される
+3. **前提** AMD Radeon RX 7900 XTを1枚搭載したエージェントが登録されている、**実行** ダッシュボードを開く、**結果** エージェント詳細に「GPU: AMD Radeon RX 7900 XT (1枚)」と表示される
+4. **前提** 複数の異なるGPUモデルを持つエージェントが登録されている、**実行** ダッシュボードを開く、**結果** 各エージェントのGPU情報が個別に正しく表示される
 
 ---
 
@@ -93,9 +94,13 @@ Ollamaコーディネーターの運用管理者として、コーディネー�
 
 ## 技術制約 *(該当する場合)*
 
-- NVIDIA GPUのみサポート（検出にnvidia-smiコマンドを使用）
-- Linux、Windows環境でのGPU検出をサポート
-- macOS環境ではNVIDIA GPUが利用不可のため、macOSエージェントは登録不可
+- 以下のGPUベンダーをサポート:
+  - **NVIDIA GPU**: NVML (NVIDIA Management Library) 経由で検出
+  - **Apple Silicon**: Metal API経由で検出 (M1/M2/M3/M4シリーズ)
+  - **AMD GPU**: ROCm/sysinfo経由で検出（Linuxのみ）
+  - **Intel GPU**: sysinfo経由で検出（Linuxのみ）
+- Linux、Windows、macOS環境でのGPU検出をサポート
+- GPUベンダー検出の優先順位: NVIDIA → Apple Silicon → AMD → Intel → その他
 
 ---
 
@@ -103,8 +108,12 @@ Ollamaコーディネーターの運用管理者として、コーディネー�
 
 この機能は以下を前提とします:
 
-- エージェントマシンにNVIDIA GPUドライバーがインストールされている
-- nvidia-smiコマンドが実行可能である
+- エージェントマシンに何らかのGPU（NVIDIA/Apple/AMD/Intel）が搭載されている
+- 該当するGPUドライバーがインストールされている
+  - NVIDIA: NVIDIA GPU Driver + CUDA Toolkit
+  - Apple Silicon: macOS標準（Metal API）
+  - AMD: ROCm Driver（Linuxの場合）
+  - Intel: Intel GPU Driver
 - OllamaがGPUを利用する設定になっている
 
 ---
@@ -113,7 +122,11 @@ Ollamaコーディネーターの運用管理者として、コーディネー�
 
 この機能は以下に依存します:
 
-- NVIDIA GPUドライバーとCUDAツールキット
+- 各GPUベンダーのドライバーとツールキット
+  - NVIDIA: CUDA Toolkit / NVML
+  - Apple: Metal Framework (macOS標準)
+  - AMD: ROCm (Linuxのみ)
+  - Intel: Intel GPU Driver
 - エージェント・コーディネーター間の通信プロトコル
 - データベースストレージ機能
 
