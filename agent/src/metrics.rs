@@ -464,8 +464,8 @@ impl AmdGpuCollector {
             return Err("KFD topology not found".to_string());
         }
 
-        let entries = fs::read_dir(kfd_path)
-            .map_err(|e| format!("Failed to read KFD topology: {}", e))?;
+        let entries =
+            fs::read_dir(kfd_path).map_err(|e| format!("Failed to read KFD topology: {}", e))?;
 
         let mut gpu_count = 0u32;
 

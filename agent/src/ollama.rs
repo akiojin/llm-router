@@ -814,5 +814,4 @@ mod tests {
         let models = manager.list_models().await.unwrap();
         assert_eq!(models, vec!["gpt-oss:20b", "gpt-oss:latest", "phi-3"]);
     }
-
 }
