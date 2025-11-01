@@ -1,5 +1,8 @@
 use axum::http::StatusCode;
-use ollama_coordinator_common::protocol::{ChatRequest, ChatResponse, GenerateRequest};
+use ollama_coordinator_common::{
+    protocol::{ChatRequest, ChatResponse, GenerateRequest},
+    types::GpuDeviceInfo,
+};
 use ollama_coordinator_coordinator::{
     api, balancer::LoadManager, registry::AgentRegistry, AppState,
 };
@@ -24,6 +27,10 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             ollama_version: "0.0.0".into(),
             ollama_port: mock.address().port(),
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })

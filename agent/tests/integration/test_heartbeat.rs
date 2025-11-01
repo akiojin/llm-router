@@ -3,7 +3,10 @@
 //! エージェントのハートビート送信機能をテスト
 
 use ollama_coordinator_agent::{client::CoordinatorClient, metrics::MetricsCollector};
-use ollama_coordinator_common::protocol::{HealthCheckRequest, RegisterRequest};
+use ollama_coordinator_common::{
+    protocol::{HealthCheckRequest, RegisterRequest},
+    types::GpuDeviceInfo,
+};
 use std::net::IpAddr;
 
 #[tokio::test]
@@ -21,6 +24,10 @@ async fn test_heartbeat_sending_after_registration() {
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
         gpu_available: true,
+        gpu_devices: vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
     };
@@ -71,6 +78,10 @@ async fn test_heartbeat_with_real_metrics() {
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
         gpu_available: true,
+        gpu_devices: vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
     };
@@ -168,6 +179,10 @@ async fn test_multiple_heartbeats() {
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
         gpu_available: true,
+        gpu_devices: vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
     };

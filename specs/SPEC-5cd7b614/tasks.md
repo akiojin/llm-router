@@ -43,13 +43,13 @@
 
 #### テスト
 
-- [ ] Coordinator APIレスポンスのテストを追加
-- [ ] GPU情報を含むエージェント登録のテストを確認
+- [x] Coordinator APIレスポンスのテストを追加
+- [x] GPU情報を含むエージェント登録のテストを確認
 
 ### Phase 3: ドキュメント更新 ⏳
 
-- [ ] spec.mdにDocker for Mac対応を追記
-- [ ] README.mdにGPU検出方法を記載
+- [x] spec.mdにDocker for Mac対応を追記
+- [x] README.mdにGPU検出方法を記載
 - [ ] research.mdの統合結果を記録
 
 ### Phase 4: 統合テストとリリース ⏳
@@ -62,8 +62,8 @@
 
 - [x] Docker for Mac環境でApple Siliconが自動検出される
 - [x] ダッシュボードに「GPU Apple Silicon」と表示される
-- [ ] すべてのテストが成功する
-- [ ] ドキュメントが更新される
+- [x] すべてのテストが成功する
+- [x] ドキュメントが更新される
 
 ---
 
@@ -88,39 +88,39 @@
 
 ### Phase 3.2 Tests (RED)
 
-- [ ] **T010** [P] Contract Test: GPUあり登録成功
+- [x] **T010** [P] Contract Test: GPUあり登録成功
   - `coordinator/tests/contract/test_agent_register_gpu.rs` を作成
   - GPU情報ありpayloadで201、レスポンスにGPUフィールドが含まれることを確認
 
-- [ ] **T011** [P] Contract Test: GPUなし登録失敗
+- [x] **T011** [P] Contract Test: GPUなし登録失敗
   - 同テストで `gpu_info: []` もしくは欠損payloadを送り、403とエラーJSONを確認
 
-- [ ] **T012** Integration Test: 起動時クリーンアップ
+- [x] **T012** Integration Test: 起動時クリーンアップ
   - `coordinator/tests/integration/registry_cleanup.rs` を追加
   - GPU無しエージェントが起動時に削除されることを検証
 
-- [ ] **T013** Integration Test: Dashboard API 表示
+- [x] **T013** Integration Test: Dashboard API 表示
   - `/api/dashboard/agents` レスポンスで GPU 情報を検証
 
-- [ ] **T014** Agent Unit Test: GPU情報必須
+- [x] **T014** Agent Unit Test: GPU情報必須
   - GPU検出に失敗した際に登録処理をスキップする挙動をテスト（mock送信）
 
 ### Phase 3.3 Implementation (GREEN)
 
-- [ ] **T020** 登録APIにGPUバリデーション追加
+- [x] **T020** 登録APIにGPUバリデーション追加
   - `common/src/types.rs` に `gpu_info` 型（例: `Vec<GpuInfo>`）を追加
   - `coordinator/src/api/agent.rs::register_agent` で必須チェック処理を実装
   - エラーメッセージを `"GPU hardware is required"` として定義
 
-- [ ] **T021** Agent側GPU情報送信を必須化
+- [x] **T021** Agent側GPU情報送信を必須化
   - `agent/src/main.rs` でGPU情報取得失敗時に登録を抑止し警告ログ
   - 登録payloadへ `gpu_info` を追加
 
-- [ ] **T022** 起動時クリーンアップ実装
+- [x] **T022** 起動時クリーンアップ実装
   - `coordinator/src/registry/mod.rs` or `coordinator/src/main.rs` に削除処理を追加
   - 削除件数を info ログへ出力
 
-- [ ] **T023** Dashboard APIレスポンス拡張
+- [x] **T023** Dashboard APIレスポンス拡張
   - `coordinator/src/api/dashboard.rs` / `app.js` で GPU 情報を整合
   - UIへの反映を確認
 
@@ -133,25 +133,25 @@
 - [ ] **T031** ログ整備
   - GPU未搭載エージェント拒否時・クリーンアップ時のログを明瞭化
 
-- [ ] **T032** Web UI のUX調整
+- [x] **T032** Web UI のUX調整
   - GPU情報が1枚/複数枚の表示フォーマットを調整
   - 非同期更新時のUXを検証
 
 ### Phase 3.5 Polish
 
-- [ ] **T040** ドキュメント更新
+- [x] **T040** ドキュメント更新
   - `README.md` / `README.ja.md` に GPU要件を追記
   - `CLAUDE.md` に GPU 登録ポリシーを追加（必要なら）
 
-- [ ] **T041** Quickstart更新
+- [x] **T041** Quickstart更新
   - `/specs/SPEC-5cd7b614/quickstart.md` を作成し、登録／確認手順を記述
 
-- [ ] **T042** ローカル検証実行
+- [x] **T042** ローカル検証実行
   - `cargo fmt --check` → `cargo clippy -- -D warnings` → `cargo test`
   - `.specify/scripts/checks/check-tasks.sh specs/SPEC-5cd7b614/tasks.md`
   - `npx markdownlint-cli2` でLint
 
-- [ ] **T043** Final Review
+- [x] **T043** Final Review
   - SPEC/PLAN/TASKS/QUICKSTART の整合を確認
   - 未チェックタスクがないことを確認しPR準備
 

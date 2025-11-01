@@ -175,7 +175,7 @@ async fn select_available_agent(
 mod tests {
     use super::*;
     use crate::{balancer::LoadManager, registry::AgentRegistry};
-    use ollama_coordinator_common::protocol::RegisterRequest;
+    use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::IpAddr;
 
     fn create_test_state() -> AppState {
@@ -205,6 +205,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -228,6 +232,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -247,6 +255,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };

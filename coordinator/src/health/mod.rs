@@ -83,7 +83,7 @@ impl HealthMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ollama_coordinator_common::protocol::RegisterRequest;
+    use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::IpAddr;
 
     #[tokio::test]
@@ -116,6 +116,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };

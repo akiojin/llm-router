@@ -366,7 +366,11 @@ Register an agent.
   "machine_name": "my-machine",
   "ip_address": "192.168.1.100",
   "ollama_version": "0.1.0",
-  "ollama_port": 11434
+  "ollama_port": 11434,
+  "gpu_available": true,
+  "gpu_devices": [
+    { "model": "NVIDIA RTX 4090", "count": 2 }
+  ]
 }
 ```
 
@@ -392,7 +396,13 @@ Get list of registered agents.
     "ollama_port": 11434,
     "status": "online",
     "registered_at": "2025-10-30T12:00:00Z",
-    "last_seen": "2025-10-30T12:05:00Z"
+    "last_seen": "2025-10-30T12:05:00Z",
+    "gpu_available": true,
+    "gpu_devices": [
+      { "model": "NVIDIA RTX 4090", "count": 2 }
+    ],
+    "gpu_count": 2,
+    "gpu_model": "NVIDIA RTX 4090"
   }
 ]
 ```

@@ -3,7 +3,10 @@
 //! CPU / メモリ / GPU 使用率の監視
 
 use nvml_wrapper::{error::NvmlError, Nvml};
-use ollama_coordinator_common::error::{AgentError, AgentResult};
+use ollama_coordinator_common::{
+    error::{AgentError, AgentResult},
+    types::GpuDeviceInfo,
+};
 use sysinfo::System;
 use tracing::{debug, warn};
 
@@ -186,6 +189,19 @@ impl MetricsCollector {
     /// GPU能力情報を取得（静的な情報、初回のみ取得推奨）
     pub fn get_gpu_capability(&self) -> Option<GpuCapability> {
         self.gpu.as_ref().and_then(|gpu| gpu.get_capability().ok())
+    }
+
+    /// 登録リクエストに使用するGPUデバイス一覧を取得
+    pub fn gpu_devices(&self) -> Vec<GpuDeviceInfo> {
+        if !self.has_gpu() {
+            return Vec::new();
+        }
+
+        match (self.gpu_model(), self.gpu_count()) {
+            (Some(model), Some(count)) if count > 0 => vec![GpuDeviceInfo { model, count }],
+            (Some(model), _) => vec![GpuDeviceInfo { model, count: 1 }],
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -804,6 +820,26 @@ mod tests {
         assert_eq!(collector.gpu_count(), Some(1));
 
         // クリーンアップ
+        std::env::remove_var("OLLAMA_GPU_AVAILABLE");
+        std::env::remove_var("OLLAMA_GPU_MODEL");
+        std::env::remove_var("OLLAMA_GPU_COUNT");
+    }
+
+    #[test]
+    fn test_gpu_devices_from_env_vars() {
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+
+        std::env::set_var("OLLAMA_GPU_AVAILABLE", "true");
+        std::env::set_var("OLLAMA_GPU_MODEL", "Env GPU");
+        std::env::set_var("OLLAMA_GPU_COUNT", "3");
+
+        let collector = MetricsCollector::new();
+        let devices = collector.gpu_devices();
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].model, "Env GPU");
+        assert_eq!(devices[0].count, 3);
+
         std::env::remove_var("OLLAMA_GPU_AVAILABLE");
         std::env::remove_var("OLLAMA_GPU_MODEL");
         std::env::remove_var("OLLAMA_GPU_COUNT");

@@ -707,6 +707,25 @@ function buildHistoryLabels(history) {
   return history.map((point) => formatHistoryLabel(new Date(point.minute)));
 }
 
+function summarizeGpu(agent) {
+  const devices = Array.isArray(agent.gpu_devices) ? agent.gpu_devices : [];
+  const totalFromDevices = devices.reduce(
+    (sum, device) => sum + (Number(device?.count) || 0),
+    0
+  );
+  const fallbackCount = typeof agent.gpu_count === "number" ? agent.gpu_count : 0;
+  const totalCount = totalFromDevices || fallbackCount;
+  const primaryModel = devices.length > 0 && devices[0]?.model
+    ? devices[0].model
+    : agent.gpu_model;
+
+  return {
+    devices,
+    totalCount,
+    primaryModel,
+  };
+}
+
 function buildAgentRow(agent, row = document.createElement("tr")) {
   row.dataset.agentId = agent.id;
   row.classList.toggle("agent-offline", agent.status === "offline");
@@ -728,9 +747,11 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
   const metricsDetail = metricsBadge ? `${metricsBadge} ${metricsTimestamp}` : metricsTimestamp;
 
   const cpuDisplay = formatPercentage(agent.cpu_usage);
-  // GPUモデル名表示（全エージェントがGPU搭載のため常に表示）
-  const gpuModelDisplay = agent.gpu_model
-    ? escapeHtml(agent.gpu_model) + (agent.gpu_count > 1 ? ` (${agent.gpu_count}枚)` : '')
+  const gpuSummary = summarizeGpu(agent);
+  const gpuModelDisplay = gpuSummary.primaryModel
+    ? `${escapeHtml(gpuSummary.primaryModel)}${
+        gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount}枚)` : ''
+      }`
     : 'GPU情報取得中';
   // GPU性能スコア表示
   const gpuScoreText =
@@ -994,16 +1015,18 @@ function openAgentModal(agent) {
   modalRefs.tags.value = Array.isArray(agent.tags) ? agent.tags.join(", ") : "";
   modalRefs.notes.value = agent.notes ?? "";
   if (modalRefs.gpuUsage) {
-    const gpuModel = agent.gpu_model || 'GPU情報なし';
-    const gpuCount = agent.gpu_count > 1 ? ` (${agent.gpu_count}枚)` : '';
+    const gpuSummary = summarizeGpu(agent);
+    const gpuModel = gpuSummary.primaryModel || 'GPU情報なし';
+    const gpuCount = gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount}枚)` : '';
     modalRefs.gpuUsage.textContent =
       typeof agent.gpu_usage === "number"
         ? formatPercentage(agent.gpu_usage)
         : `${gpuModel}${gpuCount} (メトリクス非対応)`;
   }
   if (modalRefs.gpuMemory) {
-    const gpuModel = agent.gpu_model || 'GPU情報なし';
-    const gpuCount = agent.gpu_count > 1 ? ` (${agent.gpu_count}枚)` : '';
+    const gpuSummary = summarizeGpu(agent);
+    const gpuModel = gpuSummary.primaryModel || 'GPU情報なし';
+    const gpuCount = gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount}枚)` : '';
     modalRefs.gpuMemory.textContent =
       typeof agent.gpu_memory_usage === "number"
         ? formatPercentage(agent.gpu_memory_usage)

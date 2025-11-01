@@ -8,7 +8,7 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use ollama_coordinator_common::protocol::RegisterRequest;
+use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
 use ollama_coordinator_coordinator::{
     api,
     balancer::{LoadManager, MetricsUpdate, RequestOutcome},
@@ -31,6 +31,13 @@ fn build_router() -> (Router, AgentRegistry, LoadManager) {
     };
     let router = api::create_router(state);
     (router, registry, load_manager)
+}
+
+fn sample_gpu_devices(model: &str) -> Vec<GpuDeviceInfo> {
+    vec![GpuDeviceInfo {
+        model: model.to_string(),
+        count: 1,
+    }]
 }
 
 #[tokio::test]
@@ -79,6 +86,7 @@ async fn dashboard_agents_and_stats_reflect_registry() {
             ollama_version: "0.1.0".into(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -173,6 +181,7 @@ async fn dashboard_request_history_tracks_activity() {
             ollama_version: "0.1.0".into(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -233,6 +242,7 @@ async fn dashboard_overview_returns_combined_payload() {
             ollama_version: "0.1.0".into(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -281,6 +291,7 @@ async fn dashboard_agent_metrics_endpoint_returns_history() {
             ollama_version: "0.1.0".into(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })

@@ -2,6 +2,7 @@
 
 use ollama_coordinator_agent::{
     client::CoordinatorClient, metrics::MetricsCollector, ollama::OllamaManager,
+    registration::gpu_devices_valid,
 };
 use ollama_coordinator_common::{
     error::AgentResult,
@@ -55,14 +56,23 @@ async fn main() {
         MetricsCollector::with_ollama_path(Some(ollama_manager.ollama_path().to_path_buf()));
 
     // エージェント登録
+    let gpu_devices = metrics_collector.gpu_devices();
+    if !gpu_devices_valid(&gpu_devices) {
+        eprintln!("GPU hardware not detected or invalid. Skipping coordinator registration.");
+        return;
+    }
+    let total_gpu_count: u32 = gpu_devices.iter().map(|device| device.count).sum();
+    let primary_gpu_model = gpu_devices.first().map(|device| device.model.clone());
+
     let register_req = RegisterRequest {
         machine_name: machine_name.clone(),
         ip_address,
         ollama_version,
         ollama_port,
-        gpu_available: metrics_collector.has_gpu(),
-        gpu_count: metrics_collector.gpu_count(),
-        gpu_model: metrics_collector.gpu_model(),
+        gpu_available: true,
+        gpu_devices: gpu_devices.clone(),
+        gpu_count: Some(total_gpu_count),
+        gpu_model: primary_gpu_model,
     };
 
     println!("Registering with Coordinator...");
@@ -327,6 +337,7 @@ fn registration_retry_limit() -> Option<usize> {
 mod tests {
     use super::*;
     use ollama_coordinator_common::protocol::RegisterStatus;
+    use ollama_coordinator_common::types::GpuDeviceInfo;
     use serde_json::json;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
@@ -436,6 +447,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -470,6 +485,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };

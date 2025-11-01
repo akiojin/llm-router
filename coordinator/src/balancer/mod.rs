@@ -51,7 +51,15 @@ fn compare_average_ms(a: Option<f32>, b: Option<f32>) -> Ordering {
 mod tests {
     use super::*;
     use ollama_coordinator_common::protocol::RegisterRequest;
+    use ollama_coordinator_common::types::GpuDeviceInfo;
     use std::net::{IpAddr, Ipv4Addr};
+
+    fn sample_gpu_devices() -> Vec<GpuDeviceInfo> {
+        vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }]
+    }
 
     #[test]
     fn compare_average_ms_orders_values() {
@@ -106,6 +114,7 @@ mod tests {
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -120,6 +129,7 @@ mod tests {
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -180,6 +190,7 @@ mod tests {
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
