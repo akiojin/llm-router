@@ -80,6 +80,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 1,
                 total_requests: 5,
                 average_response_time_ms: Some(80.0),
@@ -128,6 +131,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(240.0),
             })
@@ -143,6 +149,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(120.0),
             })
@@ -180,6 +189,9 @@ mod tests {
                     gpu_memory_total_mb: None,
                     gpu_memory_used_mb: None,
                     gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                     active_requests: 1,
                     average_response_time_ms: Some(100.0),
                 })
@@ -281,6 +293,15 @@ pub struct AgentLoadSnapshot {
     /// GPU温度 (℃)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_temperature: Option<f32>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model_name: Option<String>,
+    /// GPU計算能力
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_compute_capability: Option<String>,
+    /// GPU能力スコア
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_capability_score: Option<u32>,
     /// 処理中リクエスト数（Coordinator観点+エージェント自己申告）
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -352,6 +373,12 @@ pub struct MetricsUpdate {
     pub gpu_memory_used_mb: Option<u64>,
     /// GPU温度 (℃)
     pub gpu_temperature: Option<f32>,
+    /// GPUモデル名
+    pub gpu_model_name: Option<String>,
+    /// GPU計算能力
+    pub gpu_compute_capability: Option<String>,
+    /// GPU能力スコア
+    pub gpu_capability_score: Option<u32>,
     /// アクティブなリクエスト数
     pub active_requests: u32,
     /// 平均レスポンスタイム（ミリ秒）
@@ -380,6 +407,9 @@ impl LoadManager {
             gpu_memory_total_mb,
             gpu_memory_used_mb,
             gpu_temperature,
+            gpu_model_name,
+            gpu_compute_capability,
+            gpu_capability_score,
             active_requests,
             average_response_time_ms,
         } = update;
@@ -401,6 +431,9 @@ impl LoadManager {
             gpu_memory_total_mb,
             gpu_memory_used_mb,
             gpu_temperature,
+            gpu_model_name,
+            gpu_compute_capability,
+            gpu_capability_score,
             active_requests,
             total_requests: entry.total_assigned,
             average_response_time_ms: derived_average,
@@ -719,6 +752,18 @@ impl LoadManager {
             .last_metrics
             .as_ref()
             .and_then(|metrics| metrics.gpu_temperature);
+        let gpu_model_name = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_model_name.clone());
+        let gpu_compute_capability = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_compute_capability.clone());
+        let gpu_capability_score = load_state
+            .last_metrics
+            .as_ref()
+            .and_then(|metrics| metrics.gpu_capability_score);
         let active_requests = load_state.combined_active();
 
         AgentLoadSnapshot {
@@ -732,6 +777,9 @@ impl LoadManager {
             gpu_memory_total_mb,
             gpu_memory_used_mb,
             gpu_temperature,
+            gpu_model_name,
+            gpu_compute_capability,
+            gpu_capability_score,
             active_requests,
             total_requests: load_state.total_assigned,
             successful_requests: load_state.success_count,

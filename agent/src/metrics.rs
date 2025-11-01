@@ -26,6 +26,51 @@ pub struct SystemMetrics {
     pub gpu_temperature: Option<f32>,
 }
 
+/// GPU能力情報
+#[derive(Debug, Clone)]
+pub struct GpuCapability {
+    /// GPUモデル名
+    pub model_name: String,
+    /// CUDA計算能力 (major, minor)
+    pub compute_capability: (u32, u32),
+    /// 最大クロック速度 (MHz)
+    pub max_clock_mhz: u32,
+    /// メモリ総容量 (MB)
+    pub memory_total_mb: u64,
+}
+
+impl GpuCapability {
+    /// GPU能力スコアを計算
+    ///
+    /// スコア計算式:
+    /// score = (memory_gb * 100) + (max_clock_ghz * 100) + (compute_major * 1000)
+    ///
+    /// 例:
+    /// - RTX 4090 (16GB, 2.5GHz, Compute 8.9): 1600 + 250 + 8000 = 9850
+    /// - RTX 3080 (10GB, 1.7GHz, Compute 8.6): 1000 + 170 + 8000 = 9170
+    /// - GTX 1660 (6GB, 1.8GHz, Compute 7.5): 600 + 180 + 7000 = 7780
+    pub fn calculate_score(memory_mb: u64, max_clock_mhz: u32, compute_capability: (u32, u32)) -> u32 {
+        let memory_gb = memory_mb / 1024;
+        let clock_ghz = max_clock_mhz as f32 / 1000.0;
+        let (compute_major, _compute_minor) = compute_capability;
+
+        let score = (memory_gb * 100) as u32
+            + (clock_ghz * 100.0) as u32
+            + (compute_major * 1000);
+
+        score
+    }
+
+    /// 自身のスコアを計算
+    pub fn score(&self) -> u32 {
+        Self::calculate_score(
+            self.memory_total_mb,
+            self.max_clock_mhz,
+            self.compute_capability,
+        )
+    }
+}
+
 /// システムメトリクスコレクター
 pub struct MetricsCollector {
     system: System,
@@ -120,6 +165,13 @@ impl MetricsCollector {
             gpu_temperature,
         })
     }
+
+    /// GPU能力情報を取得（静的な情報、初回のみ取得推奨）
+    pub fn get_gpu_capability(&self) -> Option<GpuCapability> {
+        self.gpu
+            .as_ref()
+            .and_then(|gpu| gpu.get_capability().ok())
+    }
 }
 
 impl Default for MetricsCollector {
@@ -145,6 +197,30 @@ impl GpuCollector {
         Ok(Self {
             nvml,
             device_indices,
+        })
+    }
+
+    /// GPU能力情報を取得（初回のみ、静的な情報）
+    fn get_capability(&self) -> Result<GpuCapability, NvmlError> {
+        // 最初のGPUの情報を返す（複数GPU環境では最も強力なGPUを返すべきだが、簡易実装として最初のGPUを使用）
+        if self.device_indices.is_empty() {
+            return Err(NvmlError::NotSupported);
+        }
+
+        let device = self.nvml.device_by_index(self.device_indices[0])?;
+
+        let model_name = device.name()?;
+        let cuda_capability = device.cuda_compute_capability()?;
+        let compute_capability = (cuda_capability.major as u32, cuda_capability.minor as u32);
+        let max_clock_mhz = device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)?;
+        let memory_info = device.memory_info()?;
+        let memory_total_mb = memory_info.total / (1024 * 1024);
+
+        Ok(GpuCapability {
+            model_name,
+            compute_capability,
+            max_clock_mhz,
+            memory_total_mb,
         })
     }
 
@@ -221,5 +297,40 @@ mod tests {
         if let Some(gpu_memory) = metrics.gpu_memory_usage {
             assert!((0.0..=100.0).contains(&gpu_memory));
         }
+    }
+
+    #[test]
+    fn test_calculate_gpu_capability_score() {
+        use super::GpuCapability;
+
+        // RTX 4090 example: 16GB, 2.5GHz, Compute 8.9
+        let score = GpuCapability::calculate_score(16384, 2520, (8, 9));
+        // Expected: (16 * 100) + (2.52 * 100) + (8 * 1000) = 1600 + 252 + 8000 = 9852
+        assert!(score >= 9800 && score <= 10000, "Score should be around 9852, got {}", score);
+
+        // RTX 3080 example: 10GB, 1.7GHz, Compute 8.6
+        let score = GpuCapability::calculate_score(10240, 1710, (8, 6));
+        // Expected: (10 * 100) + (1.71 * 100) + (8 * 1000) = 1000 + 171 + 8000 = 9171
+        assert!(score >= 9100 && score <= 9200, "Score should be around 9171, got {}", score);
+
+        // GTX 1660 example: 6GB, 1.8GHz, Compute 7.5
+        let score = GpuCapability::calculate_score(6144, 1785, (7, 5));
+        // Expected: (6 * 100) + (1.785 * 100) + (7 * 1000) = 600 + 178 + 7000 = 7778
+        assert!(score >= 7700 && score <= 7800, "Score should be around 7778, got {}", score);
+    }
+
+    #[test]
+    fn test_gpu_capability_creation() {
+        let capability = GpuCapability {
+            model_name: "NVIDIA GeForce RTX 4090".to_string(),
+            compute_capability: (8, 9),
+            max_clock_mhz: 2520,
+            memory_total_mb: 16384,
+        };
+
+        assert_eq!(capability.model_name, "NVIDIA GeForce RTX 4090");
+        assert_eq!(capability.compute_capability, (8, 9));
+        assert_eq!(capability.max_clock_mhz, 2520);
+        assert_eq!(capability.memory_total_mb, 16384);
     }
 }

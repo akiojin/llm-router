@@ -62,6 +62,15 @@ pub struct HealthCheckRequest {
     /// GPU温度 (℃)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_temperature: Option<f32>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model_name: Option<String>,
+    /// GPU計算能力 (例: "8.9")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_compute_capability: Option<String>,
+    /// GPU能力スコア (0-10000)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_capability_score: Option<u32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 過去N件の平均レスポンスタイム (ms)
@@ -156,6 +165,9 @@ mod tests {
             gpu_memory_total_mb: Some(8192),
             gpu_memory_used_mb: Some(5800),
             gpu_temperature: Some(72.5),
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
             active_requests: 3,
             average_response_time_ms: Some(123.4),
             loaded_models: vec!["gpt-oss:20b".to_string()],
@@ -174,6 +186,33 @@ mod tests {
             deserialized.average_response_time_ms
         );
         assert_eq!(request.loaded_models, deserialized.loaded_models);
+    }
+
+    #[test]
+    fn test_health_check_request_with_gpu_capability() {
+        let request = HealthCheckRequest {
+            agent_id: Uuid::new_v4(),
+            cpu_usage: 50.0,
+            memory_usage: 60.0,
+            gpu_usage: Some(40.0),
+            gpu_memory_usage: Some(50.0),
+            gpu_memory_total_mb: Some(16384),
+            gpu_memory_used_mb: Some(8192),
+            gpu_temperature: Some(65.0),
+            gpu_model_name: Some("NVIDIA GeForce RTX 4090".to_string()),
+            gpu_compute_capability: Some("8.9".to_string()),
+            gpu_capability_score: Some(9500),
+            active_requests: 2,
+            average_response_time_ms: Some(100.0),
+            loaded_models: vec!["llama3:8b".to_string()],
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        let deserialized: HealthCheckRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(request.gpu_model_name, deserialized.gpu_model_name);
+        assert_eq!(request.gpu_compute_capability, deserialized.gpu_compute_capability);
+        assert_eq!(request.gpu_capability_score, deserialized.gpu_capability_score);
     }
 
     #[test]

@@ -255,6 +255,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: None,
             })
@@ -314,6 +317,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 2,
                 average_response_time_ms: Some(150.0),
             })
