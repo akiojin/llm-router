@@ -78,7 +78,6 @@ jobs:
     # 要件: FR-005
     # 目的: コミットメッセージがConventional Commits準拠かチェック
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
