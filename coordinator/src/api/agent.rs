@@ -252,6 +252,9 @@ mod tests {
                 memory_usage: 33.0,
                 gpu_usage: Some(55.0),
                 gpu_memory_usage: Some(48.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
                 active_requests: 1,
                 average_response_time_ms: None,
             })
@@ -308,6 +311,9 @@ mod tests {
                 memory_usage: 44.0,
                 gpu_usage: Some(60.0),
                 gpu_memory_usage: Some(62.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
                 active_requests: 2,
                 average_response_time_ms: Some(150.0),
             })

@@ -88,6 +88,9 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             memory_usage: 40.0,
             gpu_usage: None,
             gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
             active_requests: 2,
             average_response_time_ms: None,
         })
@@ -100,6 +103,9 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             memory_usage: 30.0,
             gpu_usage: None,
             gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
             active_requests: 0,
             average_response_time_ms: None,
         })
@@ -159,6 +165,9 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             memory_usage: 40.0,
             gpu_usage: None,
             gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
             active_requests: 1,
             average_response_time_ms: Some(250.0),
         })
@@ -171,6 +180,9 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             memory_usage: 40.0,
             gpu_usage: None,
             gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
             active_requests: 1,
             average_response_time_ms: Some(120.0),
         })

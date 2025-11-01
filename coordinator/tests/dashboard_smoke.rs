@@ -90,6 +90,9 @@ async fn dashboard_agents_and_stats_reflect_registry() {
             memory_usage: 34.0,
             gpu_usage: None,
             gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
             active_requests: 2,
             average_response_time_ms: Some(110.0),
         })
@@ -277,6 +280,9 @@ async fn dashboard_agent_metrics_endpoint_returns_history() {
             memory_usage: 55.0,
             gpu_usage: None,
             gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
             active_requests: 2,
             average_response_time_ms: Some(105.0),
         })

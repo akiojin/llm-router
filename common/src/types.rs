@@ -65,6 +65,15 @@ pub struct HealthMetrics {
     /// GPUメモリ使用率 (0.0-100.0)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_memory_usage: Option<f32>,
+    /// GPUメモリ総容量 (MB)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU使用メモリ (MB)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU温度 (℃)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_temperature: Option<f32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 累積リクエスト数
