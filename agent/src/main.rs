@@ -394,6 +394,7 @@ mod tests {
         assert_eq!(resolve_machine_name(), "pretty-host-display");
     }
 
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn test_register_with_retry_eventual_success() {
         let _lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
@@ -427,6 +428,7 @@ mod tests {
         assert_eq!(response.status, RegisterStatus::Registered);
     }
 
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn test_register_with_retry_respects_limit() {
         let _lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
