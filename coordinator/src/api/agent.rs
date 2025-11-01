@@ -128,7 +128,7 @@ mod tests {
         balancer::{LoadManager, RequestOutcome},
         registry::AgentRegistry,
     };
-    use ollama_coordinator_common::types::AgentStatus;
+    use ollama_coordinator_common::{protocol::RegisterStatus, types::AgentStatus};
     use std::net::IpAddr;
     use std::time::Duration;
 
@@ -192,6 +192,32 @@ mod tests {
 
         let result = list_agents(State(state)).await;
         assert_eq!(result.0.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_register_same_machine_different_port_creates_multiple_agents() {
+        let state = create_test_state();
+
+        let req1 = RegisterRequest {
+            machine_name: "shared-machine".to_string(),
+            ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 11434,
+        };
+        let res1 = register_agent(State(state.clone()), Json(req1)).await.unwrap().0;
+        assert_eq!(res1.status, RegisterStatus::Registered);
+
+        let req2 = RegisterRequest {
+            machine_name: "shared-machine".to_string(),
+            ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 12434,
+        };
+        let res2 = register_agent(State(state.clone()), Json(req2)).await.unwrap().0;
+        assert_eq!(res2.status, RegisterStatus::Registered);
+
+        let agents = list_agents(State(state)).await.0;
+        assert_eq!(agents.len(), 2);
     }
 
     #[tokio::test]
