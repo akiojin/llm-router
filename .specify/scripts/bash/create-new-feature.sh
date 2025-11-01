@@ -62,7 +62,18 @@ find_repo_root() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if git rev-parse --show-toplevel >/dev/null 2>&1; then
-    REPO_ROOT=$(git rev-parse --show-toplevel)
+    # Check if we're in a worktree
+    if git rev-parse --git-dir 2>/dev/null | grep -q "\.git/worktrees"; then
+        # In a worktree: use the worktree root (find from current working directory)
+        REPO_ROOT="$(find_repo_root "$PWD")"
+        if [ -z "$REPO_ROOT" ]; then
+            # Fallback to PWD if marker not found
+            REPO_ROOT="$PWD"
+        fi
+    else
+        # In main repository: use standard git root
+        REPO_ROOT=$(git rev-parse --show-toplevel)
+    fi
     HAS_GIT=true
 else
     REPO_ROOT="$(find_repo_root "$SCRIPT_DIR")"

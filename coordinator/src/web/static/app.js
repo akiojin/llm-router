@@ -644,7 +644,7 @@ function updateHistoryChart(canvas, labels, success, failures) {
         plugins: {
           legend: {
             labels: {
-              color: "var(--text-subtle)",
+              color: "#e2e8f0",
             },
           },
           tooltip: {
@@ -659,7 +659,7 @@ function updateHistoryChart(canvas, labels, success, failures) {
         scales: {
           x: {
             ticks: {
-              color: "var(--text-subtle)",
+              color: "#e2e8f0",
               maxRotation: 0,
             },
             grid: {
@@ -669,7 +669,7 @@ function updateHistoryChart(canvas, labels, success, failures) {
           y: {
             beginAtZero: true,
             ticks: {
-              color: "var(--text-subtle)",
+              color: "#e2e8f0",
               precision: 0,
             },
             grid: {

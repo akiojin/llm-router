@@ -11,6 +11,7 @@
   --danger: #f87171;
   --text: #f8fafc;
   --text-subtle: #cbd5f5;
+  --btn-text-on-accent: #0b1120;
   font-family: "Inter", "Noto Sans JP", system-ui, -apple-system, sans-serif;
 }
 
@@ -114,7 +115,7 @@ body {
   appearance: none;
   border: 1px solid rgba(56, 189, 248, 0.4);
   background: var(--accent);
-  color: #0b1120;
+  color: var(--btn-text-on-accent);
   font-weight: 600;
   padding: 8px 16px;
   border-radius: 8px;
@@ -421,7 +422,7 @@ body {
 
 .btn--primary {
   background: var(--accent);
-  color: #0b1120;
+  color: var(--btn-text-on-accent);
 }
 
 .btn--danger {
@@ -617,6 +618,7 @@ body {
     --border: rgba(148, 163, 184, 0.25);
     --text: #0f172a;
     --text-subtle: #475569;
+    --btn-text-on-accent: #0f172a;
   }
 
   body {
