@@ -60,6 +60,8 @@ const modalRefs = {
   customName: null,
   tags: null,
   notes: null,
+  gpuUsage: null,
+  gpuMemory: null,
   metricsStatus: null,
   metricsCanvas: null,
 };
@@ -103,6 +105,8 @@ document.addEventListener("DOMContentLoaded", () => {
     customName: document.getElementById("detail-custom-name"),
     tags: document.getElementById("detail-tags"),
     notes: document.getElementById("detail-notes"),
+    gpuUsage: document.getElementById("detail-gpu-usage"),
+    gpuMemory: document.getElementById("detail-gpu-memory"),
     save: modalSave,
     delete: modalDelete,
     disconnect: modalDisconnect,
@@ -711,6 +715,17 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
   const metricsTimestamp = formatTimestamp(agent.metrics_last_updated_at);
   const metricsDetail = metricsBadge ? `${metricsBadge} ${metricsTimestamp}` : metricsTimestamp;
 
+  const cpuDisplay = formatPercentage(agent.cpu_usage);
+  const cpuGpuSub =
+    typeof agent.gpu_usage === "number"
+      ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_usage)}</div>`
+      : "";
+  const memoryDisplay = formatPercentage(agent.memory_usage);
+  const memoryGpuSub =
+    typeof agent.gpu_memory_usage === "number"
+      ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_memory_usage)}</div>`
+      : "";
+
   row.innerHTML = `
     <td>
       <input
@@ -730,8 +745,14 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
     </td>
     <td>${statusLabel}</td>
     <td>${formatDuration(agent.uptime_seconds)}</td>
-    <td>${formatPercentage(agent.cpu_usage)}</td>
-    <td>${formatPercentage(agent.memory_usage)}</td>
+    <td>
+      <div class="cell-title">${cpuDisplay}</div>
+      ${cpuGpuSub}
+    </td>
+    <td>
+      <div class="cell-title">${memoryDisplay}</div>
+      ${memoryGpuSub}
+    </td>
     <td>${agent.active_requests}</td>
     <td>
       <div class="cell-title">${agent.total_requests}</div>
@@ -917,6 +938,12 @@ function openAgentModal(agent) {
   modalRefs.customName.value = agent.custom_name ?? "";
   modalRefs.tags.value = Array.isArray(agent.tags) ? agent.tags.join(", ") : "";
   modalRefs.notes.value = agent.notes ?? "";
+  if (modalRefs.gpuUsage) {
+    modalRefs.gpuUsage.textContent = formatPercentage(agent.gpu_usage);
+  }
+  if (modalRefs.gpuMemory) {
+    modalRefs.gpuMemory.textContent = formatPercentage(agent.gpu_memory_usage);
+  }
 
   const cached = state.agentMetricsCache.get(agent.id);
   if (cached && Date.now() - cached.fetchedAt.getTime() < 10_000) {
@@ -1009,32 +1036,73 @@ function updateAgentMetrics(metrics) {
   const labels = array.map((point) => formatMetricLabel(new Date(point.timestamp)));
   const cpu = array.map((point) => toNullableNumber(point.cpu_usage));
   const memory = array.map((point) => toNullableNumber(point.memory_usage));
+  const gpu = array.map((point) => toNullableNumber(point.gpu_usage));
+  const gpuMemory = array.map((point) => toNullableNumber(point.gpu_memory_usage));
 
-  if (!agentMetricsChart) {
+  const datasets = [];
+  if (datasetHasValues(cpu)) {
+    datasets.push({
+      key: "cpu",
+      label: "CPU使用率",
+      data: cpu,
+      borderColor: "rgba(59, 130, 246, 0.85)",
+      backgroundColor: "rgba(59, 130, 246, 0.12)",
+    });
+  }
+  if (datasetHasValues(memory)) {
+    datasets.push({
+      key: "memory",
+      label: "メモリ使用率",
+      data: memory,
+      borderColor: "rgba(168, 85, 247, 0.85)",
+      backgroundColor: "rgba(168, 85, 247, 0.12)",
+    });
+  }
+  if (datasetHasValues(gpu)) {
+    datasets.push({
+      key: "gpu",
+      label: "GPU使用率",
+      data: gpu,
+      borderColor: "rgba(34, 197, 94, 0.85)",
+      backgroundColor: "rgba(34, 197, 94, 0.12)",
+    });
+  }
+  if (datasetHasValues(gpuMemory)) {
+    datasets.push({
+      key: "gpu-memory",
+      label: "GPUメモリ使用率",
+      data: gpuMemory,
+      borderColor: "rgba(248, 113, 113, 0.85)",
+      backgroundColor: "rgba(248, 113, 113, 0.12)",
+    });
+  }
+
+  if (!datasets.length) {
+    destroyAgentMetricsChart();
+    setAgentMetricsStatus("メトリクスは記録されていますが数値を取得できませんでした");
+    return;
+  }
+
+  const shouldRecreate =
+    !agentMetricsChart ||
+    agentMetricsChart.data.datasets.length !== datasets.length ||
+    datasets.some((dataset, index) => agentMetricsChart.data.datasets[index]?.label !== dataset.label);
+
+  if (shouldRecreate) {
+    destroyAgentMetricsChart();
     agentMetricsChart = new Chart(canvas, {
       type: "line",
       data: {
         labels,
-        datasets: [
-          {
-            label: "CPU使用率",
-            data: cpu,
-            borderColor: "rgba(59, 130, 246, 0.85)",
-            backgroundColor: "rgba(59, 130, 246, 0.12)",
-            fill: true,
-            pointRadius: 0,
-            tension: 0.25,
-          },
-          {
-            label: "メモリ使用率",
-            data: memory,
-            borderColor: "rgba(168, 85, 247, 0.85)",
-            backgroundColor: "rgba(168, 85, 247, 0.12)",
-            fill: true,
-            pointRadius: 0,
-            tension: 0.25,
-          },
-        ],
+        datasets: datasets.map((dataset) => ({
+          label: dataset.label,
+          data: dataset.data,
+          borderColor: dataset.borderColor,
+          backgroundColor: dataset.backgroundColor,
+          fill: true,
+          pointRadius: 0,
+          tension: 0.25,
+        })),
       },
       options: {
         responsive: true,
@@ -1087,8 +1155,10 @@ function updateAgentMetrics(metrics) {
     });
   } else {
     agentMetricsChart.data.labels = labels;
-    agentMetricsChart.data.datasets[0].data = cpu;
-    agentMetricsChart.data.datasets[1].data = memory;
+    datasets.forEach((dataset, index) => {
+      agentMetricsChart.data.datasets[index].data = dataset.data;
+      agentMetricsChart.data.datasets[index].label = dataset.label;
+    });
     agentMetricsChart.update("none");
   }
 
@@ -1108,10 +1178,20 @@ function setAgentMetricsStatus(message, { isError = false } = {}) {
   modalRefs.metricsStatus.classList.toggle("is-error", isError);
 }
 
+function datasetHasValues(values) {
+  return values.some((value) => typeof value === "number" && !Number.isNaN(value));
+}
+
 function buildAgentMetricsSummary(metrics) {
   const latest = metrics[metrics.length - 1];
   const latestTime = formatMetricLabel(new Date(latest.timestamp));
-  return `データ点: ${metrics.length} / 最新: ${latestTime}`;
+  const parts = [
+    `CPU ${formatPercentage(latest.cpu_usage)}`,
+    `メモリ ${formatPercentage(latest.memory_usage)}`,
+    `GPU ${formatPercentage(latest.gpu_usage)}`,
+    `GPUメモリ ${formatPercentage(latest.gpu_memory_usage)}`,
+  ];
+  return `データ点: ${metrics.length} / 最新 ${latestTime} | ${parts.join(" / ")}`;
 }
 
 function buildAgentMetricsSignature(metrics) {
@@ -1120,8 +1200,13 @@ function buildAgentMetricsSignature(metrics) {
       const cpu = typeof point.cpu_usage === "number" ? point.cpu_usage.toFixed(2) : "-";
       const memory =
         typeof point.memory_usage === "number" ? point.memory_usage.toFixed(2) : "-";
+      const gpu = typeof point.gpu_usage === "number" ? point.gpu_usage.toFixed(2) : "-";
+      const gpuMemory =
+        typeof point.gpu_memory_usage === "number"
+          ? point.gpu_memory_usage.toFixed(2)
+          : "-";
       const ts = point.timestamp ?? "";
-      return `${ts}:${cpu}:${memory}`;
+      return `${ts}:${cpu}:${memory}:${gpu}:${gpuMemory}`;
     })
     .join("|");
 }
@@ -1213,6 +1298,10 @@ function downloadCsv(data, filename) {
     "ip_address",
     "ollama_version",
     "status",
+    "cpu_usage",
+    "memory_usage",
+    "gpu_usage",
+    "gpu_memory_usage",
     "registered_at",
     "last_seen",
     "tags",
@@ -1226,6 +1315,10 @@ function downloadCsv(data, filename) {
       agent.ip_address ?? "",
       agent.ollama_version ?? "",
       agent.status ?? "",
+      agent.cpu_usage ?? "",
+      agent.memory_usage ?? "",
+      agent.gpu_usage ?? "",
+      agent.gpu_memory_usage ?? "",
       agent.registered_at ?? "",
       agent.last_seen ?? "",
       Array.isArray(agent.tags) ? agent.tags.join("|") : "",

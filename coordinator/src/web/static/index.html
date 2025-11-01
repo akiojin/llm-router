@@ -118,8 +118,8 @@
                   <span>稼働時間</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
-                <th>CPU</th>
-                <th>メモリ</th>
+                <th>CPU / GPU</th>
+                <th>メモリ / GPU</th>
                 <th>処理中</th>
                 <th data-sort="total" class="sortable">
                   <span>累積</span>
@@ -211,6 +211,14 @@
             <div>
               <dt>直近平均応答</dt>
               <dd id="detail-average-response">-</dd>
+            </div>
+            <div>
+              <dt>GPU使用率</dt>
+              <dd id="detail-gpu-usage">-</dd>
+            </div>
+            <div>
+              <dt>GPUメモリ使用率</dt>
+              <dd id="detail-gpu-memory">-</dd>
             </div>
           </form>
           <section class="modal__metrics" aria-label="エージェントメトリクス">
