@@ -59,6 +59,15 @@ pub struct DashboardAgent {
     /// GPU温度 (℃)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_temperature: Option<f32>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model_name: Option<String>,
+    /// GPU計算能力
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_compute_capability: Option<String>,
+    /// GPU能力スコア
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_capability_score: Option<u32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 累積リクエスト数
@@ -197,6 +206,9 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 gpu_memory_total_mb,
                 gpu_memory_used_mb,
                 gpu_temperature,
+                gpu_model_name,
+                gpu_compute_capability,
+                gpu_capability_score,
                 active_requests,
                 total_requests,
                 successful_requests,
@@ -213,6 +225,9 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                     snapshot.gpu_memory_total_mb,
                     snapshot.gpu_memory_used_mb,
                     snapshot.gpu_temperature,
+                    snapshot.gpu_model_name.clone(),
+                    snapshot.gpu_compute_capability.clone(),
+                    snapshot.gpu_capability_score,
                     snapshot.active_requests,
                     snapshot.total_requests,
                     snapshot.successful_requests,
@@ -223,7 +238,8 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 )
             } else {
                 (
-                    None, None, None, None, None, None, None, 0, 0, 0, 0, None, None, true,
+                    None, None, None, None, None, None, None, None, None, None, 0, 0, 0, 0, None,
+                    None, true,
                 )
             };
 
@@ -245,6 +261,9 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 gpu_memory_total_mb,
                 gpu_memory_used_mb,
                 gpu_temperature,
+                gpu_model_name,
+                gpu_compute_capability,
+                gpu_capability_score,
                 active_requests,
                 total_requests,
                 successful_requests,
@@ -344,6 +363,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 2,
                 average_response_time_ms: Some(110.0),
             })
@@ -424,6 +446,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 3,
                 average_response_time_ms: Some(95.0),
             })
@@ -563,6 +588,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(110.0),
             })
@@ -579,6 +607,9 @@ mod tests {
                 gpu_memory_total_mb: None,
                 gpu_memory_used_mb: None,
                 gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
                 active_requests: 0,
                 average_response_time_ms: Some(95.0),
             })

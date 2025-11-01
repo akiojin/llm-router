@@ -77,6 +77,20 @@ async fn main() {
     let agent_id = register_response.agent_id;
     println!("Registered successfully! Agent ID: {}", agent_id);
 
+    // GPU能力情報を取得（静的な情報、起動時のみ）
+    let gpu_capability = metrics_collector.get_gpu_capability();
+    if let Some(ref capability) = gpu_capability {
+        println!(
+            "GPU Detected: {} (Compute {}.{}, {}MHz, {}MB, Score: {})",
+            capability.model_name,
+            capability.compute_capability.0,
+            capability.compute_capability.1,
+            capability.max_clock_mhz,
+            capability.memory_total_mb,
+            capability.score()
+        );
+    }
+
     // ハートビート送信タスク
     let mut heartbeat_timer = interval(Duration::from_secs(heartbeat_interval_secs));
 
@@ -111,6 +125,11 @@ async fn main() {
             gpu_memory_total_mb: metrics.gpu_memory_total_mb,
             gpu_memory_used_mb: metrics.gpu_memory_used_mb,
             gpu_temperature: metrics.gpu_temperature,
+            gpu_model_name: gpu_capability.as_ref().map(|c| c.model_name.clone()),
+            gpu_compute_capability: gpu_capability
+                .as_ref()
+                .map(|c| format!("{}.{}", c.compute_capability.0, c.compute_capability.1)),
+            gpu_capability_score: gpu_capability.as_ref().map(|c| c.score()),
             active_requests: 0, // TODO: 実際のリクエスト数をカウント
             average_response_time_ms: None,
             loaded_models: models,

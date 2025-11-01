@@ -82,6 +82,15 @@ pub struct HealthMetrics {
     /// GPU温度 (℃)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_temperature: Option<f32>,
+    /// GPUモデル名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model_name: Option<String>,
+    /// GPU計算能力
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_compute_capability: Option<String>,
+    /// GPU能力スコア
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_capability_score: Option<u32>,
     /// 処理中リクエスト数
     pub active_requests: u32,
     /// 累積リクエスト数
