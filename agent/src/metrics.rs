@@ -1,13 +1,35 @@
 //! メトリクス収集
 //!
-//! CPU/メモリ使用率の監視
+//! CPU / メモリ / GPU 使用率の監視
 
+use nvml_wrapper::{error::NvmlError, Nvml};
 use ollama_coordinator_common::error::{AgentError, AgentResult};
 use sysinfo::System;
+use tracing::{debug, warn};
+
+/// 収集したシステムメトリクス
+#[derive(Debug, Clone, Copy)]
+pub struct SystemMetrics {
+    /// CPU usage percentage (0.0-100.0)
+    pub cpu_usage: f32,
+    /// Memory usage percentage (0.0-100.0)
+    pub memory_usage: f32,
+    /// GPU usage percentage (0.0-100.0)
+    pub gpu_usage: Option<f32>,
+    /// GPU memory usage percentage (0.0-100.0)
+    pub gpu_memory_usage: Option<f32>,
+    /// GPU memory total (MB)
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU memory used (MB)
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU temperature (℃)
+    pub gpu_temperature: Option<f32>,
+}
 
 /// システムメトリクスコレクター
 pub struct MetricsCollector {
     system: System,
+    gpu: Option<GpuCollector>,
 }
 
 impl MetricsCollector {
@@ -16,7 +38,16 @@ impl MetricsCollector {
         let mut system = System::new_all();
         system.refresh_all();
 
-        Self { system }
+        let gpu = match GpuCollector::new() {
+            Ok(collector) => Some(collector),
+            Err(error) => {
+                // GPUが存在しない環境やNVMLが利用できない環境ではGPUメトリクスを無効化
+                debug!("GPU metrics unavailable: {:?}", error);
+                None
+            }
+        };
+
+        Self { system, gpu }
     }
 
     /// CPU使用率を取得（0.0-100.0）
@@ -56,17 +87,107 @@ impl MetricsCollector {
     }
 
     /// CPU使用率とメモリ使用率を同時に取得
-    pub fn collect_metrics(&mut self) -> AgentResult<(f32, f32)> {
+    pub fn collect_metrics(&mut self) -> AgentResult<SystemMetrics> {
         let cpu_usage = self.get_cpu_usage()?;
         let memory_usage = self.get_memory_usage()?;
 
-        Ok((cpu_usage, memory_usage))
+        let (gpu_usage, gpu_memory_usage, gpu_memory_total_mb, gpu_memory_used_mb, gpu_temperature) =
+            if let Some(gpu) = &self.gpu {
+                match gpu.collect() {
+                    Ok((usage, memory, total_mb, used_mb, temp)) => (
+                        Some(usage),
+                        Some(memory),
+                        Some(total_mb),
+                        Some(used_mb),
+                        Some(temp),
+                    ),
+                    Err(error) => {
+                        warn!("Failed to collect GPU metrics: {:?}", error);
+                        (None, None, None, None, None)
+                    }
+                }
+            } else {
+                (None, None, None, None, None)
+            };
+
+        Ok(SystemMetrics {
+            cpu_usage,
+            memory_usage,
+            gpu_usage,
+            gpu_memory_usage,
+            gpu_memory_total_mb,
+            gpu_memory_used_mb,
+            gpu_temperature,
+        })
     }
 }
 
 impl Default for MetricsCollector {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// NVIDIA GPUメトリクスコレクター
+struct GpuCollector {
+    nvml: Nvml,
+    device_indices: Vec<u32>,
+}
+
+impl GpuCollector {
+    fn new() -> Result<Self, NvmlError> {
+        let nvml = Nvml::init()?;
+        let count = nvml.device_count()?;
+        if count == 0 {
+            return Err(NvmlError::NotSupported);
+        }
+        let device_indices: Vec<u32> = (0..count).collect();
+        Ok(Self {
+            nvml,
+            device_indices,
+        })
+    }
+
+    fn collect(&self) -> Result<(f32, f32, u64, u64, f32), NvmlError> {
+        let mut total_usage = 0f32;
+        let mut total_memory_percent = 0f32;
+        let mut total_memory_total = 0u64;
+        let mut total_memory_used = 0u64;
+        let mut total_temperature = 0f32;
+
+        for index in &self.device_indices {
+            let device = self.nvml.device_by_index(*index)?;
+
+            let utilization = device.utilization_rates()?;
+            total_usage += utilization.gpu as f32;
+
+            let memory = device.memory_info()?;
+            let percent = if memory.total == 0 {
+                0.0
+            } else {
+                (memory.used as f64 / memory.total as f64 * 100.0) as f32
+            };
+            total_memory_percent += percent;
+            total_memory_total += memory.total / (1024 * 1024); // Convert to MB
+            total_memory_used += memory.used / (1024 * 1024); // Convert to MB
+
+            let temperature =
+                device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)?;
+            total_temperature += temperature as f32;
+        }
+
+        let device_count = self.device_indices.len() as f32;
+        if device_count == 0.0 {
+            return Err(NvmlError::NotSupported);
+        }
+
+        Ok((
+            total_usage / device_count,
+            total_memory_percent / device_count,
+            total_memory_total,
+            total_memory_used,
+            total_temperature / device_count,
+        ))
     }
 }
 
@@ -90,9 +211,15 @@ mod tests {
     #[test]
     fn test_collect_metrics() {
         let mut collector = MetricsCollector::new();
-        let (cpu_usage, memory_usage) = collector.collect_metrics().unwrap();
+        let metrics = collector.collect_metrics().unwrap();
 
-        assert!((0.0..=100.0).contains(&cpu_usage));
-        assert!((0.0..=100.0).contains(&memory_usage));
+        assert!((0.0..=100.0).contains(&metrics.cpu_usage));
+        assert!((0.0..=100.0).contains(&metrics.memory_usage));
+        if let Some(gpu_usage) = metrics.gpu_usage {
+            assert!((0.0..=100.0).contains(&gpu_usage));
+        }
+        if let Some(gpu_memory) = metrics.gpu_memory_usage {
+            assert!((0.0..=100.0).contains(&gpu_memory));
+        }
     }
 }

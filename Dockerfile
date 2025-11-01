@@ -47,6 +47,8 @@ RUN npm i -g \
     @openai/codex@latest \
     @google/gemini-cli@latest
 
+EXPOSE 8080
+
 WORKDIR /ollama-coordinator
 # Use bash to invoke entrypoint to avoid exec-bit and CRLF issues on Windows mounts
 ENTRYPOINT ["bash", "/ollama-coordinator/scripts/entrypoint.sh"]

@@ -28,7 +28,7 @@ OPTIONS:
   --help, -h      Show this help message
 
 WORKFLOW:
-  1. Verify current branch is a feature branch (feature/SPEC-xxx)
+  1. Verify current branch is a feature branch (starts with 'feature/')
   2. Check for uncommitted changes
   3. Push feature branch to remote
   4. Create GitHub Pull Request
@@ -62,15 +62,17 @@ fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # Verify we're on a feature branch
-if [[ ! "$CURRENT_BRANCH" =~ ^feature/SPEC-[a-z0-9]{8}$ ]]; then
+if [[ ! "$CURRENT_BRANCH" =~ ^feature/ ]]; then
     echo "ERROR: Not on a feature branch. Current branch: $CURRENT_BRANCH" >&2
-    echo "Feature branches should be named like: feature/SPEC-a1b2c3d4" >&2
+    echo "Feature branches should start with 'feature/'" >&2
     exit 1
 fi
 
-# Extract SPEC-ID
-SPEC_ID=$(echo "$CURRENT_BRANCH" | sed 's/^feature\///')
-WORKTREE_DIR="$REPO_ROOT/.worktrees/$SPEC_ID"
+# Extract SPEC-ID (if branch follows SPEC naming convention)
+SPEC_ID=""
+if [[ "$CURRENT_BRANCH" =~ ^feature/SPEC-[a-z0-9]{8}$ ]]; then
+    SPEC_ID=$(echo "$CURRENT_BRANCH" | sed 's/^feature\///')
+fi
 
 echo "========================================="
 echo "Finishing feature: $CURRENT_BRANCH"
@@ -110,16 +112,22 @@ git push -u origin "$CURRENT_BRANCH"
 # Get PR title from spec.md
 echo ""
 echo "[3/4] Creating Pull Request..."
-SPEC_FILE="$REPO_ROOT/specs/$SPEC_ID/spec.md"
 PR_TITLE="Feature implementation"
 
-if [ -f "$SPEC_FILE" ]; then
-    # Extract title from spec.md (first line after removing markdown header)
-    PR_TITLE=$(head -1 "$SPEC_FILE" | sed 's/^# 機能仕様書: //' | sed 's/^# //')
+if [ -n "$SPEC_ID" ]; then
+    SPEC_FILE="$REPO_ROOT/specs/$SPEC_ID/spec.md"
+    if [ -f "$SPEC_FILE" ]; then
+        # Extract title from spec.md (first line after removing markdown header)
+        PR_TITLE=$(head -1 "$SPEC_FILE" | sed 's/^# 機能仕様書: //' | sed 's/^# //')
+    fi
+else
+    # For non-SPEC branches, use branch name as title
+    PR_TITLE=$(echo "$CURRENT_BRANCH" | sed 's/^feature\///' | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
 fi
 
 # Create PR body
-PR_BODY=$(cat <<EOF
+if [ -n "$SPEC_ID" ]; then
+    PR_BODY=$(cat <<EOF
 ## SPEC Information
 
 **機能ID**: \`$SPEC_ID\`
@@ -170,6 +178,53 @@ $(git log origin/main..HEAD --oneline --no-merges | head -10)
 🤖 このPRは自動マージワークフローの対象です。品質チェック合格後、自動的にmainブランチへマージされます。
 EOF
 )
+else
+    PR_BODY=$(cat <<EOF
+**ブランチ**: \`$CURRENT_BRANCH\`
+
+---
+
+## 変更サマリー
+
+$(git log origin/main..HEAD --oneline --no-merges | head -10)
+
+---
+
+## 自動品質チェック
+
+このPRが作成されると、GitHub Actions **"Quality Checks"** ワークフローが自動実行されます：
+
+### 並列実行されるチェック（5つ）
+
+1. **tasks-check**: tasks.mdの全タスク完了チェック
+2. **rust-test**: Rustテスト実行（ubuntu-latest, windows-latest）
+3. **rust-lint**: Rust lintチェック（\`cargo fmt --check\`, \`cargo clippy\`）
+4. **commitlint**: コミットメッセージ検証（Conventional Commits準拠）
+5. **markdownlint**: マークダウンファイルlint
+
+### 自動マージ条件
+
+すべての品質チェックが合格すると、**"Auto Merge"** ワークフローが起動し、以下の条件を満たす場合に自動的にmainブランチへマージされます：
+
+- ✅ 全品質チェックが成功
+- ✅ PRがドラフトでない
+- ✅ マージ可能（コンフリクトなし）
+- ✅ マージ状態が正常（CLEAN または UNSTABLE）
+
+---
+
+## チェックリスト
+
+- [ ] 全テストが合格している
+- [ ] コンパイルエラーがない
+- [ ] コミットメッセージがConventional Commits準拠
+
+---
+
+🤖 このPRは自動マージワークフローの対象です。品質チェック合格後、自動的にmainブランチへマージされます。
+EOF
+)
+fi
 
 # Create PR (draft or normal)
 if [ "$DRAFT" = true ]; then
@@ -189,7 +244,11 @@ rm -f "$REPO_ROOT/.specify/.current-feature"
 
 echo ""
 echo "========================================="
-echo "✓ Feature $SPEC_ID PR created!"
+if [ -n "$SPEC_ID" ]; then
+    echo "✓ Feature $SPEC_ID PR created!"
+else
+    echo "✓ Feature PR created!"
+fi
 echo "========================================="
 echo ""
 if [ -n "$PR_URL" ]; then

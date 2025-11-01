@@ -15,11 +15,12 @@ get_current_branch() {
 # Returns 0 if valid, 1 if not
 check_feature_branch() {
     local branch="$1"
-    if [[ ! "$branch" =~ ^[0-9]{3}- ]]; then
-        echo "ERROR: Not on a feature branch. Current branch: $branch"
-        echo "Feature branches should be named like: 001-feature-name"
+    if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+        echo "ERROR: 現在のブランチ ($branch) では開発作業を実行できません。"
+        echo "メンテナが用意した作業ブランチ上でのみコマンドを実行してください（CLAUDE.md参照）。"
         return 1
     fi
+    echo "INFO: 現在のブランチを維持したままコマンドを実行してください（BRANCH=$branch）。"
     return 0
 }
 
