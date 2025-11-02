@@ -193,7 +193,7 @@
 - **FR-016b**: エージェントはOllamaが未インストールの場合、自動的にダウンロードする必要がある（✅ 実装済み: `download()`）
 - **FR-016c**: エージェントはダウンロードしたOllamaを自動的にインストールする必要がある（✅ 実装済み: `download()`）
 - **FR-016d**: エージェントはOllamaバイナリとモデルのダウンロード進捗をユーザーに表示する必要がある（✅ 実装済み: `ProgressBar`, `DownloadProgress`）
-- **FR-016e**: エージェントはネットワークエラー時に指数バックオフによる自動リトライを実行する必要がある（✅ 実装済み: `retry_http_request()`）
+- **FR-016e**: エージェントはネットワークエラー時に指数バックオフによる自動リトライを実行する必要がある（✅ 実装済み: `retry_http_request()`、`download()`と`pull_model()`に統合）
 - **FR-016f**: エージェントはダウンロードしたバイナリの整合性をSHA256チェックサムで検証する必要がある（✅ 実装済み: `verify_checksum()`, 環境変数 `OLLAMA_VERIFY_CHECKSUM`）
 - **FR-016g**: エージェントはHTTP/HTTPSプロキシ経由でのダウンロードをサポートする必要がある（✅ 実装済み: `build_http_client_with_proxy()`、環境変数 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`）
 - **FR-016h**: エージェントはデフォルトモデルをメモリ容量に応じて自動選択してプルする必要がある（✅ 実装済み: `ensure_default_model()`）

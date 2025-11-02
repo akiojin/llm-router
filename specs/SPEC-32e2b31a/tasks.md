@@ -340,8 +340,9 @@ mkdir -p common coordinator agent tests/e2e
   - ✅ `retry_http_request()`として実装
 - [x] **T105** `agent/src/ollama.rs:download()` にリトライロジック統合
   - ✅ `download()`メソッドに統合完了
-- [ ] **T106** `agent/src/ollama.rs:pull_model()` にリトライロジック統合
-  - ⏳ 未実装（オプション）
+- [x] **T106** `agent/src/ollama.rs:pull_model()` にリトライロジック統合
+  - ✅ retry_http_request()を使用してリトライ機能を追加
+  - ✅ エラーメッセージにリトライ後の失敗を明記
 - [x] **T107** **検証**: Integration Test T100が合格 (GREEN)
   - ✅ `test_download_retry_on_timeout`合格
 

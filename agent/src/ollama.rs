@@ -204,7 +204,7 @@ impl OllamaManager {
         Ok(names)
     }
 
-    /// モデルをプル
+    /// モデルをプル（リトライ付き）
     async fn pull_model(&self, model: &str) -> AgentResult<()> {
         let mut client_builder =
             reqwest::Client::builder().user_agent("ollama-coordinator-agent/0.1");
@@ -218,14 +218,34 @@ impl OllamaManager {
             .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
 
         let url = format!("{}/api/pull", self.api_base());
-        let response = client
-            .post(&url)
-            .json(&json!({ "name": model, "stream": false }))
-            .send()
-            .await
-            .map_err(|e| {
-                AgentError::OllamaConnection(format!("Failed to pull model {}: {}", model, e))
-            })?;
+
+        // リトライ設定を取得
+        let (max_retries, max_backoff_secs) = get_retry_config();
+
+        // リトライ付きでモデルプルを実行
+        let response = retry_http_request(
+            || {
+                let client = client.clone();
+                let url = url.clone();
+                let model = model.to_string();
+                async move {
+                    client
+                        .post(&url)
+                        .json(&json!({ "name": model, "stream": false }))
+                        .send()
+                        .await
+                }
+            },
+            max_retries,
+            max_backoff_secs,
+        )
+        .await
+        .map_err(|e| {
+            AgentError::OllamaConnection(format!(
+                "Failed to pull model {} after retries: {}",
+                model, e
+            ))
+        })?;
 
         let status = response.status();
         let body = response.text().await.map_err(|e| {
