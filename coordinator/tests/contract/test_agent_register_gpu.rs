@@ -8,10 +8,7 @@ use axum::{
     Router,
 };
 use ollama_coordinator_coordinator::{
-    api,
-    balancer::LoadManager,
-    registry::AgentRegistry,
-    AppState,
+    api, balancer::LoadManager, registry::AgentRegistry, AppState,
 };
 use serde_json::json;
 use tower::ServiceExt;
