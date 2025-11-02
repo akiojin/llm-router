@@ -11,6 +11,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration as StdDuration;
+use sysinfo::System;
 use tar::Archive;
 use tokio::time::{sleep, Duration};
 use zip::ZipArchive;
@@ -23,6 +24,14 @@ pub struct OllamaManager {
 }
 
 const DEFAULT_MODEL: &str = "gpt-oss:20b";
+const DEFAULT_MODEL_CANDIDATES: &[&str] =
+    &["gpt-oss:20b", "gpt-oss:7b", "gpt-oss:3b", "gpt-oss:1b"];
+const MODEL_MEMORY_REQUIREMENTS: &[(&str, f64)] = &[
+    ("gpt-oss:20b", 12.0),
+    ("gpt-oss:7b", 6.0),
+    ("gpt-oss:3b", 3.0),
+    ("gpt-oss:1b", 1.0),
+];
 
 impl OllamaManager {
     /// 新しいOllamaマネージャーを作成
@@ -71,8 +80,22 @@ impl OllamaManager {
 
     /// デフォルトモデル（環境変数で上書き可能）を確保
     async fn ensure_default_model(&self) -> AgentResult<()> {
-        let model = default_model_name();
-        self.ensure_model(&model).await
+        if let Some(override_model) = default_model_override() {
+            println!("Using explicit default model override: {}", override_model);
+            return self.ensure_model(&override_model).await;
+        }
+
+        let (selected_model, total_memory_gib) = select_default_model_for_memory();
+        if selected_model != DEFAULT_MODEL {
+            println!(
+                "System memory {:.1} GiB is below the recommended threshold for {}. Falling back to {}.",
+                total_memory_gib,
+                DEFAULT_MODEL,
+                selected_model
+            );
+        }
+
+        self.ensure_model(selected_model).await
     }
 
     /// 指定モデルが存在しなければプルする
@@ -403,11 +426,41 @@ struct ModelSummary {
 }
 
 fn default_model_name() -> String {
+    default_model_override().unwrap_or_else(|| DEFAULT_MODEL.to_string())
+}
+
+fn default_model_override() -> Option<String> {
     std::env::var("OLLAMA_DEFAULT_MODEL")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_MODEL.to_string())
+}
+
+fn select_default_model_for_memory() -> (&'static str, f64) {
+    let mut system = System::new();
+    system.refresh_memory();
+
+    let total_kib = system.total_memory() as f64;
+    let total_gib = if total_kib <= 0.0 {
+        0.0
+    } else {
+        total_kib / 1024.0 / 1024.0
+    };
+
+    (pick_model_for_memory(total_gib), total_gib)
+}
+
+fn pick_model_for_memory(total_gib: f64) -> &'static str {
+    for (model, required_gib) in MODEL_MEMORY_REQUIREMENTS {
+        if total_gib >= *required_gib {
+            return model;
+        }
+    }
+
+    DEFAULT_MODEL_CANDIDATES
+        .last()
+        .copied()
+        .unwrap_or(DEFAULT_MODEL)
 }
 
 fn pull_timeout() -> Option<StdDuration> {
@@ -747,6 +800,14 @@ mod tests {
             let _guard = EnvGuard::new("OLLAMA_DEFAULT_MODEL", None);
             assert_eq!(default_model_name(), DEFAULT_MODEL);
         }
+    }
+
+    #[test]
+    fn test_pick_model_for_memory_thresholds() {
+        assert_eq!(pick_model_for_memory(16.0), "gpt-oss:20b");
+        assert_eq!(pick_model_for_memory(8.0), "gpt-oss:7b");
+        assert_eq!(pick_model_for_memory(4.5), "gpt-oss:3b");
+        assert_eq!(pick_model_for_memory(0.5), "gpt-oss:1b");
     }
 
     #[test]

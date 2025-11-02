@@ -12,7 +12,9 @@
         "test",
         "chore",
         "revert",
-        "merge"
+        "merge",
+        "plan",
+        "tasks"
       ]
     ],
     "type-case": [2, "always", "lower-case"],

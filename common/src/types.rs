@@ -7,6 +7,22 @@ use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use uuid::Uuid;
 
+/// GPUデバイス情報
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GpuDeviceInfo {
+    /// GPUモデル名
+    pub model: String,
+    /// 当該モデルの枚数
+    pub count: u32,
+}
+
+impl GpuDeviceInfo {
+    /// GPU情報として有効か検証する
+    pub fn is_valid(&self) -> bool {
+        self.count > 0 && !self.model.trim().is_empty()
+    }
+}
+
 /// エージェント
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Agent {
@@ -38,6 +54,9 @@ pub struct Agent {
     /// ロード済みモデル一覧
     #[serde(default)]
     pub loaded_models: Vec<String>,
+    /// 搭載GPUの詳細
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpu_devices: Vec<GpuDeviceInfo>,
     /// GPU利用可能フラグ
     pub gpu_available: bool,
     /// GPU個数
@@ -163,6 +182,10 @@ mod tests {
             tags: vec!["primary".to_string()],
             notes: Some("memo".to_string()),
             loaded_models: vec!["gpt-oss:20b".to_string()],
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "NVIDIA RTX 4090".to_string(),
+                count: 2,
+            }],
             gpu_available: true,
             gpu_count: Some(2),
             gpu_model: Some("NVIDIA RTX 4090".to_string()),
@@ -196,6 +219,7 @@ mod tests {
         assert!(agent.tags.is_empty());
         assert!(agent.notes.is_none());
         assert!(agent.loaded_models.is_empty());
+        assert!(agent.gpu_devices.is_empty());
         assert!(!agent.gpu_available);
         assert!(agent.gpu_count.is_none());
         assert!(agent.gpu_model.is_none());
@@ -214,6 +238,27 @@ mod tests {
             serde_json::to_string(&AgentStatus::Offline).unwrap(),
             "\"offline\""
         );
+    }
+
+    #[test]
+    fn test_gpu_device_info_validation() {
+        let valid = GpuDeviceInfo {
+            model: "NVIDIA RTX 4090".to_string(),
+            count: 2,
+        };
+        assert!(valid.is_valid());
+
+        let zero_count = GpuDeviceInfo {
+            model: "AMD".to_string(),
+            count: 0,
+        };
+        assert!(!zero_count.is_valid());
+
+        let empty_model = GpuDeviceInfo {
+            model: " ".to_string(),
+            count: 1,
+        };
+        assert!(!empty_model.is_valid());
     }
 
     #[test]

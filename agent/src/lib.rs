@@ -13,6 +13,9 @@ pub mod ollama;
 /// メトリクス収集（CPU/メモリ監視）
 pub mod metrics;
 
+/// 登録フロー補助ロジック
+pub mod registration;
+
 /// GUI（システムトレイ、設定ウィンドウ）
 pub mod gui {
     // TODO: T062で実装

@@ -6,7 +6,7 @@ use chrono::Utc;
 use ollama_coordinator_common::{
     error::{CoordinatorError, CoordinatorResult},
     protocol::{RegisterRequest, RegisterResponse, RegisterStatus},
-    types::{Agent, AgentStatus},
+    types::{Agent, AgentStatus, GpuDeviceInfo},
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -55,16 +55,53 @@ impl AgentRegistry {
         let mut agents = self.agents.write().await;
 
         let mut removed_count = 0;
-        for agent in loaded_agents {
-            // GPU非搭載エージェントは自動削除
+        let mut removed_ids = Vec::new();
+        let mut sanitized_agents = Vec::new();
+
+        for mut agent in loaded_agents {
+            // GPU非搭載 or 情報欠落エージェントは削除対象
             if !agent.gpu_available {
                 println!(
                     "Removing GPU-less agent: {} (ID: {})",
                     agent.machine_name, agent.id
                 );
                 removed_count += 1;
+                removed_ids.push(agent.id);
                 continue;
             }
+
+            let mut sanitized = false;
+
+            if agent.gpu_devices.is_empty() {
+                if let Some(model) = agent.gpu_model.clone() {
+                    let count = agent.gpu_count.unwrap_or(1).max(1);
+                    agent.gpu_devices = vec![GpuDeviceInfo { model, count }];
+                    sanitized = true;
+                } else {
+                    println!(
+                        "Removing agent missing GPU devices: {} (ID: {})",
+                        agent.machine_name, agent.id
+                    );
+                    removed_count += 1;
+                    removed_ids.push(agent.id);
+                    continue;
+                }
+            }
+
+            if !agent.gpu_devices.iter().all(|device| device.is_valid()) {
+                println!(
+                    "Removing agent with invalid GPU info: {} (ID: {})",
+                    agent.machine_name, agent.id
+                );
+                removed_count += 1;
+                removed_ids.push(agent.id);
+                continue;
+            }
+
+            if sanitized {
+                sanitized_agents.push(agent.clone());
+            }
+
             agents.insert(agent.id, agent);
         }
 
@@ -73,6 +110,23 @@ impl AgentRegistry {
             agents.len(),
             removed_count
         );
+
+        drop(agents);
+
+        for id in removed_ids {
+            if let Err(err) = crate::db::delete_agent(id).await {
+                println!("Failed to delete GPU-less agent {}: {}", id, err);
+            }
+        }
+
+        for agent in sanitized_agents {
+            if let Err(err) = self.save_to_storage(&agent).await {
+                println!(
+                    "Failed to persist sanitized agent {} ({}): {}",
+                    agent.id, agent.machine_name, err
+                );
+            }
+        }
 
         Ok(())
     }
@@ -103,6 +157,7 @@ impl AgentRegistry {
             agent.ollama_version = req.ollama_version.clone();
             agent.ollama_port = req.ollama_port;
             agent.gpu_available = req.gpu_available;
+            agent.gpu_devices = req.gpu_devices.clone();
             agent.gpu_count = req.gpu_count;
             agent.gpu_model = req.gpu_model.clone();
             agent.status = AgentStatus::Online;
@@ -125,6 +180,7 @@ impl AgentRegistry {
                 tags: Vec::new(),
                 notes: None,
                 loaded_models: Vec::new(),
+                gpu_devices: req.gpu_devices,
                 gpu_available: req.gpu_available,
                 gpu_count: req.gpu_count,
                 gpu_model: req.gpu_model,
@@ -321,7 +377,15 @@ fn normalize_models(models: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ollama_coordinator_common::types::GpuDeviceInfo;
     use std::net::IpAddr;
+
+    fn sample_gpu_devices() -> Vec<GpuDeviceInfo> {
+        vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }]
+    }
 
     #[tokio::test]
     async fn test_register_new_agent() {
@@ -332,6 +396,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -354,6 +419,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -379,6 +445,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -390,6 +457,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -408,6 +476,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -429,6 +498,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -463,6 +533,7 @@ mod tests {
                 ollama_version: "0.1.0".to_string(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -484,6 +555,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })

@@ -2,6 +2,9 @@ services:
   ollama-coordinator:
     build: .
     container_name: ollama-coordinator
+    mem_limit: 16g
+    mem_reservation: 13g
+    memswap_limit: 18g
     volumes:
       - .:/ollama-coordinator
       - bash-history:/root/.bash_history_dir

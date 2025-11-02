@@ -2,7 +2,11 @@
 //! Ollamaプロキシ APIハンドラー
 
 use crate::{api::agent::AppError, balancer::RequestOutcome, AppState};
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    response::{IntoResponse, Response},
+    Json,
+};
 use ollama_coordinator_common::{
     error::CoordinatorError,
     protocol::{ChatRequest, ChatResponse, GenerateRequest},
@@ -13,7 +17,7 @@ use std::time::Instant;
 pub async fn proxy_chat(
     State(state): State<AppState>,
     Json(req): Json<ChatRequest>,
-) -> Result<Json<ChatResponse>, AppError> {
+) -> Result<Response, AppError> {
     // 利用可能なエージェントを選択
     let agent = select_available_agent(&state).await?;
     let agent_id = agent.id;
@@ -53,11 +57,25 @@ pub async fn proxy_chat(
             .await
             .map_err(AppError::from)?;
 
-        return Err(CoordinatorError::Http(format!(
-            "Ollama returned error: {}",
-            response.status()
-        ))
-        .into());
+        let status = response.status();
+        let status_code = axum::http::StatusCode::from_u16(status.as_u16())
+            .unwrap_or(axum::http::StatusCode::BAD_GATEWAY);
+        let body_bytes = response.bytes().await.unwrap_or_default();
+        let message = if body_bytes.is_empty() {
+            status.to_string()
+        } else {
+            String::from_utf8_lossy(&body_bytes).trim().to_string()
+        };
+
+        let payload = serde_json::json!({
+            "error": {
+                "message": message,
+                "type": "ollama_upstream_error",
+                "code": status_code.as_u16(),
+            }
+        });
+
+        return Ok((status_code, Json(payload)).into_response());
     }
 
     let parsed = response.json::<ChatResponse>().await;
@@ -71,7 +89,7 @@ pub async fn proxy_chat(
                 .await
                 .map_err(AppError::from)?;
 
-            Ok(Json(payload))
+            Ok((axum::http::StatusCode::OK, Json(payload)).into_response())
         }
         Err(e) => {
             state
@@ -89,7 +107,7 @@ pub async fn proxy_chat(
 pub async fn proxy_generate(
     State(state): State<AppState>,
     Json(req): Json<GenerateRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<Response, AppError> {
     // 利用可能なエージェントを選択
     let agent = select_available_agent(&state).await?;
     let agent_id = agent.id;
@@ -132,11 +150,25 @@ pub async fn proxy_generate(
             .await
             .map_err(AppError::from)?;
 
-        return Err(CoordinatorError::Http(format!(
-            "Ollama returned error: {}",
-            response.status()
-        ))
-        .into());
+        let status = response.status();
+        let status_code = axum::http::StatusCode::from_u16(status.as_u16())
+            .unwrap_or(axum::http::StatusCode::BAD_GATEWAY);
+        let body_bytes = response.bytes().await.unwrap_or_default();
+        let message = if body_bytes.is_empty() {
+            status.to_string()
+        } else {
+            String::from_utf8_lossy(&body_bytes).trim().to_string()
+        };
+
+        let payload = serde_json::json!({
+            "error": {
+                "message": message,
+                "type": "ollama_upstream_error",
+                "code": status_code.as_u16(),
+            }
+        });
+
+        return Ok((status_code, Json(payload)).into_response());
     }
 
     let parsed = response.json::<serde_json::Value>().await;
@@ -150,7 +182,7 @@ pub async fn proxy_generate(
                 .await
                 .map_err(AppError::from)?;
 
-            Ok(Json(payload))
+            Ok((axum::http::StatusCode::OK, Json(payload)).into_response())
         }
         Err(e) => {
             state
@@ -175,7 +207,7 @@ async fn select_available_agent(
 mod tests {
     use super::*;
     use crate::{balancer::LoadManager, registry::AgentRegistry};
-    use ollama_coordinator_common::protocol::RegisterRequest;
+    use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::IpAddr;
 
     fn create_test_state() -> AppState {
@@ -205,6 +237,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -228,6 +264,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -247,6 +287,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };

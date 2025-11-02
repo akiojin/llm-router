@@ -198,7 +198,14 @@ Ollamaの実装 (`/gpu/cpu_common.go`):
    - Docker環境での実際の検出テスト
    - 各GPUベンダーでの動作確認
 
-3. **E2Eテスト**
+## 2025-11-02 追加検証ログ
+
+- `agent/src/metrics.rs` にテスト専用の環境変数オーバーライド（`OLLAMA_TEST_*` 系）を追加し、Docker for Mac を想定した `lscpu` / `/proc/cpuinfo` のモック出力で Apple Silicon を判定できることをユニットテストで検証。
+- AMD GPU については KFD topology / `/dev/kfd` / `/sys/class/drm` を一時ディレクトリで再現し、`AmdGpuCollector::new()` が1台検出することを確認。
+- NVIDIA GPU は `/dev/nvidia0` と `/proc/driver/nvidia/version` のモックファイルで `is_nvidia_gpu_present()` が真を返すテストを追加。
+- これらのテストにより CI 環境（GPU非搭載）でも検出ロジックを安全に回帰テストできるようになった。
+
+1. **E2Eテスト**
    - Agent起動時の自動登録フロー
    - GPU情報がCoordinatorに正しく送信されることを確認
 

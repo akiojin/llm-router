@@ -3,7 +3,10 @@
 //! エージェントのCoordinatorへの登録フローをテスト
 
 use ollama_coordinator_agent::client::CoordinatorClient;
-use ollama_coordinator_common::protocol::{RegisterRequest, RegisterStatus};
+use ollama_coordinator_common::{
+    protocol::{RegisterRequest, RegisterStatus},
+    types::GpuDeviceInfo,
+};
 use std::net::IpAddr;
 
 #[tokio::test]
@@ -21,6 +24,10 @@ async fn test_agent_registration_to_coordinator() {
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
         gpu_available: true,
+        gpu_devices: vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
     };
@@ -63,6 +70,10 @@ async fn test_agent_re_registration() {
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
         gpu_available: true,
+        gpu_devices: vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
     };
@@ -99,6 +110,10 @@ async fn test_agent_registration_invalid_coordinator() {
         ollama_version: "0.1.0".to_string(),
         ollama_port: 11434,
         gpu_available: true,
+        gpu_devices: vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
     };

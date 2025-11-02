@@ -198,6 +198,7 @@ For a deeper walkthrough, including API references and customisation tips, see [
 - **GPU**: NVIDIA / AMD / Apple Silicon GPU required for agent registration
   - Automatically detected on startup
   - Docker for Mac: Apple Silicon detection supported
+- **Docker memory**: When running via `docker-compose`, allocate at least 16 GiB RAM to the container (`mem_limit: 16g`, `mem_reservation: 13g`, `memswap_limit: 18g`). On Docker Desktop, open **Settings → Resources** and raise the memory slider to ≥16 GiB before running `docker compose up`. Without this, large models such as `gpt-oss:20b` will fail to start with “requires more system memory” errors.
 - **Ollama**: Pre-installation recommended (automatic download is a future enhancement)
 - **Management**: Browser-based WebUI dashboard for agent settings and monitoring
 
@@ -366,7 +367,11 @@ Register an agent.
   "machine_name": "my-machine",
   "ip_address": "192.168.1.100",
   "ollama_version": "0.1.0",
-  "ollama_port": 11434
+  "ollama_port": 11434,
+  "gpu_available": true,
+  "gpu_devices": [
+    { "model": "NVIDIA RTX 4090", "count": 2 }
+  ]
 }
 ```
 
@@ -392,7 +397,13 @@ Get list of registered agents.
     "ollama_port": 11434,
     "status": "online",
     "registered_at": "2025-10-30T12:00:00Z",
-    "last_seen": "2025-10-30T12:05:00Z"
+    "last_seen": "2025-10-30T12:05:00Z",
+    "gpu_available": true,
+    "gpu_devices": [
+      { "model": "NVIDIA RTX 4090", "count": 2 }
+    ],
+    "gpu_count": 2,
+    "gpu_model": "NVIDIA RTX 4090"
   }
 ]
 ```

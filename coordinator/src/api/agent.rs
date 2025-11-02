@@ -12,19 +12,34 @@ use ollama_coordinator_common::{
     types::Agent,
 };
 use serde::Deserialize;
+use serde_json::json;
 
 /// POST /api/agents - エージェント登録
 pub async fn register_agent(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
-    // GPU必須チェック
-    if !req.gpu_available {
+    let has_valid_gpu = req.gpu_available
+        && !req.gpu_devices.is_empty()
+        && req.gpu_devices.iter().all(|device| device.is_valid());
+
+    if !has_valid_gpu {
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
-                "GPU is required for agent registration".to_string(),
+                "GPU hardware is required".to_string(),
             ),
         )));
+    }
+
+    let mut req = req;
+
+    if req.gpu_count.is_none() {
+        let total_count = req.gpu_devices.iter().map(|device| device.count).sum();
+        req.gpu_count = Some(total_count);
+    }
+
+    if req.gpu_model.is_none() {
+        req.gpu_model = req.gpu_devices.first().map(|device| device.model.clone());
     }
 
     let response = state.registry.register(req).await?;
@@ -125,7 +140,10 @@ impl IntoResponse for AppError {
             }
             CoordinatorError::Common(err) => {
                 // GPU必須エラーの場合は403 Forbiddenを返す
-                if err.to_string().contains("GPU is required") {
+                let message = err.to_string();
+                if message.contains("GPU is required")
+                    || message.contains("GPU hardware is required")
+                {
                     (StatusCode::FORBIDDEN, self.0.to_string())
                 } else {
                     (StatusCode::BAD_REQUEST, self.0.to_string())
@@ -133,7 +151,11 @@ impl IntoResponse for AppError {
             }
         };
 
-        (status, message).into_response()
+        let payload = json!({
+            "error": message
+        });
+
+        (status, Json(payload)).into_response()
     }
 }
 
@@ -144,7 +166,11 @@ mod tests {
         balancer::{LoadManager, MetricsUpdate, RequestOutcome},
         registry::AgentRegistry,
     };
-    use ollama_coordinator_common::{protocol::RegisterStatus, types::AgentStatus};
+    use axum::body::to_bytes;
+    use ollama_coordinator_common::{
+        protocol::RegisterStatus,
+        types::{AgentStatus, GpuDeviceInfo},
+    };
     use std::net::IpAddr;
     use std::time::Duration;
 
@@ -157,6 +183,13 @@ mod tests {
         }
     }
 
+    fn sample_gpu_devices() -> Vec<GpuDeviceInfo> {
+        vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }]
+    }
+
     #[tokio::test]
     async fn test_register_agent_success() {
         let state = create_test_state();
@@ -166,6 +199,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -195,6 +229,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -208,6 +243,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -220,6 +256,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_register_agent_gpu_required_error_is_json() {
+        let state = create_test_state();
+        let req = RegisterRequest {
+            machine_name: "gpu-required-test".to_string(),
+            ip_address: "192.168.1.101".parse().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 11434,
+            gpu_available: false,
+            gpu_devices: Vec::new(),
+            gpu_count: None,
+            gpu_model: None,
+        };
+
+        let response = register_agent(State(state), Json(req))
+            .await
+            .unwrap_err()
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let expected = "検証エラー: GPU hardware is required";
+        assert_eq!(body["error"], expected);
+    }
+
+    #[tokio::test]
+    async fn test_register_agent_missing_gpu_devices_rejected() {
+        let state = create_test_state();
+        let req = RegisterRequest {
+            machine_name: "missing-gpu-devices".to_string(),
+            ip_address: "192.168.1.102".parse().unwrap(),
+            ollama_version: "0.1.0".to_string(),
+            ollama_port: 11434,
+            gpu_available: true,
+            gpu_devices: Vec::new(),
+            gpu_count: None,
+            gpu_model: None,
+        };
+
+        let response = register_agent(State(state), Json(req))
+            .await
+            .unwrap_err()
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["error"], "検証エラー: GPU hardware is required");
+    }
+
+    #[tokio::test]
     async fn test_register_same_machine_different_port_creates_multiple_agents() {
         let state = create_test_state();
 
@@ -229,6 +316,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -244,6 +332,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 12434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -268,6 +357,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -334,6 +424,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -418,6 +509,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             }),
@@ -458,6 +550,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             }),
@@ -486,6 +579,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             }),
@@ -513,6 +607,7 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: false,
+            gpu_devices: Vec::new(),
             gpu_count: None,
             gpu_model: None,
         };

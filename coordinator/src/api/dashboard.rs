@@ -13,7 +13,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use ollama_coordinator_common::types::{AgentStatus, HealthMetrics};
+use ollama_coordinator_common::types::{AgentStatus, GpuDeviceInfo, HealthMetrics};
 use serde::Serialize;
 use std::{collections::HashMap, time::Instant};
 use uuid::Uuid;
@@ -62,6 +62,9 @@ pub struct DashboardAgent {
     /// GPUモデル名
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_model_name: Option<String>,
+    /// GPUデバイス一覧
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpu_devices: Vec<GpuDeviceInfo>,
     /// GPU計算能力
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_compute_capability: Option<String>,
@@ -262,6 +265,7 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 gpu_memory_used_mb,
                 gpu_temperature,
                 gpu_model_name,
+                gpu_devices: agent.gpu_devices.clone(),
                 gpu_compute_capability,
                 gpu_capability_score,
                 active_requests,
@@ -317,7 +321,7 @@ mod tests {
         balancer::{LoadManager, MetricsUpdate, RequestOutcome},
         registry::AgentRegistry,
     };
-    use ollama_coordinator_common::protocol::RegisterRequest;
+    use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::{IpAddr, Ipv4Addr};
     use tokio::time::Duration;
 
@@ -328,6 +332,13 @@ mod tests {
             registry,
             load_manager,
         }
+    }
+
+    fn sample_gpu_devices() -> Vec<GpuDeviceInfo> {
+        vec![GpuDeviceInfo {
+            model: "Test GPU".to_string(),
+            count: 1,
+        }]
     }
 
     #[tokio::test]
@@ -341,6 +352,7 @@ mod tests {
             ollama_version: "0.1.0".into(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -412,6 +424,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -427,6 +440,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -489,6 +503,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -533,6 +548,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })
@@ -569,6 +585,7 @@ mod tests {
                 ollama_version: "0.1.0".into(),
                 ollama_port: 11434,
                 gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
                 gpu_model: Some("Test GPU".to_string()),
             })

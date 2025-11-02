@@ -44,3 +44,4 @@ metal = "0.29"
 tokio = { workspace = true, features = ["test-util"] }
 wiremock = "0.6.5"
 once_cell = "1.21"
+tempfile = "3"

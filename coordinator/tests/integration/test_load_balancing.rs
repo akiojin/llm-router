@@ -2,11 +2,11 @@
 //!
 //! 複数エージェントへのリクエスト分散と負荷ベース選択の検証
 
+use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
 use ollama_coordinator_coordinator::{
     balancer::{LoadManager, MetricsUpdate, RequestOutcome},
     registry::AgentRegistry,
 };
-use ollama_coordinator_common::protocol::RegisterRequest;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -26,6 +26,10 @@ async fn test_round_robin_load_balancing() {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
@@ -42,11 +46,7 @@ async fn test_round_robin_load_balancing() {
 
         load_manager.begin_request(agent.id).await.unwrap();
         load_manager
-            .finish_request(
-                agent.id,
-                RequestOutcome::Success,
-                Duration::from_millis(50),
-            )
+            .finish_request(agent.id, RequestOutcome::Success, Duration::from_millis(50))
             .await
             .unwrap();
     }
@@ -68,6 +68,10 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -82,6 +86,10 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -100,6 +108,9 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             gpu_memory_total_mb: None,
             gpu_memory_used_mb: None,
             gpu_temperature: None,
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
             active_requests: 2,
             average_response_time_ms: None,
         })
@@ -115,6 +126,9 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             gpu_memory_total_mb: None,
             gpu_memory_used_mb: None,
             gpu_temperature: None,
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
             active_requests: 0,
             average_response_time_ms: None,
         })
@@ -152,6 +166,10 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -166,6 +184,10 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         })
@@ -183,6 +205,9 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             gpu_memory_total_mb: None,
             gpu_memory_used_mb: None,
             gpu_temperature: None,
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
             active_requests: 1,
             average_response_time_ms: Some(250.0),
         })
@@ -198,6 +223,9 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             gpu_memory_total_mb: None,
             gpu_memory_used_mb: None,
             gpu_temperature: None,
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
             active_requests: 1,
             average_response_time_ms: Some(120.0),
         })

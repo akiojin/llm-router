@@ -182,7 +182,7 @@ async fn recover_corrupted_agents_file(data_file: &PathBuf) -> CoordinatorResult
 mod tests {
     use super::*;
     use chrono::Utc;
-    use ollama_coordinator_common::types::AgentStatus;
+    use ollama_coordinator_common::types::{AgentStatus, GpuDeviceInfo};
     use once_cell::sync::Lazy;
     use std::net::IpAddr;
     use tempfile::tempdir;
@@ -232,6 +232,10 @@ mod tests {
             tags: Vec::new(),
             notes: None,
             loaded_models: Vec::new(),
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_available: true,
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -275,6 +279,10 @@ mod tests {
             tags: Vec::new(),
             notes: None,
             loaded_models: Vec::new(),
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_available: true,
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -316,6 +324,10 @@ mod tests {
             tags: Vec::new(),
             notes: None,
             loaded_models: Vec::new(),
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_available: true,
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -340,6 +352,10 @@ mod tests {
             tags: vec!["primary".into()],
             notes: None,
             loaded_models: vec!["gpt-oss:7b".into()],
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+            }],
             gpu_available: true,
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),

@@ -3,7 +3,11 @@
 //! CPU / メモリ / GPU 使用率の監視
 
 use nvml_wrapper::{error::NvmlError, Nvml};
-use ollama_coordinator_common::error::{AgentError, AgentResult};
+use ollama_coordinator_common::{
+    error::{AgentError, AgentResult},
+    types::GpuDeviceInfo,
+};
+use std::path::PathBuf;
 use sysinfo::System;
 use tracing::{debug, warn};
 
@@ -187,6 +191,19 @@ impl MetricsCollector {
     pub fn get_gpu_capability(&self) -> Option<GpuCapability> {
         self.gpu.as_ref().and_then(|gpu| gpu.get_capability().ok())
     }
+
+    /// 登録リクエストに使用するGPUデバイス一覧を取得
+    pub fn gpu_devices(&self) -> Vec<GpuDeviceInfo> {
+        if !self.has_gpu() {
+            return Vec::new();
+        }
+
+        match (self.gpu_model(), self.gpu_count()) {
+            (Some(model), Some(count)) if count > 0 => vec![GpuDeviceInfo { model, count }],
+            (Some(model), _) => vec![GpuDeviceInfo { model, count: 1 }],
+            _ => Vec::new(),
+        }
+    }
 }
 
 impl Default for MetricsCollector {
@@ -315,16 +332,20 @@ impl NvidiaGpuCollector {
 
     /// NVIDIA GPUの存在をデバイスファイルや/proc/driverで確認
     fn is_nvidia_gpu_present() -> bool {
-        use std::path::Path;
-
         // Method 1: /dev/nvidia0 デバイスファイル確認
-        if Path::new("/dev/nvidia0").exists() {
+        let device_path = std::env::var("OLLAMA_TEST_NVIDIA_DEVICE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/dev/nvidia0"));
+        if device_path.exists() {
             debug!("Found NVIDIA GPU via /dev/nvidia0");
             return true;
         }
 
         // Method 2: /proc/driver/nvidia/version 確認
-        if Path::new("/proc/driver/nvidia/version").exists() {
+        let version_path = std::env::var("OLLAMA_TEST_NVIDIA_VERSION_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/proc/driver/nvidia/version"));
+        if version_path.exists() {
             debug!("Found NVIDIA GPU via /proc/driver/nvidia/version");
             return true;
         }
@@ -444,6 +465,12 @@ impl AppleSiliconGpuCollector {
 
     /// lscpuコマンドでApple Siliconを検出
     fn detect_via_lscpu() -> Result<String, String> {
+        if let Ok(mock_path) = std::env::var("OLLAMA_TEST_LSCPU_PATH") {
+            let stdout = std::fs::read_to_string(&mock_path)
+                .map_err(|e| format!("Failed to read mocked lscpu output: {}", e))?;
+            return Self::parse_lscpu_output(&stdout);
+        }
+
         use std::process::Command;
 
         let output = Command::new("lscpu")
@@ -456,6 +483,10 @@ impl AppleSiliconGpuCollector {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 
+        Self::parse_lscpu_output(&stdout)
+    }
+
+    fn parse_lscpu_output(stdout: &str) -> Result<String, String> {
         // "Vendor ID: Apple" をチェック
         for line in stdout.lines() {
             if line.contains("Vendor ID") && line.contains("Apple") {
@@ -471,8 +502,12 @@ impl AppleSiliconGpuCollector {
     fn detect_via_cpuinfo() -> Result<String, String> {
         use std::fs;
 
-        let content = fs::read_to_string("/proc/cpuinfo")
-            .map_err(|e| format!("Failed to read /proc/cpuinfo: {}", e))?;
+        let path = std::env::var("OLLAMA_TEST_CPUINFO_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/proc/cpuinfo"));
+
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
 
         // "CPU implementer : 0x61" (Apple) をチェック
         for line in content.lines() {
@@ -533,15 +568,15 @@ impl AmdGpuCollector {
     /// KFD Topology (sysfs) でAMD GPUを検出
     fn detect_via_kfd_topology() -> Result<(String, u32), String> {
         use std::fs;
-        use std::path::Path;
-
-        let kfd_path = "/sys/class/kfd/kfd/topology/nodes";
-        if !Path::new(kfd_path).exists() {
+        let nodes_path = std::env::var("OLLAMA_TEST_KFD_TOPOLOGY_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/sys/class/kfd/kfd/topology/nodes"));
+        if !nodes_path.exists() {
             return Err("KFD topology not found".to_string());
         }
 
         let entries =
-            fs::read_dir(kfd_path).map_err(|e| format!("Failed to read KFD topology: {}", e))?;
+            fs::read_dir(&nodes_path).map_err(|e| format!("Failed to read KFD topology: {}", e))?;
 
         let mut gpu_count = 0u32;
 
@@ -570,9 +605,11 @@ impl AmdGpuCollector {
 
     /// /dev/kfd デバイスファイルでAMD GPUを検出
     fn detect_via_kfd_device() -> bool {
-        use std::path::Path;
+        let device_path = std::env::var("OLLAMA_TEST_KFD_DEVICE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/dev/kfd"));
 
-        if Path::new("/dev/kfd").exists() {
+        if device_path.exists() {
             debug!("Found AMD GPU via /dev/kfd");
             return true;
         }
@@ -583,14 +620,14 @@ impl AmdGpuCollector {
     /// DRM デバイスでAMD GPUを検出
     fn detect_via_drm_device() -> bool {
         use std::fs;
-        use std::path::Path;
-
-        let drm_path = "/sys/class/drm";
-        if !Path::new(drm_path).exists() {
+        let drm_path = std::env::var("OLLAMA_TEST_DRM_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/sys/class/drm"));
+        if !drm_path.exists() {
             return false;
         }
 
-        if let Ok(entries) = fs::read_dir(drm_path) {
+        if let Ok(entries) = fs::read_dir(&drm_path) {
             for entry in entries.flatten() {
                 let vendor_path = entry.path().join("device/vendor");
                 if vendor_path.exists() {
@@ -664,10 +701,28 @@ impl EnvGpuCollector {
 mod tests {
     use super::*;
     use once_cell::sync::Lazy;
+    use std::fs;
     use std::sync::Mutex;
 
     // 環境変数テスト用のグローバルロック
     static ENV_TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    struct EnvOverride<'a> {
+        key: &'a str,
+    }
+
+    impl<'a> EnvOverride<'a> {
+        fn new(key: &'a str, value: impl AsRef<str>) -> Self {
+            std::env::set_var(key, value.as_ref());
+            Self { key }
+        }
+    }
+
+    impl Drop for EnvOverride<'_> {
+        fn drop(&mut self) {
+            std::env::remove_var(self.key);
+        }
+    }
 
     #[test]
     fn test_metrics_collector_creation() {
@@ -810,6 +865,26 @@ mod tests {
     }
 
     #[test]
+    fn test_gpu_devices_from_env_vars() {
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+
+        std::env::set_var("OLLAMA_GPU_AVAILABLE", "true");
+        std::env::set_var("OLLAMA_GPU_MODEL", "Env GPU");
+        std::env::set_var("OLLAMA_GPU_COUNT", "3");
+
+        let collector = MetricsCollector::new();
+        let devices = collector.gpu_devices();
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].model, "Env GPU");
+        assert_eq!(devices[0].count, 3);
+
+        std::env::remove_var("OLLAMA_GPU_AVAILABLE");
+        std::env::remove_var("OLLAMA_GPU_MODEL");
+        std::env::remove_var("OLLAMA_GPU_COUNT");
+    }
+
+    #[test]
     fn test_gpu_detection_env_vars_disabled() {
         let _lock = ENV_TEST_LOCK.lock().unwrap();
 
@@ -905,6 +980,38 @@ mod tests {
     }
 
     #[test]
+    fn test_apple_silicon_detection_with_mocked_lscpu_path() {
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mock_path = dir.path().join("lscpu.txt");
+        fs::write(
+            &mock_path,
+            "Architecture: aarch64\nVendor ID: Apple\nModel name: Apple M4 Ultra\n",
+        )
+        .unwrap();
+        let _guard = EnvOverride::new("OLLAMA_TEST_LSCPU_PATH", mock_path.to_string_lossy());
+
+        let result = super::AppleSiliconGpuCollector::detect_via_lscpu();
+        assert_eq!(result.unwrap(), "Apple Silicon");
+    }
+
+    #[test]
+    fn test_apple_silicon_detection_with_mocked_cpuinfo_path() {
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let cpuinfo_path = dir.path().join("cpuinfo");
+        fs::write(
+            &cpuinfo_path,
+            "Processor\t: 0\nCPU implementer : 0x61\nCPU part\t: 0xd40\n",
+        )
+        .unwrap();
+        let _guard = EnvOverride::new("OLLAMA_TEST_CPUINFO_PATH", cpuinfo_path.to_string_lossy());
+
+        let result = super::AppleSiliconGpuCollector::detect_via_cpuinfo();
+        assert_eq!(result.unwrap(), "Apple Silicon");
+    }
+
+    #[test]
     fn test_amd_gpu_detection_methods() {
         use std::path::Path;
 
@@ -929,6 +1036,39 @@ mod tests {
     }
 
     #[test]
+    fn test_amd_gpu_detection_with_mocked_topology() {
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+
+        let nodes_dir = dir.path().join("nodes");
+        fs::create_dir_all(nodes_dir.join("node0")).unwrap();
+        fs::write(
+            nodes_dir.join("node0/properties"),
+            "name : agent0\nvendor_id : 0x1002\n",
+        )
+        .unwrap();
+        let device_path = dir.path().join("dev/kfd");
+        fs::create_dir_all(device_path.parent().unwrap()).unwrap();
+        fs::write(&device_path, b"").unwrap();
+        let drm_dir = dir.path().join("drm/card0/device");
+        fs::create_dir_all(&drm_dir).unwrap();
+        fs::write(drm_dir.join("vendor"), "0x1002\n").unwrap();
+
+        let _topology_guard =
+            EnvOverride::new("OLLAMA_TEST_KFD_TOPOLOGY_DIR", nodes_dir.to_string_lossy());
+        let _device_guard =
+            EnvOverride::new("OLLAMA_TEST_KFD_DEVICE_PATH", device_path.to_string_lossy());
+        let _drm_guard = EnvOverride::new(
+            "OLLAMA_TEST_DRM_DIR",
+            dir.path().join("drm").to_string_lossy(),
+        );
+
+        let collector = super::AmdGpuCollector::new().expect("AMD GPU should be detected");
+        assert_eq!(collector.device_count(), 1);
+        assert_eq!(collector.model_name(), Some("AMD GPU".to_string()));
+    }
+
+    #[test]
     fn test_nvidia_gpu_detection_methods() {
         use std::path::Path;
 
@@ -947,5 +1087,33 @@ mod tests {
                 println!("NVIDIA GPU may be detected: {:?}", collector.gpu_model());
             }
         }
+    }
+
+    #[test]
+    fn test_nvidia_gpu_detection_with_mocked_paths() {
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+
+        let dev_dir = dir.path().join("dev");
+        fs::create_dir_all(&dev_dir).unwrap();
+        fs::write(dev_dir.join("nvidia0"), b"").unwrap();
+
+        let version_dir = dir.path().join("proc/driver/nvidia");
+        fs::create_dir_all(&version_dir).unwrap();
+        fs::write(version_dir.join("version"), "Mock NVIDIA Version\n").unwrap();
+
+        let _dev_guard = EnvOverride::new(
+            "OLLAMA_TEST_NVIDIA_DEVICE_PATH",
+            dev_dir.join("nvidia0").to_string_lossy(),
+        );
+        let _version_guard = EnvOverride::new(
+            "OLLAMA_TEST_NVIDIA_VERSION_PATH",
+            version_dir.join("version").to_string_lossy(),
+        );
+
+        assert!(
+            super::NvidiaGpuCollector::is_nvidia_gpu_present(),
+            "mocked NVIDIA paths should be detected"
+        );
     }
 }

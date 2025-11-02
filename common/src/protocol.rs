@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use uuid::Uuid;
 
+use crate::types::GpuDeviceInfo;
+
 /// エージェント登録リクエスト
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RegisterRequest {
@@ -19,6 +21,9 @@ pub struct RegisterRequest {
     pub ollama_port: u16,
     /// GPU利用可能フラグ
     pub gpu_available: bool,
+    /// GPUデバイス情報
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpu_devices: Vec<GpuDeviceInfo>,
     /// GPU個数
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_count: Option<u32>,
@@ -143,6 +148,10 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "NVIDIA RTX 4090".to_string(),
+                count: 2,
+            }],
             gpu_count: Some(2),
             gpu_model: Some("NVIDIA RTX 4090".to_string()),
         };
