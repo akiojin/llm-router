@@ -74,28 +74,27 @@
 
 #### データモデル
 
-- [ ] **T011** [P] `common/src/types.rs` にAgentMetrics実装
-  - フィールド: agent_id, cpu_usage, memory_usage, active_requests, avg_response_time, timestamp
-  - Derive: Debug, Clone, Serialize, Deserialize
+- [x] **T011** [P] `common/src/types.rs` にAgentMetrics実装
+  - ✅ T006で既に実装済み（agent_id, cpu_usage, memory_usage, active_requests, avg_response_time_ms, timestamp）
+  - ✅ Debug, Clone, Serialize, Deserializeを実装
 
 #### メトリクスストレージ
 
-- [ ] **T012** `coordinator/src/registry/mod.rs` にmetricsフィールド追加
-  - フィールド: `metrics: Arc<RwLock<HashMap<Uuid, AgentMetrics>>>`
-  - 初期化: 空のHashMap
+- [x] **T012** `coordinator/src/registry/mod.rs` にmetricsフィールド追加
+  - ✅ AgentRegistryにmetrics: Arc<RwLock<HashMap<Uuid, AgentMetrics>>>を追加
+  - ✅ new()とwith_storage()で空のHashMapとして初期化
 
-- [ ] **T013** `coordinator/src/registry/mod.rs` にupdate_metrics()メソッド実装
-  - 機能: エージェントIDをキーにメトリクス保存
+- [x] **T013** `coordinator/src/registry/mod.rs` にupdate_metrics()メソッド実装
+  - ✅ エージェント存在確認 → メトリクス保存の実装完了
 
 #### 負荷ベース選択ロジック
 
-- [ ] **T014** `coordinator/src/registry/mod.rs` にselect_agent_by_metrics()メソッド実装
-  - 機能: 負荷スコア計算 → 最小スコアエージェント選択
-  - スコア計算: `cpu_usage + memory_usage + (active_requests * 10)`
+- [x] **T014** `coordinator/src/balancer/mod.rs` にselect_agent_by_metrics()メソッド実装
+  - ✅ 負荷スコア計算: cpu_usage + memory_usage + (active_requests * 10)
+  - ✅ 最小スコアエージェント選択ロジック実装
 
-- [ ] **T015** `coordinator/src/registry/mod.rs` にフォールバックロジック実装
-  - 条件: すべてのエージェントがCPU > 80%
-  - アクション: ラウンドロビンにフォールバック
+- [x] **T015** `coordinator/src/balancer/mod.rs` にフォールバックロジック実装
+  - ✅ 全エージェントCPU > 80%時のラウンドロビンフォールバック実装
 
 #### メトリクス収集API
 

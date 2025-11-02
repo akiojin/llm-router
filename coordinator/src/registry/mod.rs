@@ -6,7 +6,7 @@ use chrono::Utc;
 use ollama_coordinator_common::{
     error::{CoordinatorError, CoordinatorResult},
     protocol::{RegisterRequest, RegisterResponse, RegisterStatus},
-    types::{Agent, AgentStatus, GpuDeviceInfo},
+    types::{Agent, AgentMetrics, AgentStatus, GpuDeviceInfo},
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -18,6 +18,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct AgentRegistry {
     agents: Arc<RwLock<HashMap<Uuid, Agent>>>,
+    metrics: Arc<RwLock<HashMap<Uuid, AgentMetrics>>>,
     storage_enabled: bool,
 }
 
@@ -26,6 +27,7 @@ impl AgentRegistry {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            metrics: Arc::new(RwLock::new(HashMap::new())),
             storage_enabled: false,
         }
     }
@@ -37,6 +39,7 @@ impl AgentRegistry {
 
         let registry = Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
+            metrics: Arc::new(RwLock::new(HashMap::new())),
             storage_enabled: true,
         };
 
@@ -361,6 +364,26 @@ impl AgentRegistry {
         } else {
             Ok(())
         }
+    }
+
+    /// エージェントメトリクスを更新
+    ///
+    /// エージェントから送信されたメトリクス情報（CPU使用率、メモリ使用率、アクティブリクエスト数等）を
+    /// メモリ内のHashMapに保存する。エージェントが存在しない場合はエラーを返す。
+    pub async fn update_metrics(&self, metrics: AgentMetrics) -> CoordinatorResult<()> {
+        // エージェントが存在するか確認
+        {
+            let agents = self.agents.read().await;
+            if !agents.contains_key(&metrics.agent_id) {
+                return Err(CoordinatorError::AgentNotFound(metrics.agent_id));
+            }
+        }
+
+        // メトリクスを保存
+        let mut metrics_map = self.metrics.write().await;
+        metrics_map.insert(metrics.agent_id, metrics);
+
+        Ok(())
     }
 }
 

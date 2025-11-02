@@ -809,6 +809,68 @@ impl LoadManager {
             is_stale: load_state.is_stale(now),
         }
     }
+
+    /// メトリクスベースのエージェント選択（TDD用：T014-T015）
+    ///
+    /// 負荷スコア（cpu_usage + memory_usage + active_requests * 10）を計算し、
+    /// 最も低いスコアのエージェントを選択する。
+    /// すべてのエージェントがCPU > 80%の場合、ラウンドロビンにフォールバック。
+    pub async fn select_agent_by_metrics(&self) -> CoordinatorResult<Agent> {
+        let agents = self.registry.list().await;
+
+        let online_agents: Vec<_> = agents
+            .into_iter()
+            .filter(|agent| agent.status == AgentStatus::Online)
+            .collect();
+
+        if online_agents.is_empty() {
+            return Err(CoordinatorError::NoAgentsAvailable);
+        }
+
+        let state = self.state.read().await;
+        let now = Utc::now();
+
+        // メトリクスを持つエージェントの負荷スコアを計算
+        let mut candidates: Vec<(Agent, f64)> = Vec::new();
+
+        for agent in &online_agents {
+            if let Some(load_state) = state.get(&agent.id) {
+                if let Some(metrics) = &load_state.last_metrics {
+                    if !load_state.is_stale(now) {
+                        // 負荷スコア = cpu_usage + memory_usage + (active_requests * 10)
+                        let score = metrics.cpu_usage as f64
+                            + metrics.memory_usage as f64
+                            + (load_state.combined_active() as f64 * 10.0);
+                        candidates.push((agent.clone(), score));
+                    }
+                }
+            }
+        }
+
+        // すべてのエージェントがCPU > 80%かチェック
+        let all_high_load = !candidates.is_empty()
+            && candidates.iter().all(|(agent, _)| {
+                if let Some(load_state) = state.get(&agent.id) {
+                    if let Some(metrics) = &load_state.last_metrics {
+                        return metrics.cpu_usage > 80.0;
+                    }
+                }
+                false
+            });
+
+        if all_high_load || candidates.is_empty() {
+            // フォールバック: ラウンドロビン
+            let next_index = self
+                .round_robin
+                .fetch_add(1, AtomicOrdering::SeqCst)
+                .rem_euclid(online_agents.len());
+            return Ok(online_agents[next_index].clone());
+        }
+
+        // 最小スコアのエージェントを選択
+        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(candidates[0].0.clone())
+    }
 }
 
 fn align_to_minute(ts: DateTime<Utc>) -> DateTime<Utc> {
