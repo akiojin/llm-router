@@ -1,0 +1,25 @@
+//! Coordinator contract tests entrypoint
+
+#[path = "contract/test_health_check.rs"]
+mod test_health_check;
+
+#[path = "contract/test_agents_list.rs"]
+mod test_agents_list;
+
+#[path = "contract/test_agent_registration.rs"]
+mod test_agent_registration;
+
+#[path = "contract/test_agent_register_gpu.rs"]
+mod test_agent_register_gpu;
+
+#[path = "contract/test_proxy_chat.rs"]
+mod test_proxy_chat;
+
+#[path = "contract/test_proxy_generate.rs"]
+mod test_proxy_generate;
+
+#[path = "contract/test_metrics.rs"]
+mod test_metrics;
+
+// Tests are defined inside the modules; this harness ensures they are built
+// and executed when running `cargo test`.

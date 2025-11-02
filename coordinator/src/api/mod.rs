@@ -5,6 +5,7 @@
 pub mod agent;
 pub mod dashboard;
 pub mod health;
+pub mod metrics;
 pub mod proxy;
 
 use crate::AppState;
@@ -33,6 +34,10 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/agents/:agent_id/settings",
             put(agent::update_agent_settings),
+        )
+        .route(
+            "/api/agents/:agent_id/metrics",
+            post(metrics::update_metrics),
         )
         .route("/api/agents/metrics", get(agent::list_agent_metrics))
         .route("/api/metrics/summary", get(agent::metrics_summary))

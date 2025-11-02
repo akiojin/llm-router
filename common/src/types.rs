@@ -163,6 +163,25 @@ pub enum RequestStatus {
     Failed,
 }
 
+/// エージェントメトリクス
+///
+/// エージェントから定期的に送信される負荷情報
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMetrics {
+    /// エージェントID
+    pub agent_id: Uuid,
+    /// CPU使用率（0.0〜100.0）
+    pub cpu_usage: f64,
+    /// メモリ使用率（0.0〜100.0）
+    pub memory_usage: f64,
+    /// アクティブリクエスト数
+    pub active_requests: u32,
+    /// 平均レスポンス時間（ミリ秒）
+    pub avg_response_time_ms: Option<f64>,
+    /// タイムスタンプ
+    pub timestamp: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,5 +298,57 @@ mod tests {
             serde_json::to_string(&RequestStatus::Failed).unwrap(),
             "\"failed\""
         );
+    }
+
+    #[test]
+    fn test_agent_metrics_serialization() {
+        let agent_id = Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap();
+        let timestamp = DateTime::parse_from_rfc3339("2025-11-02T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let metrics = AgentMetrics {
+            agent_id,
+            cpu_usage: 45.5,
+            memory_usage: 60.2,
+            active_requests: 3,
+            avg_response_time_ms: Some(250.5),
+            timestamp,
+        };
+
+        // JSON serialization
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("\"agent_id\":\"12345678-1234-1234-1234-123456789012\""));
+        assert!(json.contains("\"cpu_usage\":45.5"));
+        assert!(json.contains("\"memory_usage\":60.2"));
+        assert!(json.contains("\"active_requests\":3"));
+        assert!(json.contains("\"avg_response_time_ms\":250.5"));
+
+        // JSON deserialization
+        let deserialized: AgentMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.agent_id, agent_id);
+        assert_eq!(deserialized.cpu_usage, 45.5);
+        assert_eq!(deserialized.memory_usage, 60.2);
+        assert_eq!(deserialized.active_requests, 3);
+        assert_eq!(deserialized.avg_response_time_ms, Some(250.5));
+        assert_eq!(deserialized.timestamp, timestamp);
+    }
+
+    #[test]
+    fn test_agent_metrics_deserialization_without_avg_response_time() {
+        let json = r#"{
+            "agent_id": "12345678-1234-1234-1234-123456789012",
+            "cpu_usage": 30.0,
+            "memory_usage": 40.0,
+            "active_requests": 2,
+            "avg_response_time_ms": null,
+            "timestamp": "2025-11-02T10:00:00Z"
+        }"#;
+
+        let metrics: AgentMetrics = serde_json::from_str(json).unwrap();
+        assert_eq!(metrics.cpu_usage, 30.0);
+        assert_eq!(metrics.memory_usage, 40.0);
+        assert_eq!(metrics.active_requests, 2);
+        assert_eq!(metrics.avg_response_time_ms, None);
     }
 }

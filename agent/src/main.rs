@@ -140,7 +140,9 @@ async fn main() {
                 .as_ref()
                 .map(|c| format!("{}.{}", c.compute_capability.0, c.compute_capability.1)),
             gpu_capability_score: gpu_capability.as_ref().map(|c| c.score()),
-            active_requests: 0, // TODO: 実際のリクエスト数をカウント
+            // エージェントはHTTPサーバーではないため、常に0を送信
+            // 将来的にエージェントがHTTPサーバーとして動作する場合に実装予定
+            active_requests: 0,
             average_response_time_ms: None,
             loaded_models: models,
         };

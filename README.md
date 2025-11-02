@@ -18,6 +18,63 @@ Ollama Coordinator is a system that provides unified management and a single API
 - **WebUI Management**: Manage agent settings, monitoring, and control through browser-based dashboard
 - **Cross-Platform Support**: Works on Windows 10+, macOS 12+, and Linux
 
+## Load Balancing
+
+Ollama Coordinator supports multiple load balancing strategies to optimize request distribution across agents.
+
+### Strategies
+
+#### 1. Metrics-Based Load Balancing (Recommended)
+
+Selects agents based on real-time metrics (CPU usage, memory usage, active requests). This mode provides optimal performance by routing requests to the least loaded agent.
+
+**Configuration:**
+```bash
+# Enable metrics-based load balancing
+LOAD_BALANCER_MODE=metrics cargo run -p ollama-coordinator-coordinator
+```
+
+**Load Score Calculation:**
+```
+score = cpu_usage + memory_usage + (active_requests × 10)
+```
+
+The agent with the **lowest score** is selected. If all agents have CPU usage > 80%, the system automatically falls back to round-robin.
+
+**Example:**
+- Agent A: CPU 20%, Memory 30%, Active 1 → Score = 60 ✓ Selected
+- Agent B: CPU 70%, Memory 50%, Active 5 → Score = 170
+
+#### 2. Advanced Load Balancing (Default)
+
+Combines multiple factors including response time, active requests, and CPU usage for sophisticated agent selection.
+
+**Configuration:**
+```bash
+# Use default advanced load balancing (or omit LOAD_BALANCER_MODE)
+LOAD_BALANCER_MODE=auto cargo run -p ollama-coordinator-coordinator
+```
+
+### Metrics API
+
+Agents can report their metrics to the Coordinator for load balancing decisions.
+
+**Endpoint:** `POST /api/agents/:id/metrics`
+
+**Request:**
+```json
+{
+  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "cpu_usage": 45.5,
+  "memory_usage": 60.2,
+  "active_requests": 3,
+  "avg_response_time_ms": 250.5,
+  "timestamp": "2025-11-02T10:00:00Z"
+}
+```
+
+**Response:** `204 No Content`
+
 ## Architecture
 
 ### System Overview
@@ -198,8 +255,17 @@ For a deeper walkthrough, including API references and customisation tips, see [
 - **GPU**: NVIDIA / AMD / Apple Silicon GPU required for agent registration
   - Automatically detected on startup
   - Docker for Mac: Apple Silicon detection supported
-- **Docker memory**: When running via `docker-compose`, allocate at least 16 GiB RAM to the container (`mem_limit: 16g`, `mem_reservation: 13g`, `memswap_limit: 18g`). On Docker Desktop, open **Settings → Resources** and raise the memory slider to ≥16 GiB before running `docker compose up`. Without this, large models such as `gpt-oss:20b` will fail to start with “requires more system memory” errors.
-- **Ollama**: Pre-installation recommended (automatic download is a future enhancement)
+- **Docker memory**: When running via `docker-compose`, allocate at least 16 GiB RAM to the container (`mem_limit: 16g`, `mem_reservation: 13g`, `memswap_limit: 18g`). On Docker Desktop, open **Settings → Resources** and raise the memory slider to ≥16 GiB before running `docker compose up`. Without this, large models such as `gpt-oss:20b` will fail to start with "requires more system memory" errors.
+- **Ollama**: Automatically downloaded and installed when not present
+  - Progress display during download
+  - Automatic retry on network errors
+  - SHA256 checksum verification
+  - Proxy support (HTTP_PROXY, HTTPS_PROXY environment variables)
+- **LLM Models**: Automatically downloaded on first startup
+  - Memory-based model selection (appropriate model size for available RAM)
+  - Real-time progress display with streaming status updates
+  - Automatic retry on network errors
+  - Models pulled via Ollama API
 - **Management**: Browser-based WebUI dashboard for agent settings and monitoring
 
 ### Coordinator Setup
@@ -232,7 +298,19 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 ./target/release/ollama-coordinator-agent
 ```
 
-**Note**: Ensure Ollama is installed and running on the agent machine before starting the agent. Download Ollama from [ollama.ai](https://ollama.ai).
+**Note**: Ollama is automatically downloaded and installed on first startup if not already present. The agent will:
+- Detect the platform (Linux, macOS, Windows)
+- Download the appropriate Ollama binary
+- Verify integrity with SHA256 checksum
+- Install to `~/.ollama-agent/bin/`
+- **Automatically download LLM models**:
+  - Memory-based model selection (chooses appropriate model size)
+  - Real-time progress display during model download
+  - Automatic retry on network errors (configurable via environment variables)
+  - Streaming response processing for live status updates
+- Start Ollama and register with the coordinator
+
+Manual installation is also supported. Download Ollama from [ollama.ai](https://ollama.ai).
 
 #### GPU Detection
 
@@ -314,6 +392,7 @@ OLLAMA_GPU_COUNT=1 \
 - `DATABASE_URL`: Database URL (default: `sqlite://coordinator.db`)
 - `HEALTH_CHECK_INTERVAL`: Health check interval in seconds (default: `30`)
 - `AGENT_TIMEOUT`: Agent timeout in seconds (default: `60`)
+- `LOAD_BALANCER_MODE`: Load balancing strategy - `metrics` for metrics-based or `auto` for advanced (default: `auto`)
 
 #### Agent
 - `COORDINATOR_URL`: Coordinator URL (default: `http://localhost:8080`)
@@ -321,6 +400,9 @@ OLLAMA_GPU_COUNT=1 \
 - `OLLAMA_GPU_AVAILABLE`: Manual GPU availability flag (optional, auto-detected)
 - `OLLAMA_GPU_MODEL`: Manual GPU model name (optional, auto-detected)
 - `OLLAMA_GPU_COUNT`: Manual GPU count (optional, auto-detected)
+- `OLLAMA_DEFAULT_MODEL`: Default LLM model to download (optional, auto-selected based on memory)
+- `OLLAMA_PULL_TIMEOUT_SECS`: Timeout for model download in seconds (optional)
+- `OLLAMA_API_BASE`: Custom Ollama API base URL (optional, default: `http://127.0.0.1:11434`)
 
 ## Development
 
@@ -420,6 +502,23 @@ Receive health check information (Agent→Coordinator).
   "active_requests": 3
 }
 ```
+
+#### POST /api/agents/:id/metrics
+Update agent metrics for load balancing (Agent→Coordinator).
+
+**Request:**
+```json
+{
+  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "cpu_usage": 45.5,
+  "memory_usage": 60.2,
+  "active_requests": 3,
+  "avg_response_time_ms": 250.5,
+  "timestamp": "2025-11-02T10:00:00Z"
+}
+```
+
+**Response:** `204 No Content`
 
 #### POST /api/chat
 Proxy endpoint for Ollama Chat API.

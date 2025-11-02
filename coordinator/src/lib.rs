@@ -19,9 +19,14 @@ pub mod registry;
 /// データベースアクセス
 pub mod db;
 
+/// メトリクス収集・管理
+pub mod metrics;
+
 /// 設定管理（設定ファイル読み込み）
+///
+/// 将来的にTOMLベースの設定ファイル対応を追加予定（SPEC-32e2b31a T055）
 pub mod config {
-    // TODO: T055で実装
+    // 未実装: 設定ファイル読み込み
 }
 
 /// アプリケーション状態

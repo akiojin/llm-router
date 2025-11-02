@@ -196,11 +196,26 @@ pub async fn proxy_generate(
     }
 }
 
-/// 利用可能なエージェントを選択（負荷ベース + ラウンドロビンフォールバック）
+/// 利用可能なエージェントを選択
+///
+/// 環境変数LOAD_BALANCER_MODEで動作モードを切り替え:
+/// - "metrics": メトリクスベース選択（T014-T015）
+/// - その他（デフォルト）: 既存の高度なロードバランシング
 async fn select_available_agent(
     state: &AppState,
 ) -> Result<ollama_coordinator_common::types::Agent, CoordinatorError> {
-    state.load_manager.select_agent().await
+    let mode = std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
+
+    match mode.as_str() {
+        "metrics" => {
+            // メトリクスベース選択（T014-T015で実装）
+            state.load_manager.select_agent_by_metrics().await
+        }
+        _ => {
+            // デフォルト: 既存の高度なロードバランシング
+            state.load_manager.select_agent().await
+        }
+    }
 }
 
 #[cfg(test)]

@@ -3,9 +3,11 @@
 //! Ollamaの自動ダウンロード、起動、停止、状態監視
 
 use flate2::read::GzDecoder;
+use indicatif::{ProgressBar, ProgressStyle};
 use ollama_coordinator_common::error::{AgentError, AgentResult};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -21,6 +23,26 @@ pub struct OllamaManager {
     ollama_path: PathBuf,
     process: Option<Child>,
     port: u16,
+}
+
+/// ダウンロード進捗情報
+#[derive(Debug, Clone)]
+pub struct DownloadProgress {
+    /// 現在ダウンロードしたバイト数
+    pub current: u64,
+    /// 合計バイト数
+    pub total: u64,
+}
+
+impl DownloadProgress {
+    /// パーセンテージを計算
+    pub fn percentage(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            (self.current as f64 / self.total as f64) * 100.0
+        }
+    }
 }
 
 const DEFAULT_MODEL: &str = "gpt-oss:20b";
@@ -182,8 +204,11 @@ impl OllamaManager {
         Ok(names)
     }
 
-    /// モデルをプル
+    /// モデルをプル（リトライ付き・進捗表示）
     async fn pull_model(&self, model: &str) -> AgentResult<()> {
+        use futures::StreamExt;
+        use indicatif::{ProgressBar, ProgressStyle};
+
         let mut client_builder =
             reqwest::Client::builder().user_agent("ollama-coordinator-agent/0.1");
 
@@ -196,47 +221,120 @@ impl OllamaManager {
             .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
 
         let url = format!("{}/api/pull", self.api_base());
-        let response = client
-            .post(&url)
-            .json(&json!({ "name": model, "stream": false }))
-            .send()
-            .await
-            .map_err(|e| {
-                AgentError::OllamaConnection(format!("Failed to pull model {}: {}", model, e))
-            })?;
 
-        let status = response.status();
-        let body = response.text().await.map_err(|e| {
-            AgentError::Internal(format!("Failed to read pull response for {}: {}", model, e))
+        // リトライ設定を取得
+        let (max_retries, max_backoff_secs) = get_retry_config();
+
+        // リトライ付きでモデルプルを実行（ストリーミング有効）
+        let response = retry_http_request(
+            || {
+                let client = client.clone();
+                let url = url.clone();
+                let model = model.to_string();
+                async move {
+                    client
+                        .post(&url)
+                        .json(&json!({ "name": model, "stream": true }))
+                        .send()
+                        .await
+                }
+            },
+            max_retries,
+            max_backoff_secs,
+        )
+        .await
+        .map_err(|e| {
+            AgentError::OllamaConnection(format!(
+                "Failed to pull model {} after retries: {}",
+                model, e
+            ))
         })?;
 
+        let status = response.status();
         if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
             return Err(AgentError::OllamaConnection(format!(
                 "Failed to pull model {}: HTTP {} {}",
                 model, status, body
             )));
         }
 
-        for line in body.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
+        // プログレスバーを作成（サイズ不明の場合は spinner として使用）
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap(),
+        );
+        pb.set_message(format!("Pulling model {}", model));
 
-            if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(trimmed) {
-                if let Some(error) = map
-                    .get("error")
-                    .and_then(|v| v.as_str())
-                    .filter(|v| !v.is_empty())
-                {
-                    return Err(AgentError::OllamaConnection(format!(
-                        "Failed to pull model {}: {}",
-                        model, error
-                    )));
+        // ストリーミングレスポンスを1行ずつ処理
+        let mut stream = response.bytes_stream();
+        let mut buffer = Vec::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| {
+                AgentError::Internal(format!("Failed to read pull stream for {}: {}", model, e))
+            })?;
+
+            buffer.extend_from_slice(&chunk);
+
+            // 改行で区切られたJSONを処理
+            while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line_bytes = buffer.drain(..=newline_pos).collect::<Vec<_>>();
+                let line = String::from_utf8_lossy(&line_bytes);
+                let trimmed = line.trim();
+
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(trimmed) {
+                    // エラーチェック
+                    if let Some(error) = map
+                        .get("error")
+                        .and_then(|v| v.as_str())
+                        .filter(|v| !v.is_empty())
+                    {
+                        pb.finish_and_clear();
+                        return Err(AgentError::OllamaConnection(format!(
+                            "Failed to pull model {}: {}",
+                            model, error
+                        )));
+                    }
+
+                    // ステータス表示
+                    if let Some(status_msg) = map.get("status").and_then(|v| v.as_str()) {
+                        // ダウンロード進捗がある場合
+                        if let (Some(total), Some(completed)) = (
+                            map.get("total").and_then(|v| v.as_u64()),
+                            map.get("completed").and_then(|v| v.as_u64()),
+                        ) {
+                            if total > 0 {
+                                // プログレスバーを進捗モードに切り替え
+                                if pb.length().is_none() || pb.length() == Some(0) {
+                                    pb.set_length(total);
+                                    pb.set_style(
+                                        ProgressStyle::default_bar()
+                                            .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({percent}%)")
+                                            .unwrap()
+                                            .progress_chars("#>-"),
+                                    );
+                                }
+                                pb.set_position(completed);
+                                pb.set_message(format!("Pulling model {}: {}", model, status_msg));
+                            } else {
+                                pb.set_message(format!("Pulling model {}: {}", model, status_msg));
+                            }
+                        } else {
+                            pb.set_message(format!("Pulling model {}: {}", model, status_msg));
+                        }
+                    }
                 }
             }
         }
 
+        pb.finish_with_message(format!("Model {} pulled successfully", model));
         Ok(())
     }
 
@@ -274,17 +372,22 @@ impl OllamaManager {
                 .map_err(|e| AgentError::Internal(format!("Failed to create directory: {}", e)))?;
         }
 
-        // Ollamaをダウンロード
-        let client = reqwest::Client::builder()
-            .user_agent("ollama-coordinator-agent/0.1")
-            .build()
-            .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
+        // Ollamaをダウンロード（リトライ付き、プロキシ対応）
+        let client = build_http_client_with_proxy()?;
 
-        let response = client
-            .get(&download_url)
-            .send()
-            .await
-            .map_err(|e| AgentError::Internal(format!("Failed to download Ollama: {}", e)))?;
+        let (max_retries, max_backoff_secs) = get_retry_config();
+
+        // リトライ付きでHTTPリクエスト実行
+        let response = retry_http_request(
+            || {
+                let client = client.clone();
+                let url = download_url.clone();
+                async move { client.get(&url).send().await }
+            },
+            max_retries,
+            max_backoff_secs,
+        )
+        .await?;
 
         if !response.status().is_success() {
             return Err(AgentError::Internal(format!(
@@ -293,12 +396,40 @@ impl OllamaManager {
             )));
         }
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| AgentError::Internal(format!("Failed to read Ollama download: {}", e)))?;
+        // プログレスバーを作成
+        let total_size = response.content_length().unwrap_or(0);
+        let pb = ProgressBar::new(total_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb.set_message("Downloading Ollama");
 
-        save_ollama_binary(&bytes, &download_url, &self.ollama_path)?;
+        // チャンク単位でダウンロード
+        use futures::StreamExt;
+        let mut stream = response.bytes_stream();
+        let mut buffer = Vec::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk =
+                chunk.map_err(|e| AgentError::Internal(format!("Failed to read chunk: {}", e)))?;
+            buffer.extend_from_slice(&chunk);
+            pb.inc(chunk.len() as u64);
+        }
+
+        pb.finish_with_message("Download complete");
+
+        // チェックサム検証（環境変数で有効化）
+        if std::env::var("OLLAMA_VERIFY_CHECKSUM").is_ok() {
+            println!("Verifying checksum...");
+            let expected_checksum = fetch_checksum_from_url(&client, &download_url).await?;
+            verify_checksum(&buffer, &expected_checksum)?;
+            println!("Checksum verification successful");
+        }
+
+        save_ollama_binary(&buffer, &download_url, &self.ollama_path)?;
 
         println!("Ollama downloaded successfully to {:?}", self.ollama_path);
         Ok(())
@@ -702,6 +833,154 @@ fn detect_arch() -> String {
     }
 
     std::env::consts::ARCH.to_string()
+}
+
+/// HTTPリクエストをリトライ付きで実行
+///
+/// ネットワークエラー時に指数バックオフでリトライする
+async fn retry_http_request<F, Fut, T>(
+    operation: F,
+    max_retries: u32,
+    max_backoff_secs: u64,
+) -> AgentResult<T>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, reqwest::Error>>,
+{
+    let mut attempt = 0;
+    let mut backoff_secs = 1;
+
+    loop {
+        attempt += 1;
+
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                // リトライすべきエラーかチェック
+                let should_retry = e.is_timeout() || e.is_connect() || is_5xx_error(&e);
+
+                if !should_retry || attempt >= max_retries {
+                    return Err(AgentError::Internal(format!(
+                        "HTTP request failed after {} attempts: {}",
+                        attempt, e
+                    )));
+                }
+
+                println!(
+                    "HTTP request failed (attempt {}/{}): {}. Retrying in {} seconds...",
+                    attempt, max_retries, e, backoff_secs
+                );
+
+                // 指数バックオフで待機
+                sleep(Duration::from_secs(backoff_secs)).await;
+
+                // 次回のバックオフ時間を計算（指数的に増加、最大値まで）
+                backoff_secs = std::cmp::min(backoff_secs * 2, max_backoff_secs);
+            }
+        }
+    }
+}
+
+/// HTTP 5xxエラーかチェック
+fn is_5xx_error(error: &reqwest::Error) -> bool {
+    if let Some(status) = error.status() {
+        status.is_server_error()
+    } else {
+        false
+    }
+}
+
+/// 環境変数からリトライ設定を取得
+fn get_retry_config() -> (u32, u64) {
+    let max_retries = std::env::var("OLLAMA_DOWNLOAD_MAX_RETRIES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+
+    let max_backoff_secs = std::env::var("OLLAMA_DOWNLOAD_MAX_BACKOFF_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60);
+
+    (max_retries, max_backoff_secs)
+}
+
+/// プロキシ設定付きHTTPクライアントを構築
+fn build_http_client_with_proxy() -> AgentResult<reqwest::Client> {
+    let client_builder = reqwest::Client::builder()
+        .user_agent("ollama-coordinator-agent/0.1")
+        .timeout(StdDuration::from_secs(300)); // 5分タイムアウト
+
+    // 環境変数からプロキシ設定を取得（reqwestは自動的にHTTP_PROXY, HTTPS_PROXYを読み込む）
+    // ただし、明示的にNO_PROXYを処理する場合は手動設定が必要
+
+    // reqwestはデフォルトでシステムプロキシ設定を使用するため、
+    // 特別な設定は不要（HTTP_PROXY, HTTPS_PROXY, NO_PROXYを自動認識）
+
+    client_builder
+        .build()
+        .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))
+}
+
+/// SHA256チェックサムを検証
+///
+/// バイナリデータのSHA256ハッシュを計算し、期待されるチェックサムと比較する
+fn verify_checksum(data: &[u8], expected_checksum: &str) -> AgentResult<()> {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let actual_checksum = format!("{:x}", hasher.finalize());
+
+    if actual_checksum.to_lowercase() != expected_checksum.to_lowercase() {
+        return Err(AgentError::Internal(format!(
+            "Checksum mismatch: expected {}, got {}",
+            expected_checksum, actual_checksum
+        )));
+    }
+
+    Ok(())
+}
+
+/// GitHubからチェックサムファイルを取得
+///
+/// ダウンロードURLに基づいてチェックサムファイル（.sha256）をダウンロードする
+async fn fetch_checksum_from_url(
+    client: &reqwest::Client,
+    download_url: &str,
+) -> AgentResult<String> {
+    // チェックサムURLを生成（.sha256拡張子を追加）
+    let checksum_url = format!("{}.sha256", download_url);
+
+    println!("Fetching checksum from {}", checksum_url);
+
+    let (max_retries, max_backoff_secs) = get_retry_config();
+
+    // リトライ付きでチェックサムをダウンロード
+    let response = retry_http_request(
+        || {
+            let client = client.clone();
+            let url = checksum_url.clone();
+            async move { client.get(&url).send().await }
+        },
+        max_retries,
+        max_backoff_secs,
+    )
+    .await?;
+
+    if !response.status().is_success() {
+        return Err(AgentError::Internal(format!(
+            "Failed to fetch checksum: HTTP {}",
+            response.status()
+        )));
+    }
+
+    let checksum = response
+        .text()
+        .await
+        .map_err(|e| AgentError::Internal(format!("Failed to read checksum: {}", e)))?
+        .trim()
+        .to_string();
+
+    Ok(checksum)
 }
 
 /// ollama psコマンドの実行結果

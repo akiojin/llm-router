@@ -19,14 +19,30 @@ pub async fn register_agent(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
-    let has_valid_gpu = req.gpu_available
-        && !req.gpu_devices.is_empty()
-        && req.gpu_devices.iter().all(|device| device.is_valid());
-
-    if !has_valid_gpu {
+    // GPU必須要件の検証（詳細なエラーメッセージ）
+    if !req.gpu_available {
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
-                "GPU hardware is required".to_string(),
+                "GPU hardware is required for agent registration. gpu_available must be true."
+                    .to_string(),
+            ),
+        )));
+    }
+
+    if req.gpu_devices.is_empty() {
+        return Err(AppError(CoordinatorError::Common(
+            ollama_coordinator_common::error::CommonError::Validation(
+                "GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
+                    .to_string(),
+            ),
+        )));
+    }
+
+    if !req.gpu_devices.iter().all(|device| device.is_valid()) {
+        return Err(AppError(CoordinatorError::Common(
+            ollama_coordinator_common::error::CommonError::Validation(
+                "GPU hardware is required for agent registration. Invalid GPU device information (empty model or zero count)."
+                    .to_string(),
             ),
         )));
     }
@@ -277,7 +293,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        let expected = "検証エラー: GPU hardware is required";
+        let expected = "検証エラー: GPU hardware is required for agent registration. gpu_available must be true.";
         assert_eq!(body["error"], expected);
     }
 
@@ -303,7 +319,10 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(body["error"], "検証エラー: GPU hardware is required");
+        assert_eq!(
+            body["error"],
+            "検証エラー: GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
+        );
     }
 
     #[tokio::test]

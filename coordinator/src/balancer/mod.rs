@@ -228,6 +228,154 @@ mod tests {
             (METRICS_HISTORY_CAPACITY + 9) * 2
         );
     }
+
+    #[tokio::test]
+    async fn select_agent_by_metrics_prefers_lower_load() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        // エージェント1: 低負荷
+        let low_load_agent = registry
+            .register(RegisterRequest {
+                machine_name: "low-load".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 10)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        // エージェント2: 高負荷
+        let high_load_agent = registry
+            .register(RegisterRequest {
+                machine_name: "high-load".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 11)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        // 低負荷エージェント: CPU 20%, メモリ 30%, アクティブ 1
+        // スコア = 20 + 30 + (1 * 10) = 60
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: low_load_agent,
+                cpu_usage: 20.0,
+                memory_usage: 30.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 1,
+                average_response_time_ms: Some(100.0),
+            })
+            .await
+            .unwrap();
+
+        // 高負荷エージェント: CPU 70%, メモリ 50%, アクティブ 5
+        // スコア = 70 + 50 + (5 * 10) = 170
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_load_agent,
+                cpu_usage: 70.0,
+                memory_usage: 50.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 5,
+                average_response_time_ms: Some(200.0),
+            })
+            .await
+            .unwrap();
+
+        // 低負荷エージェントが選ばれることを期待
+        let selected = manager.select_agent_by_metrics().await.unwrap();
+        assert_eq!(selected.id, low_load_agent);
+    }
+
+    #[tokio::test]
+    async fn select_agent_by_metrics_deprioritizes_agents_without_metrics() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        // エージェント1: メトリクスあり
+        let with_metrics = registry
+            .register(RegisterRequest {
+                machine_name: "with-metrics".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 20)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        // エージェント2: メトリクスなし
+        let _without_metrics = registry
+            .register(RegisterRequest {
+                machine_name: "without-metrics".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 21)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        // エージェント1にのみメトリクスを記録
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: with_metrics,
+                cpu_usage: 50.0,
+                memory_usage: 40.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 2,
+                average_response_time_ms: Some(150.0),
+            })
+            .await
+            .unwrap();
+
+        // メトリクスのあるエージェントが選ばれることを期待
+        // （メトリクスなしエージェントはcandidatesに含まれず、ラウンドロビンにフォールバック）
+        let selected = manager.select_agent_by_metrics().await.unwrap();
+        // メトリクスがある方が優先されるはず
+        assert_eq!(selected.id, with_metrics);
+    }
 }
 
 /// エージェントの最新ロード状態
@@ -808,6 +956,98 @@ impl LoadManager {
             last_updated: load_state.last_updated(),
             is_stale: load_state.is_stale(now),
         }
+    }
+
+    /// メトリクスベースのエージェント選択
+    ///
+    /// エージェントの最新メトリクス（CPU使用率、メモリ使用率、アクティブリクエスト数）を基に
+    /// 負荷スコアを計算し、最も低いスコアのエージェントを選択します。
+    ///
+    /// # 負荷スコア計算式
+    ///
+    /// ```text
+    /// score = cpu_usage + memory_usage + (active_requests × 10)
+    /// ```
+    ///
+    /// - `cpu_usage`: CPU使用率（0.0～100.0）
+    /// - `memory_usage`: メモリ使用率（0.0～100.0）
+    /// - `active_requests`: アクティブリクエスト数（重み付け：×10）
+    ///
+    /// # フォールバック戦略
+    ///
+    /// 以下のいずれかの条件に該当する場合、ラウンドロビン選択にフォールバックします：
+    ///
+    /// - すべてのエージェントのCPU使用率が80%を超えている
+    /// - メトリクスを持つエージェントが存在しない
+    /// - すべてのメトリクスが古い（120秒以上前）
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(Agent)`: 選択されたエージェント
+    /// - `Err(CoordinatorError::NoAgentsAvailable)`: オンラインエージェントが存在しない
+    ///
+    /// # 例
+    ///
+    /// ```ignore
+    /// let manager = LoadManager::new(registry);
+    /// let agent = manager.select_agent_by_metrics().await?;
+    /// println!("Selected agent: {}", agent.machine_name);
+    /// ```
+    pub async fn select_agent_by_metrics(&self) -> CoordinatorResult<Agent> {
+        let agents = self.registry.list().await;
+
+        let online_agents: Vec<_> = agents
+            .into_iter()
+            .filter(|agent| agent.status == AgentStatus::Online)
+            .collect();
+
+        if online_agents.is_empty() {
+            return Err(CoordinatorError::NoAgentsAvailable);
+        }
+
+        let state = self.state.read().await;
+        let now = Utc::now();
+
+        // メトリクスを持つエージェントの負荷スコアを計算
+        let mut candidates: Vec<(Agent, f64)> = Vec::new();
+
+        for agent in &online_agents {
+            if let Some(load_state) = state.get(&agent.id) {
+                if let Some(metrics) = &load_state.last_metrics {
+                    if !load_state.is_stale(now) {
+                        // 負荷スコア = cpu_usage + memory_usage + (active_requests * 10)
+                        let score = metrics.cpu_usage as f64
+                            + metrics.memory_usage as f64
+                            + (load_state.combined_active() as f64 * 10.0);
+                        candidates.push((agent.clone(), score));
+                    }
+                }
+            }
+        }
+
+        // すべてのエージェントがCPU > 80%かチェック
+        let all_high_load = !candidates.is_empty()
+            && candidates.iter().all(|(agent, _)| {
+                if let Some(load_state) = state.get(&agent.id) {
+                    if let Some(metrics) = &load_state.last_metrics {
+                        return metrics.cpu_usage > 80.0;
+                    }
+                }
+                false
+            });
+
+        if all_high_load || candidates.is_empty() {
+            // フォールバック: ラウンドロビン
+            let next_index = self
+                .round_robin
+                .fetch_add(1, AtomicOrdering::SeqCst)
+                .rem_euclid(online_agents.len());
+            return Ok(online_agents[next_index].clone());
+        }
+
+        // 最小スコアのエージェントを選択
+        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(candidates[0].0.clone())
     }
 }
 

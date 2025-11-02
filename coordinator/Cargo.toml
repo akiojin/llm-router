@@ -32,9 +32,15 @@ tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
+sysinfo = "0.32"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3.8"
 once_cell = "1.21"
 wiremock = "0.6.5"
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "loadbalancer_bench"
+harness = false

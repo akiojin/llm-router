@@ -1,6 +1,7 @@
 # タスク: 自動マージ機能の実装
 
 **機能ID**: `SPEC-47c6f44c` | **入力**: `/ollama-coordinator/specs/SPEC-47c6f44c/`の設計ドキュメント
+**ステータス**: ✅ **実装完了** (2025-10-30 完了)
 **前提条件**: plan.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
 
 ## フォーマット: `[ID] [P?] 説明`

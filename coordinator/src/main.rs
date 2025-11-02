@@ -37,6 +37,11 @@ async fn main() {
     );
     health_monitor.start();
 
+    // ロードバランサーモード確認
+    let load_balancer_mode =
+        std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
+    println!("Load balancer mode: {}", load_balancer_mode);
+
     // アプリケーション状態を初期化
     let state = AppState {
         registry,

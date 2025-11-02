@@ -637,6 +637,145 @@ components:
 
 **重要**: このフェーズは `/speckit.tasks` コマンドで実行
 
+## Ollama自動ダウンロード機能強化（追加要件）
+
+**背景**: 基本的なOllama自動ダウンロード・インストール機能は実装済み（`agent/src/ollama.rs:download()`）。以下の4つの機能強化を追加実装する。
+
+### 新機能要件と技術設計
+
+#### 1. ダウンロード進捗表示（FR-016d）
+
+**目的**: ユーザーがOllamaバイナリ/モデルのダウンロード状況を把握できるようにする
+
+**技術アプローチ**:
+- **依存クレート**: `indicatif` (プログレスバー表示)
+- **実装方針**:
+  - `reqwest`の`Response::bytes_stream()`でチャンク単位でダウンロード
+  - `Content-Length`ヘッダーから総サイズを取得
+  - `ProgressBar`で進捗率（パーセンテージ）、ダウンロード速度、ETA（推定残り時間）を表示
+  - モデルプル時はOllama APIの進捗情報をパース
+
+**実装場所**: `agent/src/ollama.rs:download()`, `agent/src/ollama.rs:pull_model()`
+
+**環境変数**: `OLLAMA_DOWNLOAD_PROGRESS=false` で進捗表示を無効化可能
+
+#### 2. ネットワークエラー時の自動リトライ（FR-016e）
+
+**目的**: ネットワークの一時的な障害に対して自動復旧する
+
+**技術アプローチ**:
+- **依存クレート**: `backoff` (指数バックオフ実装) または手動実装
+- **リトライ戦略**:
+  - 初回失敗: 1秒待機
+  - 2回目失敗: 2秒待機
+  - 3回目失敗: 4秒待機
+  - 4回目失敗: 8秒待機
+  - 5回目失敗: 16秒待機
+  - 6回目以降: 60秒固定（最大値）
+  - 最大リトライ回数: 5回（環境変数で変更可能）
+- **リトライ対象エラー**:
+  - `reqwest::Error::is_timeout()`
+  - `reqwest::Error::is_connect()`
+  - HTTP 5xx系エラー
+- **リトライ非対象**:
+  - HTTP 4xx系エラー（404, 403など）
+  - ディスク容量不足エラー
+
+**実装場所**: `agent/src/ollama.rs:download()`, `agent/src/ollama.rs:pull_model()`
+
+**環境変数**:
+- `OLLAMA_DOWNLOAD_MAX_RETRIES=5` (デフォルト: 5)
+- `OLLAMA_DOWNLOAD_MAX_BACKOFF_SECS=60` (デフォルト: 60)
+
+#### 3. SHA256チェックサム検証（FR-016f）
+
+**目的**: ダウンロードしたバイナリの整合性を保証し、改ざん・破損を検出
+
+**技術アプローチ**:
+- **依存クレート**: `sha2` (SHA256ハッシュ計算)
+- **チェックサム取得**:
+  - GitHub Releases APIから`ollama-{platform}-{arch}.sha256`ファイルをダウンロード
+  - または`OLLAMA_CHECKSUM`環境変数で直接指定
+- **検証フロー**:
+  1. バイナリダウンロード完了後、ファイル全体のSHA256を計算
+  2. 公式チェックサムと比較
+  3. 不一致の場合はファイル削除＋エラー報告
+  4. 一致の場合は展開・インストール継続
+- **フォールバック**: チェックサムファイルが取得できない場合は警告表示のみ（検証スキップ）
+
+**実装場所**: `agent/src/ollama.rs:download()` 内に`verify_checksum()`関数を追加
+
+**環境変数**:
+- `OLLAMA_CHECKSUM=<sha256>` (手動チェックサム指定)
+- `OLLAMA_SKIP_CHECKSUM_VERIFICATION=true` (検証スキップ、非推奨)
+
+#### 4. プロキシ対応（FR-016g）
+
+**目的**: 企業ネットワーク等のプロキシ環境でもダウンロード可能にする
+
+**技術アプローチ**:
+- **依存クレート**: `reqwest` (標準でプロキシサポート)
+- **プロキシ検出順序**:
+  1. 環境変数`HTTP_PROXY`, `HTTPS_PROXY`を確認
+  2. 環境変数`ALL_PROXY`を確認
+  3. プロキシなしで接続
+- **認証付きプロキシ対応**:
+  - `http://user:pass@proxy.example.com:8080` 形式をサポート
+- **プロキシ除外**: `NO_PROXY`環境変数で除外ホストを指定可能
+
+**実装場所**: `agent/src/ollama.rs:download()` でHTTPクライアント作成時にプロキシ設定
+
+**環境変数**:
+- `HTTP_PROXY=http://proxy.example.com:8080`
+- `HTTPS_PROXY=https://proxy.example.com:8443`
+- `ALL_PROXY=http://proxy.example.com:8080`
+- `NO_PROXY=localhost,127.0.0.1,.local`
+
+### 依存関係追加
+
+**agent/Cargo.toml**:
+```toml
+[dependencies]
+# 既存
+reqwest = { version = "0.11", features = ["stream", "rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+
+# 新規追加
+indicatif = "0.17"        # プログレスバー
+sha2 = "0.10"             # SHA256チェックサム
+backoff = "0.4"           # 指数バックオフ（オプション: 手動実装も可）
+```
+
+### テスト戦略
+
+**Contract Tests**:
+- ダウンロード進捗コールバックAPI定義
+
+**Integration Tests**:
+- モックHTTPサーバーで進捗表示テスト（`wiremock` crate使用）
+- ネットワークエラーシミュレーション（タイムアウト、接続エラー）
+- チェックサム検証テスト（正常/不一致/欠損）
+- プロキシ経由ダウンロードテスト（`mockito` crate使用）
+
+**Unit Tests**:
+- 指数バックオフ計算ロジック
+- SHA256ハッシュ計算
+- プロキシURL解析
+
+### 実装優先順位
+
+1. **P0 (最優先)**: リトライ機能（FR-016e）- ネットワーク環境での安定性向上
+2. **P1**: プロキシ対応（FR-016g）- 企業環境での利用可能性
+3. **P2**: ダウンロード進捗表示（FR-016d）- UX改善
+4. **P3**: チェックサム検証（FR-016f）- セキュリティ強化
+
+### 成功基準
+
+- リトライ機能: ネットワークエラー時に最大5回自動リトライし、最終的に成功または明確なエラー報告
+- プロキシ対応: `HTTP_PROXY`設定環境で正常にダウンロード完了
+- 進捗表示: ダウンロード中に進捗率、速度、ETAがリアルタイム更新
+- チェックサム検証: 改ざんファイルを検出してエラー報告
+
 ## Phase 3+: 今後の実装
 
 **Phase 3**: タスク実行 (`/speckit.tasks` コマンドが tasks.md を作成)

@@ -8,10 +8,7 @@ use axum::{
     Router,
 };
 use ollama_coordinator_coordinator::{
-    api,
-    balancer::LoadManager,
-    registry::AgentRegistry,
-    AppState,
+    api, balancer::LoadManager, registry::AgentRegistry, AppState,
 };
 use serde_json::json;
 use tower::ServiceExt;
@@ -118,5 +115,8 @@ async fn register_gpu_agent_missing_devices_is_rejected() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let body = to_bytes(response.into_body(), 1024).await.unwrap();
     let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(error["error"], "検証エラー: GPU hardware is required");
+    assert_eq!(
+        error["error"],
+        "検証エラー: GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
+    );
 }
