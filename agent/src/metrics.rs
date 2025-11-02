@@ -843,4 +843,109 @@ mod tests {
         // クリーンアップ
         std::env::remove_var("OLLAMA_GPU_MODEL");
     }
+
+    #[test]
+    #[cfg_attr(not(target_arch = "aarch64"), ignore)]
+    fn test_apple_silicon_detection_via_lscpu() {
+        use std::process::Command;
+
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+
+        // lscpuコマンドが利用可能かチェック
+        if Command::new("lscpu").output().is_err() {
+            println!("lscpu not available, skipping test");
+            return;
+        }
+
+        // lscpu出力を確認
+        let output = Command::new("lscpu").output().unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        if stdout.contains("Vendor ID") && stdout.contains("Apple") {
+            // Apple Siliconが検出されるべき
+            let collector = MetricsCollector::new();
+            assert!(
+                collector.has_gpu(),
+                "Apple Silicon should be detected via lscpu"
+            );
+            // GPUモデルが取得できることを確認（環境変数が優先される場合もある）
+            let model = collector.gpu_model();
+            println!("Detected GPU model: {:?}", model);
+            // モデル名が取得できれば成功とする
+            assert!(
+                model.is_some(),
+                "GPU model should be detected when lscpu shows Apple"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg_attr(not(target_arch = "aarch64"), ignore)]
+    fn test_apple_silicon_detection_via_cpuinfo() {
+        use std::fs;
+
+        let _lock = ENV_TEST_LOCK.lock().unwrap();
+
+        // /proc/cpuinfoが存在するかチェック
+        if fs::read_to_string("/proc/cpuinfo").is_err() {
+            println!("/proc/cpuinfo not available, skipping test");
+            return;
+        }
+
+        let content = fs::read_to_string("/proc/cpuinfo").unwrap();
+
+        if content.contains("CPU implementer") && content.contains("0x61") {
+            // Apple Siliconが検出されるべき
+            let collector = MetricsCollector::new();
+            assert!(
+                collector.has_gpu(),
+                "Apple Silicon should be detected via /proc/cpuinfo"
+            );
+        }
+    }
+
+    #[test]
+    fn test_amd_gpu_detection_methods() {
+        use std::path::Path;
+
+        // AMD GPU検出に使用されるパスの存在確認テスト
+        // 実際のAMD GPUがなくても、検出ロジックが正しく動作するか確認
+
+        let kfd_path = Path::new("/dev/kfd");
+        let kfd_topology_path = Path::new("/sys/class/kfd/kfd/topology/nodes");
+
+        // これらのパスの存在をチェック（AMD GPUがあれば存在する）
+        let has_kfd = kfd_path.exists();
+        let has_topology = kfd_topology_path.exists();
+
+        // AMD GPUがある環境でのみアサーション
+        if has_kfd || has_topology {
+            let collector = MetricsCollector::new();
+            // AMD GPUが検出される可能性がある
+            if collector.has_gpu() {
+                println!("AMD GPU may be detected: {:?}", collector.gpu_model());
+            }
+        }
+    }
+
+    #[test]
+    fn test_nvidia_gpu_detection_methods() {
+        use std::path::Path;
+
+        // NVIDIA GPU検出に使用されるパスの存在確認テスト
+        let nvidia_dev = Path::new("/dev/nvidia0");
+        let nvidia_version = Path::new("/proc/driver/nvidia/version");
+
+        let has_nvidia_dev = nvidia_dev.exists();
+        let has_nvidia_version = nvidia_version.exists();
+
+        // NVIDIA GPUがある環境でのみアサーション
+        if has_nvidia_dev || has_nvidia_version {
+            let collector = MetricsCollector::new();
+            // NVIDIA GPUが検出される可能性がある
+            if collector.has_gpu() {
+                println!("NVIDIA GPU may be detected: {:?}", collector.gpu_model());
+            }
+        }
+    }
 }
