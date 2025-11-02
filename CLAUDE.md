@@ -53,6 +53,21 @@ GitHub Actions が実行する検証を**全てローカルで事前に成功さ
 - いずれかが失敗した状態でコミットすることを固く禁止する。失敗原因を解消し、再実行→合格を確認してからコミットせよ。
 - ローカル検証結果を残すため、必要に応じて実行ログをメモし、レビュー時に提示できるようにすること。
 
+### commitlint準拠コミットログ（強制）
+
+- コミットメッセージは必ず Conventional Commits 形式（例: `type(scope): summary`）で記述する。`type` は `feat` / `fix` / `docs` / `test` / `chore` / `refactor` / `ci` / `build` などプロジェクトで許可された識別子のみを使用する。
+- `summary` は50文字以内で要点を記載し、語尾に句読点を付けない。必要なら本文に詳細とチケット番号を追記する。
+- コミット前に `.specify/scripts/checks/check-commits.sh --from origin/main --to HEAD` を実行し、手元で commitlint を通過させる。スクリプトは `npx commitlint` を呼び出し、違反コミットを明示的に列挙する。
+- CI（Quality Checks）でも commitlint が必ず実行される。違反が検出された場合は `git commit --amend` や `git rebase -i` でメッセージを修正し、再度ローカルチェックを合格させてからプッシュする。
+- CI・ローカルいずれかで commitlint が失敗した状態でのレビュー依頼やプルリク作成は禁止。
+
+### markdownlint準拠ドキュメント（強制）
+
+- Markdown ファイルは commit 前に `npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git` を実行して lint を通過させる。対象が限定される場合でもルールに従ったグロブを使用し、必ず全ファイルを検証する。
+- 各ドキュメントは MD013（行長）、MD029（リスト番号）、MD041（見出しタイトル）など既定ルールを満たすよう編集する。必要な場合のみ、`.markdownlint.json` で合意された例外設定を追加する。
+- lint で検出された警告を放置した状態でのコミット・プッシュは禁止。修正が困難な場合は lint ルール変更の提案を issue に記録し、承認なしでローカル例外を入れない。
+- CI の Quality Checks でも markdownlint が実行されるため、ローカルで合格しない限り PR がブロックされる。CLI での改善結果を再チェックし、ゼロ警告を確認してからレビューを依頼する。
+
 ### Spec駆動開発ライフサイクル
 
 新機能の開発は、以下の3ステップで進めます：
