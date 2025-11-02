@@ -261,7 +261,11 @@ For a deeper walkthrough, including API references and customisation tips, see [
   - Automatic retry on network errors
   - SHA256 checksum verification
   - Proxy support (HTTP_PROXY, HTTPS_PROXY environment variables)
-  - Memory-based automatic model selection
+- **LLM Models**: Automatically downloaded on first startup
+  - Memory-based model selection (appropriate model size for available RAM)
+  - Real-time progress display with streaming status updates
+  - Automatic retry on network errors
+  - Models pulled via Ollama API
 - **Management**: Browser-based WebUI dashboard for agent settings and monitoring
 
 ### Coordinator Setup
@@ -299,7 +303,11 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 - Download the appropriate Ollama binary
 - Verify integrity with SHA256 checksum
 - Install to `~/.ollama-agent/bin/`
-- Automatically select an appropriate model based on available memory
+- **Automatically download LLM models**:
+  - Memory-based model selection (chooses appropriate model size)
+  - Real-time progress display during model download
+  - Automatic retry on network errors (configurable via environment variables)
+  - Streaming response processing for live status updates
 - Start Ollama and register with the coordinator
 
 Manual installation is also supported. Download Ollama from [ollama.ai](https://ollama.ai).
@@ -392,6 +400,9 @@ OLLAMA_GPU_COUNT=1 \
 - `OLLAMA_GPU_AVAILABLE`: Manual GPU availability flag (optional, auto-detected)
 - `OLLAMA_GPU_MODEL`: Manual GPU model name (optional, auto-detected)
 - `OLLAMA_GPU_COUNT`: Manual GPU count (optional, auto-detected)
+- `OLLAMA_DEFAULT_MODEL`: Default LLM model to download (optional, auto-selected based on memory)
+- `OLLAMA_PULL_TIMEOUT_SECS`: Timeout for model download in seconds (optional)
+- `OLLAMA_API_BASE`: Custom Ollama API base URL (optional, default: `http://127.0.0.1:11434`)
 
 ## Development
 
