@@ -74,6 +74,23 @@ jobs:
           echo "🔍 Running Rust linter..."
           cargo clippy --all-targets --all-features -- -D warnings
 
+  openai-proxy-tests:
+    # OpenAI互換APIの回帰テストを明示的に実行
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run OpenAI proxy tests
+        run: |
+          echo "🤖 Running OpenAI-compatible API tests..."
+          make openai-tests
+
   commitlint:
     # 要件: FR-005
     # 目的: コミットメッセージがConventional Commits準拠かチェック
