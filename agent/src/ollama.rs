@@ -274,17 +274,26 @@ impl OllamaManager {
                 .map_err(|e| AgentError::Internal(format!("Failed to create directory: {}", e)))?;
         }
 
-        // Ollamaをダウンロード
+        // Ollamaをダウンロード（リトライ付き）
         let client = reqwest::Client::builder()
             .user_agent("ollama-coordinator-agent/0.1")
+            .timeout(StdDuration::from_secs(300)) // 5分タイムアウト
             .build()
             .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
 
-        let response = client
-            .get(&download_url)
-            .send()
-            .await
-            .map_err(|e| AgentError::Internal(format!("Failed to download Ollama: {}", e)))?;
+        let (max_retries, max_backoff_secs) = get_retry_config();
+
+        // リトライ付きでHTTPリクエスト実行
+        let response = retry_http_request(
+            || {
+                let client = client.clone();
+                let url = download_url.clone();
+                async move { client.get(&url).send().await }
+            },
+            max_retries,
+            max_backoff_secs,
+        )
+        .await?;
 
         if !response.status().is_success() {
             return Err(AgentError::Internal(format!(
@@ -702,6 +711,76 @@ fn detect_arch() -> String {
     }
 
     std::env::consts::ARCH.to_string()
+}
+
+/// HTTPリクエストをリトライ付きで実行
+///
+/// ネットワークエラー時に指数バックオフでリトライする
+async fn retry_http_request<F, Fut, T>(
+    operation: F,
+    max_retries: u32,
+    max_backoff_secs: u64,
+) -> AgentResult<T>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, reqwest::Error>>,
+{
+    let mut attempt = 0;
+    let mut backoff_secs = 1;
+
+    loop {
+        attempt += 1;
+
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                // リトライすべきエラーかチェック
+                let should_retry = e.is_timeout() || e.is_connect() || is_5xx_error(&e);
+
+                if !should_retry || attempt >= max_retries {
+                    return Err(AgentError::Internal(format!(
+                        "HTTP request failed after {} attempts: {}",
+                        attempt, e
+                    )));
+                }
+
+                println!(
+                    "HTTP request failed (attempt {}/{}): {}. Retrying in {} seconds...",
+                    attempt, max_retries, e, backoff_secs
+                );
+
+                // 指数バックオフで待機
+                sleep(Duration::from_secs(backoff_secs)).await;
+
+                // 次回のバックオフ時間を計算（指数的に増加、最大値まで）
+                backoff_secs = std::cmp::min(backoff_secs * 2, max_backoff_secs);
+            }
+        }
+    }
+}
+
+/// HTTP 5xxエラーかチェック
+fn is_5xx_error(error: &reqwest::Error) -> bool {
+    if let Some(status) = error.status() {
+        status.is_server_error()
+    } else {
+        false
+    }
+}
+
+/// 環境変数からリトライ設定を取得
+fn get_retry_config() -> (u32, u64) {
+    let max_retries = std::env::var("OLLAMA_DOWNLOAD_MAX_RETRIES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+
+    let max_backoff_secs = std::env::var("OLLAMA_DOWNLOAD_MAX_BACKOFF_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60);
+
+    (max_retries, max_backoff_secs)
 }
 
 /// ollama psコマンドの実行結果
