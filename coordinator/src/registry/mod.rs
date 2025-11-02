@@ -184,6 +184,9 @@ impl AgentRegistry {
                 gpu_available: req.gpu_available,
                 gpu_count: req.gpu_count,
                 gpu_model: req.gpu_model,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
             };
             agents.insert(agent_id, agent.clone());
             (agent_id, RegisterStatus::Registered, agent)
@@ -218,6 +221,9 @@ impl AgentRegistry {
         &self,
         agent_id: Uuid,
         loaded_models: Option<Vec<String>>,
+        gpu_model_name: Option<String>,
+        gpu_compute_capability: Option<String>,
+        gpu_capability_score: Option<u32>,
     ) -> CoordinatorResult<()> {
         let agent_to_save = {
             let mut agents = self.agents.write().await;
@@ -228,6 +234,16 @@ impl AgentRegistry {
             agent.status = AgentStatus::Online;
             if let Some(models) = loaded_models {
                 agent.loaded_models = normalize_models(models);
+            }
+            // GPU能力情報を更新
+            if gpu_model_name.is_some() {
+                agent.gpu_model_name = gpu_model_name;
+            }
+            if gpu_compute_capability.is_some() {
+                agent.gpu_compute_capability = gpu_compute_capability;
+            }
+            if gpu_capability_score.is_some() {
+                agent.gpu_capability_score = gpu_capability_score;
             }
             agent.clone()
         };
@@ -556,6 +572,9 @@ mod tests {
                     "".into(),
                     "phi-3".into(),
                 ]),
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();

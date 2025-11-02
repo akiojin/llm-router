@@ -17,7 +17,13 @@ pub async fn health_check(
     };
     state
         .registry
-        .update_last_seen(req.agent_id, models)
+        .update_last_seen(
+            req.agent_id,
+            models,
+            req.gpu_model_name.clone(),
+            req.gpu_compute_capability.clone(),
+            req.gpu_capability_score,
+        )
         .await?;
 
     // 最新メトリクスをロードマネージャーに記録

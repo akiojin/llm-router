@@ -65,6 +65,15 @@ pub struct Agent {
     /// GPUモデル名
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_model: Option<String>,
+    /// GPUモデル名（詳細）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_model_name: Option<String>,
+    /// GPU計算能力 (例: "8.9")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_compute_capability: Option<String>,
+    /// GPU能力スコア (0-10000)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_capability_score: Option<u32>,
 }
 
 /// エージェント状態
@@ -180,6 +189,9 @@ mod tests {
             gpu_available: true,
             gpu_count: Some(2),
             gpu_model: Some("NVIDIA RTX 4090".to_string()),
+            gpu_model_name: Some("NVIDIA GeForce RTX 4090".to_string()),
+            gpu_compute_capability: Some("8.9".to_string()),
+            gpu_capability_score: Some(9850),
         };
 
         let json = serde_json::to_string(&agent).unwrap();
@@ -211,6 +223,9 @@ mod tests {
         assert!(!agent.gpu_available);
         assert!(agent.gpu_count.is_none());
         assert!(agent.gpu_model.is_none());
+        assert!(agent.gpu_model_name.is_none());
+        assert!(agent.gpu_compute_capability.is_none());
+        assert!(agent.gpu_capability_score.is_none());
     }
 
     #[test]
