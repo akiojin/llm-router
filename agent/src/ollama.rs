@@ -274,12 +274,8 @@ impl OllamaManager {
                 .map_err(|e| AgentError::Internal(format!("Failed to create directory: {}", e)))?;
         }
 
-        // Ollamaをダウンロード（リトライ付き）
-        let client = reqwest::Client::builder()
-            .user_agent("ollama-coordinator-agent/0.1")
-            .timeout(StdDuration::from_secs(300)) // 5分タイムアウト
-            .build()
-            .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
+        // Ollamaをダウンロード（リトライ付き、プロキシ対応）
+        let client = build_http_client_with_proxy()?;
 
         let (max_retries, max_backoff_secs) = get_retry_config();
 
@@ -781,6 +777,23 @@ fn get_retry_config() -> (u32, u64) {
         .unwrap_or(60);
 
     (max_retries, max_backoff_secs)
+}
+
+/// プロキシ設定付きHTTPクライアントを構築
+fn build_http_client_with_proxy() -> AgentResult<reqwest::Client> {
+    let client_builder = reqwest::Client::builder()
+        .user_agent("ollama-coordinator-agent/0.1")
+        .timeout(StdDuration::from_secs(300)); // 5分タイムアウト
+
+    // 環境変数からプロキシ設定を取得（reqwestは自動的にHTTP_PROXY, HTTPS_PROXYを読み込む）
+    // ただし、明示的にNO_PROXYを処理する場合は手動設定が必要
+
+    // reqwestはデフォルトでシステムプロキシ設定を使用するため、
+    // 特別な設定は不要（HTTP_PROXY, HTTPS_PROXY, NO_PROXYを自動認識）
+
+    client_builder
+        .build()
+        .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))
 }
 
 /// ollama psコマンドの実行結果
