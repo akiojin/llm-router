@@ -317,14 +317,18 @@ mkdir -p common coordinator agent tests/e2e
 
 ### Integration Tests (並列実行可能)
 
-- [ ] **T099** [P] `agent/tests/integration/test_download_with_progress.rs` に進捗表示
+- [x] **T099** [P] `agent/tests/integration/test_download_with_progress.rs` に進捗表示
   Integration Test (モックHTTPサーバーでチャンク送信)
-- [ ] **T100** [P] `agent/tests/integration/test_download_retry.rs` にリトライ
+  - ✅ テストテンプレート作成（#[ignore]で実装後有効化予定）
+- [x] **T100** [P] `agent/tests/integration/test_download_retry.rs` にリトライ
   Integration Test (タイムアウト・接続エラーシミュレーション)
-- [ ] **T101** [P] `agent/tests/integration/test_download_checksum.rs` にチェックサム検証
+  - ✅ テストテンプレート作成（#[ignore]で実装後有効化予定）
+- [x] **T101** [P] `agent/tests/integration/test_download_checksum.rs` にチェックサム検証
   Integration Test (正常/不一致/欠損)
-- [ ] **T102** [P] `agent/tests/integration/test_download_proxy.rs` にプロキシ
+  - ✅ テストテンプレート作成（#[ignore]で実装後有効化予定）
+- [x] **T102** [P] `agent/tests/integration/test_download_proxy.rs` にプロキシ
   Integration Test (プロキシ経由ダウンロード)
+  - ✅ テストテンプレート作成（4テストケース: HTTP/HTTPS/認証/NO_PROXY）
 
 ### 実装 (優先順位順)
 
