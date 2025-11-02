@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # check-tasks.sh - tasks.mdの全タスク完了チェック
 #

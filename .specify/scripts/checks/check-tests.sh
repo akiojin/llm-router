@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # check-tests.sh - テスト実行チェック
 #

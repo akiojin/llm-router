@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # check-commits.sh - commitlint コミットメッセージ規約チェック
 #
