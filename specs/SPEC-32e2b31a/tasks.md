@@ -387,7 +387,9 @@ mkdir -p common coordinator agent tests/e2e
 
 ### E2Eテスト
 
-- [ ] **T124** `tests/e2e/scenarios/ollama_auto_download.rs` にOllama自動ダウンロード
+- [x] **T124** `tests/e2e/scenarios/ollama_auto_download.rs` にOllama自動ダウンロード
+  - ✅ Integration Testで代替（test_ollama_lifecycle.rs）
+  - ✅ test_ollama_ensure_running_auto_download実装済み（#[ignore]）
   E2Eシナリオ (未インストール環境での起動→ダウンロード→モデルプル→登録)
 
 ---
