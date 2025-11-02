@@ -345,7 +345,7 @@
 - **推定時間**: 2時間
 - **ステータス**: ✅ 完了
 - **検証ログ (2025-11-02)**:
-  - `cargo test -p ollama-coordinator-coordinator --test openai_proxy` を`make openai-tests`経由で実行し、`/api/chat`・`/api/generate` 正常系／未登録エージェント／404エラーがいずれも期待通りのOpenAI互換レスポンスで返ることを確認
+  - `make openai-tests`（内部で `cargo test -p ollama-coordinator-coordinator --test openai_proxy` を実行）により、`/api/chat`・`/api/generate` の正常系／未登録エージェント／404エラーがOpenAI互換レスポンスで返ることを確認
   - `curl http://127.0.0.1:8080/api/chat` でエージェントを経由した疎通を手動確認済み（`gpt-oss:20b` 応答およびメモリ不足エラーの両ケースを取得）
 
 ### T004: 同一マシン複数エージェントE2E ✅
