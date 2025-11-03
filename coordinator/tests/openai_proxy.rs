@@ -13,9 +13,13 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 async fn build_state_with_mock(mock: &MockServer) -> AppState {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
+    let request_history = std::sync::Arc::new(
+        ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
+    );
     let state = AppState {
         registry,
         load_manager,
+        request_history,
     };
 
     // 登録済みエージェントを追加
@@ -197,9 +201,13 @@ async fn test_proxy_chat_missing_model_returns_openai_error() {
 async fn test_proxy_chat_no_agents() {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
+    let request_history = std::sync::Arc::new(
+        ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
+    );
     let router = api::create_router(AppState {
         registry,
         load_manager,
+        request_history,
     });
 
     let payload = ChatRequest {
@@ -319,9 +327,13 @@ async fn test_proxy_generate_streaming_passthrough() {
 async fn test_proxy_generate_no_agents() {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
+    let request_history = std::sync::Arc::new(
+        ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
+    );
     let router = api::create_router(AppState {
         registry,
         load_manager,
+        request_history,
     });
 
     let payload = GenerateRequest {

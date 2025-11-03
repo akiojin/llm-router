@@ -36,4 +36,6 @@ pub struct AppState {
     pub registry: registry::AgentRegistry,
     /// ロードマネージャー
     pub load_manager: balancer::LoadManager,
+    /// リクエスト履歴ストレージ
+    pub request_history: std::sync::Arc<db::request_history::RequestHistoryStorage>,
 }

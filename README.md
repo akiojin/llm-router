@@ -14,6 +14,7 @@ Ollama Coordinator is a system that provides unified management and a single API
 - **Automatic Load Balancing**: Automatically distribute requests across available agents
 - **Automatic Failure Detection**: Detect offline agents and exclude them from distribution
 - **Real-time Monitoring**: Visualize all agent states via web dashboard
+- **Request History Tracking**: Complete request/response logging with 7-day retention
 - **Self-registering Agents**: Agents automatically register with the Coordinator
 - **WebUI Management**: Manage agent settings, monitoring, and control through browser-based dashboard
 - **Cross-Platform Support**: Works on Windows 10+, macOS 12+, and Linux
@@ -441,6 +442,61 @@ This project follows Spec-Driven Development:
 4. Execute tasks (strict TDD cycle)
 
 See [CLAUDE.md](./CLAUDE.md) for details.
+
+## Request History
+
+Ollama Coordinator automatically logs all requests and responses for debugging,
+auditing, and analysis purposes.
+
+### Features
+
+- **Complete Request/Response Logging**: Captures full request bodies,
+response bodies, and metadata
+- **Automatic Retention**: Keeps history for 7 days with automatic cleanup
+- **Web Dashboard**: View, filter, and search request history through the
+web interface
+- **Export Capabilities**: Export history in JSON or CSV format
+- **Filtering Options**: Filter by model, agent, status, and time range
+
+### Accessing Request History
+
+#### Via Web Dashboard
+
+1. Open the coordinator dashboard: `http://localhost:8080/dashboard`
+2. Navigate to the "Request History" section
+3. Use filters to narrow down specific requests
+4. Click on any request to view full details including request/response bodies
+
+#### Via API
+
+**List Request History:**
+```bash
+GET /api/dashboard/request-responses?page=1&per_page=50
+```
+
+**Get Request Details:**
+```bash
+GET /api/dashboard/request-responses/{id}
+```
+
+**Export History:**
+```bash
+# JSON format
+GET /api/dashboard/request-responses/export
+
+# CSV format (via dashboard UI)
+```
+
+### Storage
+
+Request history is stored in JSON format at:
+- Linux/macOS: `~/.ollama-coordinator/request_history.json`
+- Windows: `%USERPROFILE%\.ollama-coordinator\request_history.json`
+
+The file is automatically managed with:
+- Atomic writes (temp file + rename) to prevent corruption
+- File locking to handle concurrent access
+- Automatic cleanup of records older than 7 days
 
 ## API Specification
 

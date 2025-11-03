@@ -9,7 +9,10 @@ use crate::{
     AppState,
 };
 use axum::{
+    body::Body,
     extract::{Path, State},
+    http::StatusCode,
+    response::Response,
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -314,6 +317,115 @@ async fn collect_history(state: &AppState) -> Vec<RequestHistoryPoint> {
     state.load_manager.request_history().await
 }
 
+/// T023: リクエスト履歴一覧API
+pub async fn list_request_responses(
+    State(state): State<AppState>,
+) -> Result<Json<crate::db::request_history::FilteredRecords>, AppError> {
+    let filter = crate::db::request_history::RecordFilter::default();
+    let result = state
+        .request_history
+        .filter_and_paginate(&filter, 1, 100)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(result))
+}
+
+/// T024: リクエスト履歴詳細API
+pub async fn get_request_response_detail(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<ollama_coordinator_common::protocol::RequestResponseRecord>, AppError> {
+    let records = state
+        .request_history
+        .load_records()
+        .await
+        .map_err(AppError::from)?;
+    let record = records.into_iter().find(|r| r.id == id).ok_or_else(|| {
+        ollama_coordinator_common::error::CoordinatorError::Database(format!(
+            "Record {} not found",
+            id
+        ))
+    })?;
+    Ok(Json(record))
+}
+
+/// T025: エクスポートAPI
+pub async fn export_request_responses(State(state): State<AppState>) -> Result<Response, AppError> {
+    let records = state
+        .request_history
+        .load_records()
+        .await
+        .map_err(AppError::from)?;
+
+    // CSV形式でエクスポート
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    wtr.write_record([
+        "id",
+        "timestamp",
+        "request_type",
+        "model",
+        "agent_id",
+        "agent_machine_name",
+        "agent_ip",
+        "duration_ms",
+        "status",
+        "completed_at",
+    ])
+    .map_err(|e| {
+        ollama_coordinator_common::error::CoordinatorError::Internal(format!(
+            "CSV header error: {}",
+            e
+        ))
+    })?;
+
+    for record in records {
+        let status_str = match &record.status {
+            ollama_coordinator_common::protocol::RecordStatus::Success => "success".to_string(),
+            ollama_coordinator_common::protocol::RecordStatus::Error { message } => {
+                format!("error: {}", message)
+            }
+        };
+
+        wtr.write_record(&[
+            record.id.to_string(),
+            record.timestamp.to_rfc3339(),
+            format!("{:?}", record.request_type),
+            record.model,
+            record.agent_id.to_string(),
+            record.agent_machine_name,
+            record.agent_ip.to_string(),
+            record.duration_ms.to_string(),
+            status_str,
+            record.completed_at.to_rfc3339(),
+        ])
+        .map_err(|e| {
+            ollama_coordinator_common::error::CoordinatorError::Internal(format!(
+                "CSV write error: {}",
+                e
+            ))
+        })?;
+    }
+
+    let csv_data = wtr.into_inner().map_err(|e| {
+        ollama_coordinator_common::error::CoordinatorError::Internal(format!(
+            "CSV finalize error: {}",
+            e
+        ))
+    })?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/csv")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"request_history.csv\"",
+        )
+        .body(Body::from(csv_data))
+        .unwrap();
+
+    Ok(response)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,9 +440,12 @@ mod tests {
     fn create_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         AppState {
             registry,
             load_manager,
+            request_history,
         }
     }
 

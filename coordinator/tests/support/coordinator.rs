@@ -12,9 +12,13 @@ use super::http::{spawn_router, TestServer};
 pub async fn spawn_coordinator() -> TestServer {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
+    let request_history = std::sync::Arc::new(
+        ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
+    );
     let state = AppState {
         registry,
         load_manager,
+        request_history,
     };
 
     let router = api::create_router(state);

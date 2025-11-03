@@ -60,9 +60,12 @@ mod tests {
     fn create_test_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         AppState {
             registry,
             load_manager,
+            request_history,
         }
     }
 

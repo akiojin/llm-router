@@ -2,6 +2,18 @@
 //!
 //! JSONファイルベースのデータ永続化
 
+pub mod request_history;
+
+#[cfg(test)]
+pub(crate) mod test_utils {
+    use once_cell::sync::Lazy;
+    use tokio::sync::Mutex as TokioMutex;
+
+    /// テスト用のグローバルロック（環境変数の競合を防ぐ）
+    /// db配下のすべてのテストで共有
+    pub static TEST_LOCK: Lazy<TokioMutex<()>> = Lazy::new(|| TokioMutex::new(()));
+}
+
 use chrono::Utc;
 use ollama_coordinator_common::{
     error::{CoordinatorError, CoordinatorResult},
@@ -183,17 +195,12 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use ollama_coordinator_common::types::{AgentStatus, GpuDeviceInfo};
-    use once_cell::sync::Lazy;
     use std::net::IpAddr;
     use tempfile::tempdir;
-    use tokio::sync::Mutex as TokioMutex;
-
-    // テスト用のグローバルロック（環境変数の競合を防ぐ）
-    static TEST_LOCK: Lazy<TokioMutex<()>> = Lazy::new(|| TokioMutex::new(()));
 
     #[tokio::test]
     async fn test_init_storage() {
-        let _lock = TEST_LOCK.lock().await;
+        let _lock = test_utils::TEST_LOCK.lock().await;
 
         // 一時ディレクトリを使用（_guardでスコープ内保持）
         let _guard = tempdir().unwrap();
@@ -211,7 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_and_load_agent() {
-        let _lock = TEST_LOCK.lock().await;
+        let _lock = test_utils::TEST_LOCK.lock().await;
 
         // 一時ディレクトリを使用（_guardでスコープ内保持）
         let _guard = tempdir().unwrap();
@@ -258,7 +265,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_agent() {
-        let _lock = TEST_LOCK.lock().await;
+        let _lock = test_utils::TEST_LOCK.lock().await;
 
         // 一時ディレクトリを使用（_guardでスコープ内保持）
         let _guard = tempdir().unwrap();
@@ -302,7 +309,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_existing_agent() {
-        let _lock = TEST_LOCK.lock().await;
+        let _lock = test_utils::TEST_LOCK.lock().await;
 
         // 一時ディレクトリを使用（_guardでスコープ内保持）
         let _guard = tempdir().unwrap();
@@ -377,7 +384,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_agents_recovers_from_corrupted_file() {
-        let _lock = TEST_LOCK.lock().await;
+        let _lock = test_utils::TEST_LOCK.lock().await;
 
         let _guard = tempdir().unwrap();
         std::env::set_var("OLLAMA_COORDINATOR_DATA_DIR", _guard.path());

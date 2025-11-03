@@ -176,6 +176,45 @@
           <canvas id="requests-chart" aria-label="Requests per minute" role="img"></canvas>
         </div>
       </section>
+
+      <section class="request-history-section">
+        <header class="section-header">
+          <h2>リクエスト履歴</h2>
+          <div class="section-tools">
+            <button type="button" id="export-history-csv" class="btn">CSVエクスポート</button>
+            <label class="filter-label">
+              <span>モデル</span>
+              <input
+                type="search"
+                id="filter-history-model"
+                placeholder="モデル名でフィルタ"
+                autocomplete="off"
+              />
+            </label>
+          </div>
+        </header>
+
+        <div class="table-wrapper">
+          <table class="request-history-table">
+            <thead>
+              <tr>
+                <th>タイムスタンプ</th>
+                <th>種類</th>
+                <th>モデル</th>
+                <th>エージェント</th>
+                <th>処理時間</th>
+                <th>ステータス</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="request-history-tbody">
+              <tr>
+                <td colspan="7" class="empty-message">履歴を読み込み中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <footer class="page-footer">
@@ -277,6 +316,58 @@
           <button type="button" id="agent-modal-delete" class="btn btn--danger">削除</button>
           <button type="button" id="agent-modal-save" class="btn btn--primary">保存</button>
           <button type="button" id="agent-modal-ok" class="btn">閉じる</button>
+        </footer>
+      </div>
+    </div>
+
+    <div id="request-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="request-modal-title">
+      <div class="modal__dialog">
+        <header class="modal__header">
+          <h2 id="request-modal-title">リクエスト詳細</h2>
+          <button type="button" id="request-modal-close" class="modal__close" aria-label="閉じる">×</button>
+        </header>
+        <section class="modal__content">
+          <form id="request-detail-form" class="detail-list">
+            <div>
+              <dt>ID</dt>
+              <dd id="request-detail-id">-</dd>
+            </div>
+            <div>
+              <dt>タイムスタンプ</dt>
+              <dd id="request-detail-timestamp">-</dd>
+            </div>
+            <div>
+              <dt>種類</dt>
+              <dd id="request-detail-type">-</dd>
+            </div>
+            <div>
+              <dt>モデル</dt>
+              <dd id="request-detail-model">-</dd>
+            </div>
+            <div>
+              <dt>エージェント</dt>
+              <dd id="request-detail-agent">-</dd>
+            </div>
+            <div>
+              <dt>処理時間</dt>
+              <dd id="request-detail-duration">-</dd>
+            </div>
+            <div>
+              <dt>ステータス</dt>
+              <dd id="request-detail-status">-</dd>
+            </div>
+            <div>
+              <dt>リクエストボディ</dt>
+              <dd><pre id="request-detail-request-body" class="json-body">-</pre></dd>
+            </div>
+            <div>
+              <dt>レスポンスボディ</dt>
+              <dd><pre id="request-detail-response-body" class="json-body">-</pre></dd>
+            </div>
+          </form>
+        </section>
+        <footer class="modal__footer">
+          <button type="button" id="request-modal-ok" class="btn">閉じる</button>
         </footer>
       </div>
     </div>

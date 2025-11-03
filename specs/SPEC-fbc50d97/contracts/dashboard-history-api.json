@@ -1,0 +1,318 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Ollama Coordinator - Request History API",
+    "version": "1.0.0",
+    "description": "API契約: リクエスト/レスポンス履歴の取得、検索、エクスポート"
+  },
+  "paths": {
+    "/api/dashboard/request-responses": {
+      "get": {
+        "summary": "リクエスト履歴の一覧取得",
+        "description": "フィルタ条件に基づいてリクエスト履歴を取得。ページネーション対応。",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "モデル名でフィルタ（部分一致）",
+            "example": "llama2"
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "エージェントIDでフィルタ"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["success", "error"] },
+            "description": "ステータスでフィルタ"
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time" },
+            "description": "開始日時（ISO8601形式、この時刻以降のレコード）",
+            "example": "2025-11-01T00:00:00Z"
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time" },
+            "description": "終了日時（ISO8601形式、この時刻以前のレコード）",
+            "example": "2025-11-03T23:59:59Z"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "default": 1 },
+            "description": "ページ番号（1から開始）"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+            "description": "1ページあたりのレコード数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResponseListResponse"
+                },
+                "example": {
+                  "records": [
+                    {
+                      "id": "550e8400-e29b-41d4-a716-446655440000",
+                      "timestamp": "2025-11-03T10:30:00Z",
+                      "request_type": "chat",
+                      "model": "llama2",
+                      "agent_id": "123e4567-e89b-12d3-a456-426614174000",
+                      "agent_machine_name": "gpu-server-01",
+                      "agent_ip": "192.168.1.10",
+                      "request_body": {
+                        "model": "llama2",
+                        "messages": [{ "role": "user", "content": "Hello" }]
+                      },
+                      "response_body": {
+                        "message": { "role": "assistant", "content": "Hi!" }
+                      },
+                      "duration_ms": 1234,
+                      "status": { "type": "success" },
+                      "completed_at": "2025-11-03T10:30:01Z"
+                    }
+                  ],
+                  "total_count": 1,
+                  "page": 1,
+                  "per_page": 100
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": {
+                  "error": "Invalid query parameter",
+                  "details": "page must be >= 1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard/request-responses/{id}": {
+      "get": {
+        "summary": "リクエスト履歴の詳細取得",
+        "description": "指定されたIDのリクエスト履歴を取得",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "リクエストレコードID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestResponseRecord" },
+                "example": {
+                  "id": "550e8400-e29b-41d4-a716-446655440000",
+                  "timestamp": "2025-11-03T10:30:00Z",
+                  "request_type": "chat",
+                  "model": "llama2",
+                  "agent_id": "123e4567-e89b-12d3-a456-426614174000",
+                  "agent_machine_name": "gpu-server-01",
+                  "agent_ip": "192.168.1.10",
+                  "request_body": {
+                    "model": "llama2",
+                    "messages": [{ "role": "user", "content": "Hello" }]
+                  },
+                  "response_body": {
+                    "message": { "role": "assistant", "content": "Hi!" }
+                  },
+                  "duration_ms": 1234,
+                  "status": { "type": "success" },
+                  "completed_at": "2025-11-03T10:30:01Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "レコードが見つからない",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": {
+                  "error": "Record not found",
+                  "details": "No record with id 550e8400-e29b-41d4-a716-446655440000"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard/request-responses/export": {
+      "get": {
+        "summary": "リクエスト履歴のエクスポート",
+        "description": "フィルタ条件に基づいてリクエスト履歴をJSON/CSV形式でエクスポート",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["json", "csv"] },
+            "description": "エクスポート形式"
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "モデル名でフィルタ（一覧エンドポイントと同じ）"
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": { "type": "string", "format": "uuid" },
+            "description": "エージェントIDでフィルタ"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["success", "error"] },
+            "description": "ステータスでフィルタ"
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time" },
+            "description": "開始日時"
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time" },
+            "description": "終了日時"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功（ファイルダウンロード）",
+            "headers": {
+              "Content-Disposition": {
+                "schema": { "type": "string" },
+                "example": "attachment; filename=\"history-2025-11-03.json\""
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/RequestResponseRecord" }
+                }
+              },
+              "text/csv": {
+                "schema": { "type": "string" },
+                "example": "timestamp,request_type,model,agent_machine_name,status,duration_ms\n2025-11-03T10:30:00Z,chat,llama2,gpu-server-01,success,1234\n"
+              }
+            }
+          },
+          "400": {
+            "description": "バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RequestResponseRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "request_type",
+          "model",
+          "agent_id",
+          "agent_machine_name",
+          "agent_ip",
+          "request_body",
+          "duration_ms",
+          "status",
+          "completed_at"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "request_type": { "type": "string", "enum": ["chat", "generate"] },
+          "model": { "type": "string" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "agent_machine_name": { "type": "string" },
+          "agent_ip": { "type": "string" },
+          "request_body": { "type": "object" },
+          "response_body": { "type": "object", "nullable": true },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "status": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": { "type": "string", "enum": ["success"] }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "message"],
+                "properties": {
+                  "type": { "type": "string", "enum": ["error"] },
+                  "message": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "completed_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RequestResponseListResponse": {
+        "type": "object",
+        "required": ["records", "total_count", "page", "per_page"],
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RequestResponseRecord" }
+          },
+          "total_count": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1 },
+          "per_page": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string" },
+          "details": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -25,9 +25,13 @@ use tower::ServiceExt;
 fn build_router() -> (Router, AgentRegistry, LoadManager) {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
+    let request_history = std::sync::Arc::new(
+        ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
+    );
     let state = AppState {
         registry: registry.clone(),
         load_manager: load_manager.clone(),
+        request_history,
     };
     let router = api::create_router(state);
     (router, registry, load_manager)

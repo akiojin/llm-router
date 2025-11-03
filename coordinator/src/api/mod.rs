@@ -52,6 +52,18 @@ pub fn create_router(state: AppState) -> Router {
             "/api/dashboard/metrics/:agent_id",
             get(dashboard::get_agent_metrics),
         )
+        .route(
+            "/api/dashboard/request-responses",
+            get(dashboard::list_request_responses),
+        )
+        .route(
+            "/api/dashboard/request-responses/:id",
+            get(dashboard::get_request_response_detail),
+        )
+        .route(
+            "/api/dashboard/request-responses/export",
+            get(dashboard::export_request_responses),
+        )
         .route("/api/health", post(health::health_check))
         .route("/api/chat", post(proxy::proxy_chat))
         .route("/api/generate", post(proxy::proxy_generate))
@@ -74,9 +86,12 @@ mod tests {
     fn test_state() -> (AppState, AgentRegistry) {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let state = AppState {
             registry: registry.clone(),
             load_manager,
+            request_history,
         };
         (state, registry)
     }

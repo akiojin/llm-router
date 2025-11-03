@@ -1597,3 +1597,157 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+// ========================================
+// Request History (T029-T032)
+// ========================================
+
+let requestHistoryCache = [];
+
+async function fetchRequestHistory() {
+  try {
+    const response = await fetch("/api/dashboard/request-responses");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    requestHistoryCache = data.records || [];
+    renderRequestHistory();
+  } catch (error) {
+    console.error("Failed to fetch request history:", error);
+    const tbody = document.getElementById("request-history-tbody");
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-message">履歴の読み込みに失敗しました</td></tr>`;
+    }
+  }
+}
+
+function renderRequestHistory() {
+  const tbody = document.getElementById("request-history-tbody");
+  if (!tbody) return;
+
+  const filterModel = document.getElementById("filter-history-model")?.value.toLowerCase() || "";
+
+  let filtered = requestHistoryCache;
+  if (filterModel) {
+    filtered = filtered.filter(record =>
+      record.model?.toLowerCase().includes(filterModel)
+    );
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-message">履歴がありません</td></tr>`;
+    return;
+  }
+
+  const rows = filtered.map(record => {
+    const timestamp = new Date(record.timestamp);
+    const statusClass = record.status.type === "success" ? "status-success" : "status-error";
+    const statusText = record.status.type === "success"
+      ? "成功"
+      : `エラー: ${escapeHtml(record.status.message || "不明")}`;
+
+    return `
+      <tr data-record-id="${escapeHtml(record.id)}">
+        <td>${formatTimestamp(timestamp)}</td>
+        <td>${escapeHtml(record.request_type)}</td>
+        <td>${escapeHtml(record.model)}</td>
+        <td title="${escapeHtml(record.agent_ip)}">${escapeHtml(record.agent_machine_name)}</td>
+        <td>${escapeHtml(record.duration_ms)}ms</td>
+        <td><span class="${statusClass}">${statusText}</span></td>
+        <td><button class="btn btn-sm view-request-detail" data-id="${escapeHtml(record.id)}">詳細</button></td>
+      </tr>
+    `;
+  }).join("");
+
+  tbody.innerHTML = rows;
+
+  // 詳細ボタンにイベントリスナーを追加
+  tbody.querySelectorAll(".view-request-detail").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      showRequestDetail(id);
+    });
+  });
+}
+
+async function showRequestDetail(id) {
+  try {
+    const response = await fetch(`/api/dashboard/request-responses/${id}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const record = await response.json();
+
+    document.getElementById("request-detail-id").textContent = record.id;
+    document.getElementById("request-detail-timestamp").textContent = formatTimestamp(new Date(record.timestamp));
+    document.getElementById("request-detail-type").textContent = record.request_type;
+    document.getElementById("request-detail-model").textContent = record.model;
+    document.getElementById("request-detail-agent").textContent = `${record.agent_machine_name} (${record.agent_ip})`;
+    document.getElementById("request-detail-duration").textContent = `${record.duration_ms}ms`;
+
+    const statusText = record.status.type === "success"
+      ? "成功"
+      : `エラー: ${record.status.message || "不明"}`;
+    document.getElementById("request-detail-status").textContent = statusText;
+
+    document.getElementById("request-detail-request-body").textContent =
+      JSON.stringify(record.request_body, null, 2);
+
+    document.getElementById("request-detail-response-body").textContent =
+      record.response_body ? JSON.stringify(record.response_body, null, 2) : "（レスポンスなし）";
+
+    // モーダル表示
+    const modal = document.getElementById("request-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+    }
+  } catch (error) {
+    console.error("Failed to fetch request detail:", error);
+    alert("リクエスト詳細の読み込みに失敗しました");
+  }
+}
+
+function exportHistoryCSV() {
+  window.location.href = "/api/dashboard/request-responses/export";
+}
+
+// リクエスト履歴の初期化
+document.addEventListener("DOMContentLoaded", () => {
+  // CSVエクスポートボタン
+  const exportBtn = document.getElementById("export-history-csv");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportHistoryCSV);
+  }
+
+  // モデルフィルタ
+  const filterModel = document.getElementById("filter-history-model");
+  if (filterModel) {
+    filterModel.addEventListener("input", () => {
+      renderRequestHistory();
+    });
+  }
+
+  // モーダルクローズボタン
+  const requestModalClose = document.getElementById("request-modal-close");
+  const requestModalOk = document.getElementById("request-modal-ok");
+  const requestModal = document.getElementById("request-modal");
+
+  if (requestModalClose && requestModal) {
+    requestModalClose.addEventListener("click", () => {
+      requestModal.classList.add("hidden");
+    });
+  }
+
+  if (requestModalOk && requestModal) {
+    requestModalOk.addEventListener("click", () => {
+      requestModal.classList.add("hidden");
+    });
+  }
+
+  // 初回読み込み
+  fetchRequestHistory();
+
+  // 定期更新（30秒ごと）
+  setInterval(fetchRequestHistory, 30000);
+});

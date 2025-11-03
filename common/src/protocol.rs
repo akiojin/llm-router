@@ -2,6 +2,7 @@
 //!
 //! Agent↔Coordinator間の通信メッセージ
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use uuid::Uuid;
@@ -134,6 +135,58 @@ pub struct GenerateRequest {
     /// ストリーミング有効化
     #[serde(default)]
     pub stream: bool,
+}
+
+/// リクエスト/レスポンスレコード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestResponseRecord {
+    /// レコードの一意識別子
+    pub id: Uuid,
+    /// リクエスト受信時刻
+    pub timestamp: DateTime<Utc>,
+    /// リクエストタイプ（Chat または Generate）
+    pub request_type: RequestType,
+    /// 使用されたモデル名
+    pub model: String,
+    /// 処理したエージェントのID
+    pub agent_id: Uuid,
+    /// エージェントのマシン名
+    pub agent_machine_name: String,
+    /// エージェントのIPアドレス
+    pub agent_ip: IpAddr,
+    /// リクエスト本文（JSON形式）
+    pub request_body: serde_json::Value,
+    /// レスポンス本文（JSON形式、エラー時はNone）
+    pub response_body: Option<serde_json::Value>,
+    /// 処理時間（ミリ秒）
+    pub duration_ms: u64,
+    /// レコードのステータス（成功 or エラー）
+    pub status: RecordStatus,
+    /// レスポンス完了時刻
+    pub completed_at: DateTime<Utc>,
+}
+
+/// リクエストタイプ
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RequestType {
+    /// /api/chat エンドポイント
+    Chat,
+    /// /api/generate エンドポイント
+    Generate,
+}
+
+/// レコードステータス
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum RecordStatus {
+    /// 正常に処理完了
+    Success,
+    /// エラー発生
+    Error {
+        /// エラーメッセージ
+        message: String,
+    },
 }
 
 #[cfg(test)]

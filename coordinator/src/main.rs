@@ -42,10 +42,22 @@ async fn main() {
         std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
     println!("Load balancer mode: {}", load_balancer_mode);
 
+    // リクエスト履歴ストレージを初期化
+    let request_history = std::sync::Arc::new(
+        ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new()
+            .expect("Failed to initialize request history storage"),
+    );
+
+    // クリーンアップタスクを開始（7日以上古いレコードを1時間ごとに削除）
+    ollama_coordinator_coordinator::db::request_history::start_cleanup_task(
+        request_history.clone(),
+    );
+
     // アプリケーション状態を初期化
     let state = AppState {
         registry,
         load_manager,
+        request_history,
     };
 
     // ルーター作成
