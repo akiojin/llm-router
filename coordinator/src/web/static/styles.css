@@ -256,6 +256,14 @@ body {
   border-radius: 8px;
 }
 
+.per-page-select {
+  cursor: pointer;
+  padding-right: 20px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="rgba(255,255,255,0.6)" d="M6 9L1 4h10z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+}
+
 .table-wrapper {
   background: var(--bg-card-alt);
   border-radius: 16px;

@@ -1603,6 +1603,8 @@ function escapeHtml(value) {
 // ========================================
 
 let requestHistoryCache = [];
+let currentHistoryPage = 1;
+let historyPerPage = 50;
 
 async function fetchRequestHistory() {
   try {
@@ -1635,12 +1637,23 @@ function renderRequestHistory() {
     );
   }
 
+  // 新しい順に並べ替え（降順）
+  filtered = filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-message">履歴がありません</td></tr>`;
+    updateHistoryPagination(0, 0);
     return;
   }
 
-  const rows = filtered.map(record => {
+  // ページネーション計算
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / historyPerPage);
+  const startIndex = (currentHistoryPage - 1) * historyPerPage;
+  const endIndex = Math.min(startIndex + historyPerPage, totalItems);
+  const pageItems = filtered.slice(startIndex, endIndex);
+
+  const rows = pageItems.map(record => {
     const timestamp = new Date(record.timestamp);
     const statusClass = record.status.type === "success" ? "status-success" : "status-error";
     const statusText = record.status.type === "success"
@@ -1669,6 +1682,27 @@ function renderRequestHistory() {
       showRequestDetail(id);
     });
   });
+
+  // ページネーション情報を更新
+  updateHistoryPagination(currentHistoryPage, totalPages);
+}
+
+function updateHistoryPagination(currentPage, totalPages) {
+  const pageInfo = document.getElementById("history-page-info");
+  const prevBtn = document.getElementById("history-page-prev");
+  const nextBtn = document.getElementById("history-page-next");
+
+  if (pageInfo) {
+    pageInfo.textContent = totalPages > 0 ? `${currentPage} / ${totalPages}` : "- / -";
+  }
+
+  if (prevBtn) {
+    prevBtn.disabled = currentPage <= 1;
+  }
+
+  if (nextBtn) {
+    nextBtn.disabled = currentPage >= totalPages || totalPages === 0;
+  }
 }
 
 async function showRequestDetail(id) {
@@ -1724,6 +1758,37 @@ document.addEventListener("DOMContentLoaded", () => {
   const filterModel = document.getElementById("filter-history-model");
   if (filterModel) {
     filterModel.addEventListener("input", () => {
+      currentHistoryPage = 1; // フィルタ変更時は1ページ目にリセット
+      renderRequestHistory();
+    });
+  }
+
+  // 表示件数切り替え
+  const perPageSelect = document.getElementById("history-per-page");
+  if (perPageSelect) {
+    perPageSelect.addEventListener("change", (e) => {
+      historyPerPage = parseInt(e.target.value, 10);
+      currentHistoryPage = 1; // 表示件数変更時は1ページ目にリセット
+      renderRequestHistory();
+    });
+  }
+
+  // ページネーションボタン
+  const prevBtn = document.getElementById("history-page-prev");
+  const nextBtn = document.getElementById("history-page-next");
+
+  if (prevBtn) {
+    prevBtn.addEventListener("click", () => {
+      if (currentHistoryPage > 1) {
+        currentHistoryPage--;
+        renderRequestHistory();
+      }
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      currentHistoryPage++;
       renderRequestHistory();
     });
   }

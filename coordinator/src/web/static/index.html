@@ -191,6 +191,14 @@
                 autocomplete="off"
               />
             </label>
+            <label class="filter-label">
+              <span>表示件数</span>
+              <select id="history-per-page" class="per-page-select">
+                <option value="25">25件</option>
+                <option value="50" selected>50件</option>
+                <option value="100">100件</option>
+              </select>
+            </label>
           </div>
         </header>
 
@@ -213,6 +221,12 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="pagination" id="history-pagination">
+          <button type="button" id="history-page-prev" class="btn" aria-label="前のページ">&lt;</button>
+          <span class="pagination__info" id="history-page-info">- / -</span>
+          <button type="button" id="history-page-next" class="btn" aria-label="次のページ">&gt;</button>
         </div>
       </section>
     </main>
