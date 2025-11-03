@@ -183,7 +183,10 @@ pub enum RecordStatus {
     /// 正常に処理完了
     Success,
     /// エラー発生
-    Error { message: String },
+    Error {
+        /// エラーメッセージ
+        message: String,
+    },
 }
 
 #[cfg(test)]

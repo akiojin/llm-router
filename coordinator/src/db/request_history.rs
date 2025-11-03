@@ -76,20 +76,15 @@ impl RequestHistoryStorage {
         let records = self.load_records().await?;
 
         // フィルタリング
-        let filtered: Vec<RequestResponseRecord> = records
-            .into_iter()
-            .filter(|r| filter.matches(r))
-            .collect();
+        let filtered: Vec<RequestResponseRecord> =
+            records.into_iter().filter(|r| filter.matches(r)).collect();
 
         let total_count = filtered.len();
 
         // ページネーション
         let start = (page.saturating_sub(1)) * per_page;
-        let paginated: Vec<RequestResponseRecord> = filtered
-            .into_iter()
-            .skip(start)
-            .take(per_page)
-            .collect();
+        let paginated: Vec<RequestResponseRecord> =
+            filtered.into_iter().skip(start).take(per_page).collect();
 
         Ok(FilteredRecords {
             records: paginated,
@@ -106,21 +101,23 @@ impl RequestHistoryStorage {
             return Ok(Vec::new());
         }
 
-        let content = fs::read_to_string(&self.file_path)
-            .await
-            .map_err(|e| CoordinatorError::Database(format!("Failed to read history file: {}", e)))?;
+        let content = fs::read_to_string(&self.file_path).await.map_err(|e| {
+            CoordinatorError::Database(format!("Failed to read history file: {}", e))
+        })?;
 
         if content.trim().is_empty() {
             return Ok(Vec::new());
         }
 
-        serde_json::from_str(&content).map_err(|e| {
-            CoordinatorError::Database(format!("Failed to parse history file: {}", e))
-        })
+        serde_json::from_str(&content)
+            .map_err(|e| CoordinatorError::Database(format!("Failed to parse history file: {}", e)))
     }
 
     /// ロックなしでレコードを保存（内部使用）
-    async fn save_records_unlocked(&self, records: &[RequestResponseRecord]) -> CoordinatorResult<()> {
+    async fn save_records_unlocked(
+        &self,
+        records: &[RequestResponseRecord],
+    ) -> CoordinatorResult<()> {
         // ディレクトリが存在しない場合は作成（冪等なので常に実行）
         if let Some(parent) = self.file_path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
@@ -135,15 +132,13 @@ impl RequestHistoryStorage {
 
         // 一時ファイルに書き込んでから rename（破損防止）
         let temp_path = self.file_path.with_extension("tmp");
-        fs::write(&temp_path, json).await.map_err(|e| {
-            CoordinatorError::Database(format!("Failed to write temp file: {}", e))
-        })?;
-
-        fs::rename(&temp_path, &self.file_path)
+        fs::write(&temp_path, json)
             .await
-            .map_err(|e| {
-                CoordinatorError::Database(format!("Failed to rename temp file: {}", e))
-            })?;
+            .map_err(|e| CoordinatorError::Database(format!("Failed to write temp file: {}", e)))?;
+
+        fs::rename(&temp_path, &self.file_path).await.map_err(|e| {
+            CoordinatorError::Database(format!("Failed to rename temp file: {}", e))
+        })?;
 
         Ok(())
     }
@@ -158,10 +153,15 @@ impl Default for RequestHistoryStorage {
 /// レコードフィルタ
 #[derive(Debug, Clone, Default)]
 pub struct RecordFilter {
+    /// モデル名フィルタ（部分一致）
     pub model: Option<String>,
+    /// エージェントIDフィルタ
     pub agent_id: Option<Uuid>,
+    /// ステータスフィルタ
     pub status: Option<FilterStatus>,
+    /// 開始時刻フィルタ
     pub start_time: Option<DateTime<Utc>>,
+    /// 終了時刻フィルタ
     pub end_time: Option<DateTime<Utc>>,
 }
 
@@ -207,16 +207,22 @@ impl RecordFilter {
 /// フィルタ用のステータス
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterStatus {
+    /// 成功したリクエスト
     Success,
+    /// 失敗したリクエスト
     Error,
 }
 
 /// フィルタ済みレコード
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FilteredRecords {
+    /// フィルタ・ページネーション適用後のレコード
     pub records: Vec<RequestResponseRecord>,
+    /// フィルタ適用後の総件数
     pub total_count: usize,
+    /// 現在のページ番号
     pub page: usize,
+    /// 1ページあたりの件数
     pub per_page: usize,
 }
 
@@ -318,7 +324,10 @@ mod tests {
         let new_record = create_test_record(Utc::now() - Duration::days(6));
         storage.save_record(&new_record).await.unwrap();
 
-        storage.cleanup_old_records(Duration::days(7)).await.unwrap();
+        storage
+            .cleanup_old_records(Duration::days(7))
+            .await
+            .unwrap();
 
         let loaded = storage.load_records().await.unwrap();
         assert_eq!(loaded.len(), 1);

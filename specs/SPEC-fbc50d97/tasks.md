@@ -32,16 +32,16 @@
 
 ## Phase 3.1: セットアップ
 
-- [ ] T001 [P] `common/src/protocol.rs` に `RequestResponseRecord` 構造体を定義
+- [x] T001 [P] `common/src/protocol.rs` に `RequestResponseRecord` 構造体を定義
   - `RequestType`, `RecordStatus` enum も含む
   - serde でシリアライズ/デシリアライズ対応
   - 依存: なし
 
-- [ ] T002 [P] `Cargo.toml` に `csv = "1.3"` 依存関係を追加
+- [x] T002 [P] `Cargo.toml` に `csv = "1.3"` 依存関係を追加
   - CSV エクスポート用
   - 依存: なし
 
-- [ ] T003 [P] `coordinator/src/db/mod.rs` に `request_history` モジュールを宣言
+- [x] T003 [P] `coordinator/src/db/mod.rs` に `request_history` モジュールを宣言
   - `pub mod request_history;` を追加
   - 依存: なし
 
@@ -53,19 +53,19 @@
 
 ### Contract Tests（並列実行可能）
 
-- [ ] T004 [P] `tests/contract/request_history_api_test.rs` に
+- [x] T004 [P] `tests/contract/request_history_api_test.rs` に
   List API (`GET /api/dashboard/request-responses`) の contract test を作成
   - 空の履歴でも 200 OK を返すことをテスト
   - レスポンス構造（records, total_count, page, per_page）を検証
   - 依存: T001 (RequestResponseRecord 定義)
 
-- [ ] T005 [P] `tests/contract/request_history_api_test.rs` に
+- [x] T005 [P] `tests/contract/request_history_api_test.rs` に
   Detail API (`GET /api/dashboard/request-responses/:id`) の contract test を作成
   - 存在しないIDで 404 を返すことをテスト
   - 存在するIDで RequestResponseRecord を返すことをテスト
   - 依存: T001
 
-- [ ] T006 [P] `tests/contract/request_history_api_test.rs` に
+- [x] T006 [P] `tests/contract/request_history_api_test.rs` に
   Export API (`GET /api/dashboard/request-responses/export`) の contract test を作成
   - format=json で JSON 形式を返すことをテスト
   - format=csv で CSV 形式を返すことをテスト
@@ -74,27 +74,27 @@
 
 ### Integration Tests（ストレージ層）
 
-- [ ] T007 [P] `tests/integration/request_storage_test.rs` に
+- [x] T007 [P] `tests/integration/request_storage_test.rs` に
   ストレージ層の保存機能の integration test を作成
   - `save_record()` 関数をテスト
   - レコードがファイルに保存されることを確認
   - JSON 形式の検証
   - 依存: T001
 
-- [ ] T008 [P] `tests/integration/request_storage_test.rs` に
+- [x] T008 [P] `tests/integration/request_storage_test.rs` に
   ストレージ層の読み込み機能の integration test を作成
   - `load_records()` 関数をテスト
   - 保存されたレコードを正しく読み込めることを確認
   - 依存: T001
 
-- [ ] T009 [P] `tests/integration/request_storage_test.rs` に
+- [x] T009 [P] `tests/integration/request_storage_test.rs` に
   ストレージ層のクリーンアップ機能の integration test を作成
   - `cleanup_old_records()` 関数をテスト
   - 7日より古いレコードが削除されることを確認
   - 新しいレコードは残ることを確認
   - 依存: T001
 
-- [ ] T010 [P] `tests/integration/request_storage_test.rs` に
+- [x] T010 [P] `tests/integration/request_storage_test.rs` に
   ストレージ層のフィルタリング機能の integration test を作成
   - モデル名、エージェントID、ステータス、日時範囲でフィルタ
   - ページネーションの動作を確認
@@ -102,19 +102,19 @@
 
 ### Integration Tests（プロキシ層）
 
-- [ ] T011 `tests/integration/request_capture_test.rs` に
+- [x] T011 `tests/integration/request_capture_test.rs` に
   プロキシキャプチャ機能の integration test を作成
   - `/api/chat` へのリクエストがキャプチャされることをテスト
   - request_history.json にレコードが保存されることを確認
   - レスポンスが正しくクライアントに返されることを確認
   - 依存: T001, T007 (保存機能のテストが先)
 
-- [ ] T012 `tests/integration/request_capture_test.rs` に
+- [x] T012 `tests/integration/request_capture_test.rs` に
   エラーリクエストのキャプチャ integration test を作成
   - エラーが発生したリクエストもエラー情報付きで保存されることを確認
   - 依存: T001, T011
 
-- [ ] T013 `tests/integration/request_capture_test.rs` に
+- [x] T013 `tests/integration/request_capture_test.rs` に
   ストリーミングレスポンスのキャプチャ integration test を作成
   - ストリーミングモードでもレスポンス全体が保存されることを確認
   - 依存: T001, T011
@@ -125,36 +125,36 @@
 
 ### ストレージ層実装
 
-- [ ] T014 `coordinator/src/db/request_history.rs` にストレージ構造体を作成
+- [x] T014 `coordinator/src/db/request_history.rs` にストレージ構造体を作成
   - `RequestHistoryStorage` 構造体
   - `Arc<Mutex<()>>` でファイルロック
   - `new()` コンストラクタ
   - 依存: T001, T003
 
-- [ ] T015 `coordinator/src/db/request_history.rs` に `save_record()` 関数を実装
+- [x] T015 `coordinator/src/db/request_history.rs` に `save_record()` 関数を実装
   - レコードを JSON 配列に追加して保存
   - ファイルロック使用
   - 一時ファイル + rename パターン（破損防止）
   - 依存: T014, T007 (テストが先)
 
-- [ ] T016 `coordinator/src/db/request_history.rs` に `load_records()` 関数を実装
+- [x] T016 `coordinator/src/db/request_history.rs` に `load_records()` 関数を実装
   - JSON ファイルから全レコードを読み込み
   - ファイルが存在しない場合は空配列を返す
   - 依存: T014, T008 (テストが先)
 
-- [ ] T017 `coordinator/src/db/request_history.rs` に
+- [x] T017 `coordinator/src/db/request_history.rs` に
   `cleanup_old_records()` 関数を実装
   - 7日より古いレコードを削除
   - 新しいレコードのみを残して保存
   - 依存: T014, T015, T016, T009 (テストが先)
 
-- [ ] T018 `coordinator/src/db/request_history.rs` に
+- [x] T018 `coordinator/src/db/request_history.rs` に
   `filter_and_paginate()` 関数を実装
   - フィルタ条件（モデル名、エージェントID、ステータス、日時範囲）
   - ページネーション（page, per_page）
   - 依存: T014, T016, T010 (テストが先)
 
-- [ ] T019 `coordinator/src/db/request_history.rs` に
+- [x] T019 `coordinator/src/db/request_history.rs` に
   定期クリーンアップタスクを実装
   - `tokio::spawn` + `tokio::time::interval` (1時間ごと)
   - サーバー起動時に1回実行
@@ -163,18 +163,18 @@
 
 ### プロキシ層修正
 
-- [ ] T020 `coordinator/src/api/proxy.rs` の `proxy_chat()` 関数を修正
+- [x] T020 `coordinator/src/api/proxy.rs` の `proxy_chat()` 関数を修正
   - レスポンスをバッファリング（`hyper::body::to_bytes`）
   - RequestResponseRecord を作成
   - `tokio::spawn` で非同期保存（fire-and-forget）
   - クライアントにレスポンス返却
   - 依存: T001, T015, T011 (テストが先)
 
-- [ ] T021 `coordinator/src/api/proxy.rs` の `proxy_generate()` 関数を修正
+- [x] T021 `coordinator/src/api/proxy.rs` の `proxy_generate()` 関数を修正
   - T020 と同じキャプチャロジックを実装
   - 依存: T020, T011
 
-- [ ] T022 `coordinator/src/api/proxy.rs` に
+- [x] T022 `coordinator/src/api/proxy.rs` に
   ストリーミングレスポンスのキャプチャ機能を実装
   - `forward_streaming_response()` 関数を修正
   - ストリーム完了後にレスポンス全体を保存
@@ -182,7 +182,7 @@
 
 ### ダッシュボードAPI実装
 
-- [ ] T023 `coordinator/src/api/dashboard.rs` に
+- [x] T023 `coordinator/src/api/dashboard.rs` に
   List エンドポイント (`GET /api/dashboard/request-responses`) を実装
   - クエリパラメータのパース（model, agent_id, status, start_time, end_time,
     page, per_page）
@@ -190,14 +190,14 @@
   - レスポンス構造（records, total_count, page, per_page）
   - 依存: T016, T018, T004 (テストが先)
 
-- [ ] T024 `coordinator/src/api/dashboard.rs` に
+- [x] T024 `coordinator/src/api/dashboard.rs` に
   Detail エンドポイント (`GET /api/dashboard/request-responses/:id`) を実装
   - パスパラメータから UUID を取得
   - レコードを検索して返却
   - 見つからない場合は 404
   - 依存: T016, T005 (テストが先)
 
-- [ ] T025 `coordinator/src/api/dashboard.rs` に
+- [x] T025 `coordinator/src/api/dashboard.rs` に
   Export エンドポイント (`GET /api/dashboard/request-responses/export`) を実装
   - format パラメータ（json または csv）
   - JSON 形式: フィルタ済みレコードを JSON 配列で返却
@@ -205,7 +205,7 @@
   - Content-Disposition ヘッダー設定（attachment）
   - 依存: T002, T016, T018, T006 (テストが先)
 
-- [ ] T026 `coordinator/src/api/mod.rs` または `coordinator/src/main.rs` に
+- [x] T026 `coordinator/src/api/mod.rs` または `coordinator/src/main.rs` に
   新しいエンドポイントをルーターに登録
   - `/api/dashboard/request-responses` → list handler
   - `/api/dashboard/request-responses/:id` → detail handler
@@ -216,7 +216,7 @@
 
 ## Phase 3.4: UI実装
 
-- [ ] T027 [P] `coordinator/src/web/static/index.html` に
+- [x] T027 [P] `coordinator/src/web/static/index.html` に
   「リクエスト履歴」タブを追加
   - 新しいタブボタン（History）
   - 履歴コンテンツセクション（初期状態は非表示）
@@ -226,14 +226,14 @@
   - 詳細モーダル要素
   - 依存: なし
 
-- [ ] T028 `coordinator/src/web/static/app.js` に
+- [x] T028 `coordinator/src/web/static/app.js` に
   履歴リスト表示機能を実装
   - `fetchRequestHistory()` 関数（API呼び出し）
   - テーブルにレコードを描画
   - 5秒ごとの自動更新
   - 依存: T023, T027
 
-- [ ] T029 `coordinator/src/web/static/app.js` に
+- [x] T029 `coordinator/src/web/static/app.js` に
   詳細モーダル表示機能を実装
   - レコードクリック時のイベントハンドラ
   - 詳細API呼び出し
@@ -242,7 +242,7 @@
   - モーダルを閉じる機能
   - 依存: T024, T027, T028
 
-- [ ] T030 `coordinator/src/web/static/app.js` に
+- [x] T030 `coordinator/src/web/static/app.js` に
   フィルタ機能を実装
   - フィルタフォームの submit イベントハンドラ
   - クエリパラメータ構築
@@ -250,14 +250,14 @@
   - フィルタクリア機能
   - 依存: T023, T028
 
-- [ ] T031 `coordinator/src/web/static/app.js` に
+- [x] T031 `coordinator/src/web/static/app.js` に
   エクスポート機能を実装
   - JSON エクスポートボタンのクリックハンドラ
   - CSV エクスポートボタンのクリックハンドラ
   - ファイルダウンロード処理
   - 依存: T025, T027
 
-- [ ] T032 [P] `coordinator/src/web/static/styles.css` に
+- [x] T032 [P] `coordinator/src/web/static/styles.css` に
   履歴UI のスタイルを追加
   - 履歴テーブルのスタイル
   - 詳細モーダルのスタイル
@@ -296,12 +296,12 @@
   - バリデーションのユニットテスト
   - 依存: T018
 
-- [ ] T036 すべてのテストを実行して合格確認
+- [x] T036 すべてのテストを実行して合格確認
   - `cargo test` 実行
   - 全テスト合格を確認
   - 依存: すべての実装タスク
 
-- [ ] T037 ローカル検証を実行
+- [x] T037 ローカル検証を実行
   - `cargo fmt --check` 実行
   - `cargo clippy -- -D warnings` 実行
   - `make quality-checks` 実行（または個別チェック）

@@ -335,23 +335,31 @@ pub async fn get_request_response_detail(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> Result<Json<ollama_coordinator_common::protocol::RequestResponseRecord>, AppError> {
-    let records = state.request_history.load_records().await.map_err(AppError::from)?;
-    let record = records
-        .into_iter()
-        .find(|r| r.id == id)
-        .ok_or_else(|| ollama_coordinator_common::error::CoordinatorError::Database(format!("Record {} not found", id)))?;
+    let records = state
+        .request_history
+        .load_records()
+        .await
+        .map_err(AppError::from)?;
+    let record = records.into_iter().find(|r| r.id == id).ok_or_else(|| {
+        ollama_coordinator_common::error::CoordinatorError::Database(format!(
+            "Record {} not found",
+            id
+        ))
+    })?;
     Ok(Json(record))
 }
 
 /// T025: エクスポートAPI
-pub async fn export_request_responses(
-    State(state): State<AppState>,
-) -> Result<Response, AppError> {
-    let records = state.request_history.load_records().await.map_err(AppError::from)?;
+pub async fn export_request_responses(State(state): State<AppState>) -> Result<Response, AppError> {
+    let records = state
+        .request_history
+        .load_records()
+        .await
+        .map_err(AppError::from)?;
 
     // CSV形式でエクスポート
     let mut wtr = csv::Writer::from_writer(vec![]);
-    wtr.write_record(&[
+    wtr.write_record([
         "id",
         "timestamp",
         "request_type",
@@ -363,7 +371,12 @@ pub async fn export_request_responses(
         "status",
         "completed_at",
     ])
-    .map_err(|e| ollama_coordinator_common::error::CoordinatorError::Internal(format!("CSV header error: {}", e)))?;
+    .map_err(|e| {
+        ollama_coordinator_common::error::CoordinatorError::Internal(format!(
+            "CSV header error: {}",
+            e
+        ))
+    })?;
 
     for record in records {
         let status_str = match &record.status {
@@ -385,12 +398,20 @@ pub async fn export_request_responses(
             status_str,
             record.completed_at.to_rfc3339(),
         ])
-        .map_err(|e| ollama_coordinator_common::error::CoordinatorError::Internal(format!("CSV write error: {}", e)))?;
+        .map_err(|e| {
+            ollama_coordinator_common::error::CoordinatorError::Internal(format!(
+                "CSV write error: {}",
+                e
+            ))
+        })?;
     }
 
-    let csv_data = wtr
-        .into_inner()
-        .map_err(|e| ollama_coordinator_common::error::CoordinatorError::Internal(format!("CSV finalize error: {}", e)))?;
+    let csv_data = wtr.into_inner().map_err(|e| {
+        ollama_coordinator_common::error::CoordinatorError::Internal(format!(
+            "CSV finalize error: {}",
+            e
+        ))
+    })?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -419,9 +440,8 @@ mod tests {
     fn create_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
-        let request_history = std::sync::Arc::new(
-            crate::db::request_history::RequestHistoryStorage::new().unwrap()
-        );
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         AppState {
             registry,
             load_manager,

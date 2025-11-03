@@ -86,9 +86,8 @@ mod tests {
     fn test_state() -> (AppState, AgentRegistry) {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
-        let request_history = std::sync::Arc::new(
-            crate::db::request_history::RequestHistoryStorage::new().unwrap()
-        );
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let state = AppState {
             registry: registry.clone(),
             load_manager,

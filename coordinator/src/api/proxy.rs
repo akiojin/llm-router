@@ -13,9 +13,12 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use ollama_coordinator_common::{
     error::CoordinatorError,
-    protocol::{ChatRequest, ChatResponse, GenerateRequest, RecordStatus, RequestResponseRecord, RequestType},
+    protocol::{
+        ChatRequest, ChatResponse, GenerateRequest, RecordStatus, RequestResponseRecord,
+        RequestType,
+    },
 };
-use std::{io, net::IpAddr, sync::Arc, time::Instant};
+use std::{io, sync::Arc, time::Instant};
 use uuid::Uuid;
 
 /// POST /api/chat - Ollama Chat APIプロキシ
@@ -58,18 +61,21 @@ pub async fn proxy_chat(
             // エラーを記録
             save_request_record(
                 state.request_history.clone(),
-                record_id,
-                timestamp,
-                RequestType::Chat,
-                req.model.clone(),
-                agent_id,
-                agent_machine_name.clone(),
-                agent_ip,
-                request_body.clone(),
-                None,
-                duration,
-                RecordStatus::Error {
-                    message: format!("Failed to proxy chat request: {}", e),
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type: RequestType::Chat,
+                    model: req.model.clone(),
+                    agent_id,
+                    agent_machine_name: agent_machine_name.clone(),
+                    agent_ip,
+                    request_body: request_body.clone(),
+                    response_body: None,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Error {
+                        message: format!("Failed to proxy chat request: {}", e),
+                    },
+                    completed_at: Utc::now(),
                 },
             );
 
@@ -99,18 +105,21 @@ pub async fn proxy_chat(
         // エラーレスポンスを記録
         save_request_record(
             state.request_history.clone(),
-            record_id,
-            timestamp,
-            RequestType::Chat,
-            req.model.clone(),
-            agent_id,
-            agent_machine_name.clone(),
-            agent_ip,
-            request_body.clone(),
-            None,
-            duration,
-            RecordStatus::Error {
-                message: message.clone(),
+            RequestResponseRecord {
+                id: record_id,
+                timestamp,
+                request_type: RequestType::Chat,
+                model: req.model.clone(),
+                agent_id,
+                agent_machine_name: agent_machine_name.clone(),
+                agent_ip,
+                request_body: request_body.clone(),
+                response_body: None,
+                duration_ms: duration.as_millis() as u64,
+                status: RecordStatus::Error {
+                    message: message.clone(),
+                },
+                completed_at: Utc::now(),
             },
         );
 
@@ -139,17 +148,20 @@ pub async fn proxy_chat(
         // TODO: T021 - 将来的にバッファリングして完全なレスポンスを保存
         save_request_record(
             state.request_history.clone(),
-            record_id,
-            timestamp,
-            RequestType::Chat,
-            req.model.clone(),
-            agent_id,
-            agent_machine_name,
-            agent_ip,
-            request_body,
-            None,
-            duration,
-            RecordStatus::Success,
+            RequestResponseRecord {
+                id: record_id,
+                timestamp,
+                request_type: RequestType::Chat,
+                model: req.model.clone(),
+                agent_id,
+                agent_machine_name,
+                agent_ip,
+                request_body,
+                response_body: None,
+                duration_ms: duration.as_millis() as u64,
+                status: RecordStatus::Success,
+                completed_at: Utc::now(),
+            },
         );
 
         return forward_streaming_response(response).map_err(AppError::from);
@@ -170,17 +182,20 @@ pub async fn proxy_chat(
             let response_body = serde_json::to_value(&payload).ok();
             save_request_record(
                 state.request_history.clone(),
-                record_id,
-                timestamp,
-                RequestType::Chat,
-                req.model.clone(),
-                agent_id,
-                agent_machine_name,
-                agent_ip,
-                request_body,
-                response_body,
-                duration,
-                RecordStatus::Success,
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type: RequestType::Chat,
+                    model: req.model.clone(),
+                    agent_id,
+                    agent_machine_name,
+                    agent_ip,
+                    request_body,
+                    response_body,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Success,
+                    completed_at: Utc::now(),
+                },
             );
 
             Ok((StatusCode::OK, Json(payload)).into_response())
@@ -195,18 +210,21 @@ pub async fn proxy_chat(
             // パースエラーを記録
             save_request_record(
                 state.request_history.clone(),
-                record_id,
-                timestamp,
-                RequestType::Chat,
-                req.model,
-                agent_id,
-                agent_machine_name,
-                agent_ip,
-                request_body,
-                None,
-                duration,
-                RecordStatus::Error {
-                    message: format!("Failed to parse chat response: {}", e),
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type: RequestType::Chat,
+                    model: req.model,
+                    agent_id,
+                    agent_machine_name,
+                    agent_ip,
+                    request_body,
+                    response_body: None,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Error {
+                        message: format!("Failed to parse chat response: {}", e),
+                    },
+                    completed_at: Utc::now(),
                 },
             );
 
@@ -258,18 +276,21 @@ pub async fn proxy_generate(
             // エラーを記録
             save_request_record(
                 state.request_history.clone(),
-                record_id,
-                timestamp,
-                RequestType::Generate,
-                req.model.clone(),
-                agent_id,
-                agent_machine_name.clone(),
-                agent_ip,
-                request_body.clone(),
-                None,
-                duration,
-                RecordStatus::Error {
-                    message: format!("Failed to proxy generate request: {}", e),
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type: RequestType::Generate,
+                    model: req.model.clone(),
+                    agent_id,
+                    agent_machine_name: agent_machine_name.clone(),
+                    agent_ip,
+                    request_body: request_body.clone(),
+                    response_body: None,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Error {
+                        message: format!("Failed to proxy generate request: {}", e),
+                    },
+                    completed_at: Utc::now(),
                 },
             );
 
@@ -299,18 +320,21 @@ pub async fn proxy_generate(
         // エラーレスポンスを記録
         save_request_record(
             state.request_history.clone(),
-            record_id,
-            timestamp,
-            RequestType::Generate,
-            req.model.clone(),
-            agent_id,
-            agent_machine_name.clone(),
-            agent_ip,
-            request_body.clone(),
-            None,
-            duration,
-            RecordStatus::Error {
-                message: message.clone(),
+            RequestResponseRecord {
+                id: record_id,
+                timestamp,
+                request_type: RequestType::Generate,
+                model: req.model.clone(),
+                agent_id,
+                agent_machine_name: agent_machine_name.clone(),
+                agent_ip,
+                request_body: request_body.clone(),
+                response_body: None,
+                duration_ms: duration.as_millis() as u64,
+                status: RecordStatus::Error {
+                    message: message.clone(),
+                },
+                completed_at: Utc::now(),
             },
         );
 
@@ -339,17 +363,20 @@ pub async fn proxy_generate(
         // TODO: T021 - 将来的にバッファリングして完全なレスポンスを保存
         save_request_record(
             state.request_history.clone(),
-            record_id,
-            timestamp,
-            RequestType::Generate,
-            req.model.clone(),
-            agent_id,
-            agent_machine_name,
-            agent_ip,
-            request_body,
-            None,
-            duration,
-            RecordStatus::Success,
+            RequestResponseRecord {
+                id: record_id,
+                timestamp,
+                request_type: RequestType::Generate,
+                model: req.model.clone(),
+                agent_id,
+                agent_machine_name,
+                agent_ip,
+                request_body,
+                response_body: None,
+                duration_ms: duration.as_millis() as u64,
+                status: RecordStatus::Success,
+                completed_at: Utc::now(),
+            },
         );
 
         return forward_streaming_response(response).map_err(AppError::from);
@@ -370,17 +397,20 @@ pub async fn proxy_generate(
             let response_body = Some(payload.clone());
             save_request_record(
                 state.request_history.clone(),
-                record_id,
-                timestamp,
-                RequestType::Generate,
-                req.model.clone(),
-                agent_id,
-                agent_machine_name,
-                agent_ip,
-                request_body,
-                response_body,
-                duration,
-                RecordStatus::Success,
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type: RequestType::Generate,
+                    model: req.model.clone(),
+                    agent_id,
+                    agent_machine_name,
+                    agent_ip,
+                    request_body,
+                    response_body,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Success,
+                    completed_at: Utc::now(),
+                },
             );
 
             Ok((StatusCode::OK, Json(payload)).into_response())
@@ -395,18 +425,21 @@ pub async fn proxy_generate(
             // パースエラーを記録
             save_request_record(
                 state.request_history.clone(),
-                record_id,
-                timestamp,
-                RequestType::Generate,
-                req.model,
-                agent_id,
-                agent_machine_name,
-                agent_ip,
-                request_body,
-                None,
-                duration,
-                RecordStatus::Error {
-                    message: format!("Failed to parse generate response: {}", e),
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type: RequestType::Generate,
+                    model: req.model,
+                    agent_id,
+                    agent_machine_name,
+                    agent_ip,
+                    request_body,
+                    response_body: None,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Error {
+                        message: format!("Failed to parse generate response: {}", e),
+                    },
+                    completed_at: Utc::now(),
                 },
             );
 
@@ -461,34 +494,9 @@ fn forward_streaming_response(response: reqwest::Response) -> Result<Response, C
 /// リクエスト/レスポンスレコードを保存（Fire-and-forget）
 fn save_request_record(
     storage: Arc<crate::db::request_history::RequestHistoryStorage>,
-    record_id: Uuid,
-    timestamp: chrono::DateTime<Utc>,
-    request_type: RequestType,
-    model: String,
-    agent_id: Uuid,
-    agent_machine_name: String,
-    agent_ip: IpAddr,
-    request_body: serde_json::Value,
-    response_body: Option<serde_json::Value>,
-    duration: std::time::Duration,
-    status: RecordStatus,
+    record: RequestResponseRecord,
 ) {
     tokio::spawn(async move {
-        let record = RequestResponseRecord {
-            id: record_id,
-            timestamp,
-            request_type,
-            model,
-            agent_id,
-            agent_machine_name,
-            agent_ip,
-            request_body,
-            response_body,
-            duration_ms: duration.as_millis() as u64,
-            status,
-            completed_at: Utc::now(),
-        };
-
         if let Err(e) = storage.save_record(&record).await {
             tracing::error!("Failed to save request record: {}", e);
         }
@@ -505,9 +513,8 @@ mod tests {
     fn create_test_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
-        let request_history = std::sync::Arc::new(
-            crate::db::request_history::RequestHistoryStorage::new().unwrap()
-        );
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         AppState {
             registry,
             load_manager,
