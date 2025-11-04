@@ -178,7 +178,7 @@ ollama-coordinator/
 
 - **Coordinator**: Linux / Windows 10以降 / macOS 12以降、Rust 1.70以降
 - **Agent**: Windows 10以降 / macOS 12以降（CLIベースアプリケーション）、Rust 1.70以降
-- **Ollama**: 事前インストール推奨（自動ダウンロード機能は将来的な拡張）
+- **Ollama**: 未インストールの場合は初回起動時に自動ダウンロード・インストール（進捗表示・再試行・SHA256検証付き）
 - **管理**: ブラウザベースのWebUIダッシュボードでエージェント設定と監視
 
 ### Coordinatorのセットアップ
@@ -211,7 +211,32 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 ./target/release/ollama-coordinator-agent
 ```
 
-**注意**: Agent起動前に、マシン上でOllamaがインストールされ、起動していることを確認してください。Ollamaは[ollama.ai](https://ollama.ai)からダウンロードできます。
+**注意**: Agentは起動時にOllamaの存在を確認し、未インストールなら自動的にバイナリをダウンロード・検証・展開してから起動します。手動インストールが必要な場合は[ollama.ai](https://ollama.ai)から取得できます。
+
+### リリースバイナリの作成と公開
+
+GitHubリリースには各プラットフォーム向けのバイナリを同梱します。基本手順は以下のとおりです。
+
+1. リリース用のタグを作成する前に `cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test` を通し、品質チェックを完了させる。
+2. ターゲットごとにリリースビルドを実行する。
+   ```bash
+   # Linux (x86_64)
+   cargo build --release --target x86_64-unknown-linux-gnu
+
+   # Windows
+   cargo build --release --target x86_64-pc-windows-msvc
+
+   # macOS (Apple Silicon)
+   cargo build --release --target aarch64-apple-darwin
+
+   # macOS (Intel)
+   cargo build --release --target x86_64-apple-darwin
+   ```
+3. 生成されたバイナリ（`target/<target>/release/` 配下の `ollama-coordinator-coordinator` と `ollama-coordinator-agent`）を `.tar.gz` もしくは `.zip` にまとめ、README・CHANGELOGなど必要ファイルを同梱する。
+4. GitHubリポジトリでリリースを作成し、各プラットフォーム向けアーカイブをアップロードする。リリースノートには対応プラットフォーム・ハッシュ値（任意）・既知の制限事項を記載する。
+5. 必要に応じて自動化（GitHub Actions 等）で上記手順を再現し、リリースタグ作成と同時にアーティファクトをアップロードする。  
+   本リポジトリでは `.github/workflows/release-binaries.yml` がリリース公開時に同等の処理を自動実行する。
+6. `main` ブランチにマージされると `.github/workflows/semantic-release.yml` が実行され、Conventional Commits からバージョンを決定して `Cargo.toml` 群と `CHANGELOG.md` を更新し、GitHub Release を自動作成します。公開されたリリースイベントが `release-binaries` をトリガーし、各プラットフォーム向けアーカイブが添付されます。
 
 ## 使い方
 

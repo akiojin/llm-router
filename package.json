@@ -1,5 +1,5 @@
 {
-  "name": "ollama-coordinator",
+  "name": "ollama-coordinator-release",
   "version": "0.0.0",
   "description": "Centralized management system for coordinating Ollama instances across multiple machines.",
   "private": true,
@@ -14,7 +14,14 @@
   "devDependencies": {
     "@commitlint/cli": "^20.0.0",
     "@commitlint/config-conventional": "^20.0.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.1",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "husky": "^9.1.0",
-    "markdownlint-cli": "^0.45.0"
+    "markdownlint-cli": "^0.45.0",
+    "semantic-release": "^24.1.0"
   }
 }

@@ -313,6 +313,10 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 
 Manual installation is also supported. Download Ollama from [ollama.ai](https://ollama.ai).
 
+### Release Automation
+
+Merging changes into `main` runs `.github/workflows/semantic-release.yml`, which derives the next semantic version from Conventional Commits, updates the workspace Cargo manifests and `CHANGELOG.md`, and publishes a GitHub Release. The published release event triggers `.github/workflows/release-binaries.yml` to attach prebuilt archives for every supported platform.
+
 #### GPU Detection
 
 Agents automatically detect GPU on startup. **GPU is required** for agent registration.
