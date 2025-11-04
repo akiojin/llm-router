@@ -234,7 +234,8 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
    ```
 3. 生成されたバイナリ（`target/<target>/release/` 配下の `ollama-coordinator-coordinator` と `ollama-coordinator-agent`）を `.tar.gz` もしくは `.zip` にまとめ、README・CHANGELOGなど必要ファイルを同梱する。
 4. GitHubリポジトリでリリースを作成し、各プラットフォーム向けアーカイブをアップロードする。リリースノートには対応プラットフォーム・ハッシュ値（任意）・既知の制限事項を記載する。
-5. 必要に応じて自動化（GitHub Actions 等）で上記手順を再現し、リリースタグ作成と同時にアーティファクトをアップロードする。
+5. 必要に応じて自動化（GitHub Actions 等）で上記手順を再現し、リリースタグ作成と同時にアーティファクトをアップロードする。  
+   本リポジトリでは `.github/workflows/release-binaries.yml` がリリース公開時に同等の処理を自動実行する。
 
 ## 使い方
 
