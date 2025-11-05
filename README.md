@@ -315,7 +315,7 @@ Manual installation is also supported. Download Ollama from [ollama.ai](https://
 
 ### Release Automation
 
-Merging changes into `main` runs `.github/workflows/semantic-release.yml`, which derives the next semantic version from Conventional Commits, updates the workspace Cargo manifests and `CHANGELOG.md`, and publishes a GitHub Release. The published release event triggers `.github/workflows/release-binaries.yml` to attach prebuilt archives for every supported platform. The workflow produces platform-specific archives with consistent formats:
+Merging changes into `main` runs `.github/workflows/semantic-release.yml`, which first reuses `.github/workflows/release-binaries.yml` to build and validate platform archives, then derives the next semantic version from Conventional Commits, updates the workspace Cargo manifests and `CHANGELOG.md`, and finally publishes a GitHub Release with the freshly built artifacts attached. The workflow produces platform-specific archives with consistent formats:
 
 - `ollama-coordinator-linux-*` / `ollama-coordinator-macos-*` → `.tar.gz`
 - `ollama-coordinator-windows-*` → `.zip`

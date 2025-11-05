@@ -30,6 +30,18 @@
         ]
       }
     ],
-    "@semantic-release/github"
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "release/*.tar.gz"
+          },
+          {
+            "path": "release/*.zip"
+          }
+        ]
+      }
+    ]
   ]
 }
