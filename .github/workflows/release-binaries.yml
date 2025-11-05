@@ -55,6 +55,24 @@ jobs:
           tar czf "$archive" -C dist "$(basename "$staging")"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
+      - name: Validate archive contents (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ steps.package_unix.outputs.archive }}"
+          [[ "$archive" == ollama-coordinator-* ]] || { echo "::error::unexpected archive name $archive"; exit 1; }
+          [[ "$archive" == *.tar.gz ]] || { echo "::error::expected .tar.gz archive"; exit 1; }
+          root_dir=$(tar -tzf "$archive" | head -1 | cut -d/ -f1)
+          [[ -n "$root_dir" ]] || { echo "::error::failed to detect root directory"; exit 1; }
+          tar -tzf "$archive" | tee contents.txt
+          grep -q "^${root_dir}/ollama-coordinator-coordinator\$" contents.txt
+          grep -q "^${root_dir}/ollama-coordinator-agent\$" contents.txt
+          grep -q "^${root_dir}/README.md\$" contents.txt
+          grep -q "^${root_dir}/README.ja.md\$" contents.txt
+          grep -q "^${root_dir}/LICENSE\$" contents.txt
+          rm contents.txt
+
       - name: Package binaries (Windows)
         if: runner.os == 'Windows'
         id: package_windows
@@ -69,6 +87,34 @@ jobs:
           Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $archive -Force
           "archive=$archive" >> $env:GITHUB_OUTPUT
 
+      - name: Validate archive contents (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = "${{ steps.package_windows.outputs.archive }}"
+          if (-not ($archive -like "ollama-coordinator-*")) {
+            Write-Error "unexpected archive name $archive"
+            exit 1
+          }
+          if (-not ($archive.EndsWith(".zip"))) {
+            Write-Error "expected .zip archive"
+            exit 1
+          }
+          $extractDir = Join-Path $PWD "validate"
+          if (Test-Path $extractDir) {
+            Remove-Item $extractDir -Recurse -Force
+          }
+          Expand-Archive -Path $archive -DestinationPath $extractDir -Force
+          $files = Get-ChildItem -Path $extractDir -File -Recurse
+          $expected = @("ollama-coordinator-coordinator.exe","ollama-coordinator-agent.exe","README.md","README.ja.md","LICENSE")
+          foreach ($name in $expected) {
+            if (-not ($files.Name -contains $name)) {
+              Write-Error "missing $name in archive"
+              exit 1
+            }
+          }
+          Remove-Item $extractDir -Recurse -Force
+*** End Patch
       - name: Upload release artifact (Unix)
         if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
