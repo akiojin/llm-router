@@ -239,6 +239,13 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
 6. `main` ブランチにマージされると `.github/workflows/semantic-release.yml` が実行され、Conventional Commits からバージョンを決定して `Cargo.toml` 群と `CHANGELOG.md` を更新し、GitHub Release を自動作成します。公開されたリリースイベントが `release-binaries` をトリガーし、各プラットフォーム向けアーカイブが添付されます。
    - `main` ブランチが保護されている場合は、GitHub Actions が直接 push できるように **Fine-grained Personal Access Token** を作成し、リポジトリシークレット `SEMANTIC_RELEASE_TOKEN` として登録してください。設定しておくと `semantic-release` がリリースコミットを正常に作成でき、後続のバイナリ公開フローが確実に起動します。
 
+自動作成されるアーカイブ形式は以下のとおりです。
+
+- `ollama-coordinator-linux-*` / `ollama-coordinator-macos-*` → `.tar.gz`
+- `ollama-coordinator-windows-*` → `.zip`
+
+各アーカイブには Coordinator / Agent のバイナリに加えて `README.md`、`README.ja.md`、`LICENSE` を必ず同梱し、ターゲット環境ごとに1ファイルをダウンロードすればセットアップできる状態を保証します。
+
 ## 使い方
 
 ### 基本的な使い方
