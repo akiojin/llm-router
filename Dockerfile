@@ -45,7 +45,9 @@ RUN npm i -g \
     prettier@latest \
     @anthropic-ai/claude-code@latest \
     @openai/codex@latest \
-    @google/gemini-cli@latest
+    @google/gemini-cli@latest \
+    @commitlint/cli@latest \
+    @commitlint/config-conventional@latest
 
 EXPOSE 8080
 

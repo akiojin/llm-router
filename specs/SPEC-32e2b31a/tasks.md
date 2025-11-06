@@ -245,6 +245,11 @@
 - [ ] **T091** [P] `CLAUDE.md` を更新 (Rust開発ガイドライン、TDD遵守、非同期パターン)
 - [ ] **T092** [P] `specs/SPEC-32e2b31a/quickstart.md` を作成 (開発者クイックスタート)
 
+### リリース配布検証
+
+- [ ] **T097** [P] `.github/workflows/release-binaries.yml` にUnix系`.tar.gz`／Windows`.zip`生成を検証する手順とチェックリストを追加
+- [ ] **T098** [P] `specs/SPEC-32e2b31a/contracts/release-distribution.md` を作成し、リリースアーティファクト構成の契約テストと検証手順を定義
+
 ### コード品質
 
 - [ ] **T093** [P] `cargo clippy` でリンティング、警告をすべて解消
@@ -463,8 +468,8 @@ mkdir -p common coordinator agent tests/e2e
 
 ---
 
-**総タスク数**: 124タスク（基本96 + Ollama自動ダウンロード強化28）
-**並列実行可能タスク**: 約70タスク（[P]マーク）
+**総タスク数**: 126タスク（基本96 + Ollama自動ダウンロード強化28 + リリース配布検証2）
+**並列実行可能タスク**: 約72タスク（[P]マーク）
 **推定完了時間**: 5-7週間（TDDサイクル遵守、Ollama自動ダウンロード機能強化含む）
 
 ---

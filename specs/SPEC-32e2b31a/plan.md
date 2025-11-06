@@ -587,6 +587,8 @@ components:
    - 依存クレート追加 (axum, tokio, tauri, etc.)
    - SQLiteスキーマ定義 (`coordinator/src/db/schema.sql`)
    - CI/CD設定 (GitHub Actions: テスト、ビルド、リリース)
+   - リリース配布フォーマットの検証（Unix系=`.tar.gz`、Windows=`.zip`／主要ドキュメント同梱確認）
+   - リリースワークフローで `main` ブランチへのマージ後のみ配布が行われるようガードを設置
 
 2. **Common層実装** ([P]):
    - 共通型定義 (`common/src/types.rs`) → Unit Test
