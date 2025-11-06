@@ -26,7 +26,7 @@ jobs:
     env:
       # workflow_call supplies inputs.target_branch, workflow_dispatch writes to github.event.inputs;
       # default to main when neither is provided.
-      TARGET_BRANCH: ${{ inputs.target_branch != '' && inputs.target_branch || github.event.inputs.target_branch || 'main' }}
+      TARGET_BRANCH: ${{ inputs.target_branch || github.event.inputs.target_branch || 'main' }}
     strategy:
       matrix:
         include:
