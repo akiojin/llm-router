@@ -575,6 +575,48 @@ make quality-checks
 2. `.github/workflows/` のActionsログを確認
 3. `scripts/release/` のスクリプトを直接実行してデバッグ
 
+## 実践例: v1.0.0正式版リリース
+
+### 実行結果（2025-11-06）
+
+developブランチからmainブランチへのマージにより、**v1.0.0正式版リリースが成功**しました：
+
+```bash
+# リリース情報
+タグ: v1.0.0
+作成日時: 2025-11-06T02:56:30+00:00
+経過時間: 38分42秒（目標30分から8分42秒超過）
+
+# 公開されたバイナリ（4プラットフォーム）
+- Linux x86_64: 3.16 MB
+- Windows x86_64: 3.26 MB
+- macOS x86_64: 2.99 MB
+- macOS ARM64: 2.84 MB
+```
+
+### 学習事項
+
+**解決した課題**（7回の試行）:
+
+1. **TARGET_BRANCH評価エラー**: GitHub Actions式を簡素化
+2. **tar | head パイプ問題**: pipefailとSIGPIPEの競合を解決
+
+**根本原因**:
+
+```bash
+# 問題: pipefailがtar | head -1のSIGPIPEを失敗扱い
+# 解決:
+set +o pipefail
+root_dir=$(tar -tzf "$archive" 2>&1 | head -1 | cut -d/ -f1)
+set -o pipefail
+```
+
+**推奨事項**:
+
+- パイプラインでの早期終了（head, grep -q等）使用時はpipefailに注意
+- ローカル検証でGitHub Actions同等の環境をテスト
+- バイナリ検証ロジックはシンプルに保つ
+
 ---
 
-*クイックスタートガイド - 実装完了後の遡及的文書化 - 2025-11-05*
+*クイックスタートガイド - 最終更新: 2025-11-06 (v1.0.0リリース成功)*
