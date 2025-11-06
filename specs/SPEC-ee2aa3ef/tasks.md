@@ -223,18 +223,36 @@
   - 説明: メンテナがdevelopブランチを作成
   - 依存関係: T016
   - ステータス: ⚠️ 保留（メンテナ作業）
+  - **作成手順**: quickstart.md「リポジトリ状態」セクション参照
+    - mainから分岐: `git checkout -b develop`
+    - リモートプッシュ: `git push -u origin develop`
+    - ブランチ保護設定（GitHub Web UI）
 
 - [ ] **T023** feature → develop フロー確認
   - パス: N/A（統合テスト）
   - 説明: feature/auto-release → develop PR作成、品質チェック、alpha版リリース確認
   - 依存関係: T022
   - ステータス: ⚠️ 保留（developブランチ作成後）
+  - **パフォーマンス計測**:
+    - PR作成時刻を記録: `date -Iseconds`
+    - alpha版リリース作成時刻を確認: GitHub Releases
+    - 目標: **5分以内** （成功基準: spec.md L163）
+    - 実測値を記録: `echo "PR作成→alpha版: X分Y秒" >> performance.log`
 
 - [ ] **T024** develop → main フロー確認
   - パス: N/A（統合テスト）
   - 説明: develop → main PR作成、品質チェック、正式版リリース、バイナリ公開確認
   - 依存関係: T023
   - ステータス: ⚠️ 保留
+  - **パフォーマンス計測**:
+    - リリースコマンド実行時刻を記録: `date -Iseconds`
+    - 正式版リリース＋バイナリ公開完了時刻を確認: GitHub Releases
+    - 目標: **30分以内** （成功基準: spec.md L165）
+    - 実測値を記録: `echo "コマンド実行→正式版公開: X分Y秒" >> performance.log`
+    - 検証項目:
+      - ✅ v1.x.x形式のタグ作成
+      - ✅ CHANGELOG.md更新
+      - ✅ 5プラットフォームバイナリ添付（Linux/Windows/macOS x2）
 
 - [ ] **T025** ホットフィックスフロー確認
   - パス: N/A（統合テスト）

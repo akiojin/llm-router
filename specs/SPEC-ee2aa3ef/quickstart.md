@@ -36,6 +36,28 @@
   git branch -r | grep origin/develop
   ```
 
+  **developブランチが存在しない場合の作成手順**（メンテナ実施）:
+
+  ```bash
+  # 1. mainブランチから分岐してdevelopを作成
+  git checkout main
+  git pull origin main
+  git checkout -b develop
+
+  # 2. リモートにプッシュ
+  git push -u origin develop
+
+  # 3. ブランチ保護設定（GitHub Web UI）
+  #    Settings → Branches → Add branch protection rule
+  #    - Branch name pattern: develop
+  #    - ✅ Require a pull request before merging
+  #    - ✅ Require status checks to pass before merging
+  #      - quality-checks
+
+  # 4. 確認
+  git branch -r | grep origin/develop
+  ```
+
 - [x] **mainブランチ** が存在する（通常は既存）
   ```bash
   git branch -r | grep origin/main
