@@ -88,7 +88,7 @@ jobs:
           archive="${{ steps.package_unix.outputs.archive }}"
           [[ "$archive" == ollama-coordinator-* ]] || { echo "::error::unexpected archive name $archive"; exit 1; }
           [[ "$archive" == *.tar.gz ]] || { echo "::error::expected .tar.gz archive"; exit 1; }
-          root_dir=$(tar -tzf "$archive" | head -1 | cut -d/ -f1)
+          root_dir=$(tar -tzf "$archive" 2>/dev/null | head -1 | cut -d/ -f1)
           [[ -n "$root_dir" ]] || { echo "::error::failed to detect root directory"; exit 1; }
           tar -tzf "$archive" > contents.txt
           grep -q "^${root_dir}/ollama-coordinator-coordinator\$" contents.txt
