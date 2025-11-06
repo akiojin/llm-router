@@ -42,7 +42,9 @@ RUN npm i -g \
     bun@latest \
     typescript@latest \
     eslint@latest \
-    prettier@latest
+    prettier@latest \
+    @commitlint/cli@latest \
+    @commitlint/config-conventional@latest
 
 EXPOSE 8080
 
