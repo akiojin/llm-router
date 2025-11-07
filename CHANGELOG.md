@@ -1,3 +1,10 @@
+## [1.0.1-alpha.3](https://github.com/akiojin/ollama-coordinator/compare/v1.0.1-alpha.2...v1.0.1-alpha.3) (2025-11-07)
+
+
+### Bug Fixes
+
+* **docker:** change global package installation from pnpm to npm ([b86a34f](https://github.com/akiojin/ollama-coordinator/commit/b86a34f7fe2622fd83e083412cec7ddb690771e7))
+
 ## [1.0.1-alpha.2](https://github.com/akiojin/ollama-coordinator/compare/v1.0.1-alpha.1...v1.0.1-alpha.2) (2025-11-07)
 
 
