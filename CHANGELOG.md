@@ -1,19 +1,16 @@
 ## [1.0.1-alpha.3](https://github.com/akiojin/ollama-coordinator/compare/v1.0.1-alpha.2...v1.0.1-alpha.3) (2025-11-07)
 
-
 ### Bug Fixes
 
 * **docker:** change global package installation from pnpm to npm ([b86a34f](https://github.com/akiojin/ollama-coordinator/commit/b86a34f7fe2622fd83e083412cec7ddb690771e7))
 
 ## [1.0.1-alpha.2](https://github.com/akiojin/ollama-coordinator/compare/v1.0.1-alpha.1...v1.0.1-alpha.2) (2025-11-07)
 
-
 ### Bug Fixes
 
 * **docker:** update .codex volume mapping and sync auth.json from host ([340f409](https://github.com/akiojin/ollama-coordinator/commit/340f409080e8944e6bd0f11b3237bc16dcd6f226))
 
 ## [1.0.1-alpha.1](https://github.com/akiojin/ollama-coordinator/compare/v1.0.0...v1.0.1-alpha.1) (2025-11-06)
-
 
 ### Bug Fixes
 
