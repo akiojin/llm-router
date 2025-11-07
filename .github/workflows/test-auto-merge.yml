@@ -44,27 +44,30 @@ jobs:
           fi
           echo "✅ Workflow name is correct"
 
-      - name: Verify workflow_run trigger
+      - name: Verify pull_request_target trigger
         run: |
-          if ! grep -q "workflow_run:" .github/workflows/auto-merge.yml; then
-            echo "❌ ERROR: workflow_run trigger not found"
+          if ! grep -q "pull_request_target:" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: pull_request_target trigger not found"
             exit 1
           fi
-          echo "✅ workflow_run trigger found"
+          echo "✅ pull_request_target trigger found"
 
-          if ! grep -q 'workflows: \["Quality Checks"\]' .github/workflows/auto-merge.yml; then
-            echo "❌ ERROR: 'Quality Checks' workflow not found in workflow_run trigger"
-            exit 1
-          fi
-          echo "✅ Triggers on 'Quality Checks' workflow"
+          REQUIRED_TYPES=(opened reopened ready_for_review synchronize)
+          for type in "${REQUIRED_TYPES[@]}"; do
+            if ! grep -A 5 "pull_request_target:" .github/workflows/auto-merge.yml | grep -q "- $type"; then
+              echo "❌ ERROR: pull_request_target.types missing '$type'"
+              exit 1
+            fi
+          done
+          echo "✅ Required pull_request_target types found"
 
       - name: Verify required permissions
         run: |
-          if ! grep -q "contents: write" .github/workflows/auto-merge.yml; then
-            echo "❌ ERROR: 'contents: write' permission not found"
+          if ! grep -q "contents: read" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: 'contents: read' permission not found"
             exit 1
           fi
-          echo "✅ 'contents: write' permission found"
+          echo "✅ 'contents: read' permission found"
 
           if ! grep -q "pull-requests: write" .github/workflows/auto-merge.yml; then
             echo "❌ ERROR: 'pull-requests: write' permission not found"
