@@ -79,8 +79,7 @@ jobs:
           git push --no-verify origin "$RELEASE_BRANCH"
 
           echo "✓ Created and pushed $RELEASE_BRANCH"
-          echo "Semantic-release will now run on this branch automatically."
           echo ""
           echo "Next steps:"
           echo "1. Wait for release.yml to complete"
-          echo "2. Review and merge the auto-generated PR to main"
+          echo "2. Monitor publish.yml for binary distribution"

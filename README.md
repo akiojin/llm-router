@@ -474,6 +474,53 @@ This project follows Spec-Driven Development:
 
 See [CLAUDE.md](./CLAUDE.md) for details.
 
+### Claude Code Worktree Hooks
+
+This project uses Claude Code PreToolUse Hooks to enforce Worktree environment
+boundaries and prevent accidental operations that could disrupt the development workflow.
+
+**Features:**
+
+- **Git Branch Protection**: Blocks `git checkout`, `git switch`, `git worktree`
+commands to prevent branch switching
+- **Directory Navigation Control**: Blocks `cd` commands that would move outside
+the Worktree boundary
+- **Smart Allow Lists**: Permits read-only operations like `git branch --list`
+- **Fast Execution**: Average response time < 50ms (target: < 100ms)
+
+**Installation & Configuration:**
+
+For detailed setup instructions, manual testing examples, and troubleshooting, see:
+
+- [Quickstart Guide](./specs/SPEC-dc648675/quickstart.md) - Step-by-step setup
+and verification
+- [Feature Specification](./specs/SPEC-dc648675/spec.md) - Requirements and
+acceptance criteria
+- [Implementation Plan](./specs/SPEC-dc648675/plan.md) - Technical design and
+architecture
+- [Performance Report](./specs/SPEC-dc648675/performance.md) - Benchmark results
+
+**Running Hook Tests:**
+
+```bash
+# Run all Hook contract tests (13 test cases)
+make test-hooks
+
+# Or run manually with Bats
+npx bats tests/hooks/test-block-git-branch-ops.bats tests/hooks/test-block-cd-command.bats
+
+# Run performance benchmark
+tests/hooks/benchmark-hooks.sh
+```
+
+**Automated Testing:**
+
+Hook tests are automatically executed in CI/CD:
+
+- GitHub Actions: `.github/workflows/test-hooks.yml` (standalone)
+- Quality Checks: `.github/workflows/quality-checks.yml` (integrated)
+- Makefile: `make quality-checks` includes `test-hooks` target
+
 ## Request History
 
 Ollama Coordinator automatically logs all requests and responses for debugging,

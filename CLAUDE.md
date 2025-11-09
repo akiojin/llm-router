@@ -61,13 +61,114 @@ GitHub Actions が実行する検証を**全てローカルで事前に成功さ
 - いずれかが失敗した状態でコミットすることを固く禁止する。失敗原因を解消し、再実行→合格を確認してからコミットせよ。
 - ローカル検証結果を残すため、必要に応じて実行ログをメモし、レビュー時に提示できるようにすること。
 
-### commitlint準拠コミットログ（強制）
+### commitlint準拠コミットログ（絶対厳守・バージョニング直結）
 
-- コミットメッセージは必ず Conventional Commits 形式（例: `type(scope): summary`）で記述する。`type` は `feat` / `fix` / `docs` / `test` / `chore` / `refactor` / `ci` / `build` などプロジェクトで許可された識別子のみを使用する。
-- `summary` は50文字以内で要点を記載し、語尾に句読点を付けない。必要なら本文に詳細とチケット番号を追記する。
-- コミット前に `.specify/scripts/checks/check-commits.sh --from origin/main --to HEAD` を実行し、手元で commitlint を通過させる。スクリプトは `npx commitlint` を呼び出し、違反コミットを明示的に列挙する。
-- CI（Quality Checks）でも commitlint が必ず実行される。違反が検出された場合は `git commit --amend` や `git rebase -i` でメッセージを修正し、再度ローカルチェックを合格させてからプッシュする。
-- CI・ローカルいずれかで commitlint が失敗した状態でのレビュー依頼やプルリク作成は禁止。
+**🚨 重要: このプロジェクトはsemantic-releaseによる自動バージョン管理を採用しています**
+
+コミットメッセージの`type`が**バージョン番号を自動決定**します。不適切なtypeの使用は、誤ったバージョン番号の自動付与につながります。
+
+#### semantic-releaseとの関係性
+
+| Commit Type | バージョン影響 | 例 | 使用場面 |
+|-------------|--------------|-----|----------|
+| `feat:` | **MINOR** ⬆️ (1.2.0 → 1.3.0) | `feat(api): ユーザー検索機能を追加` | 新機能追加時 |
+| `fix:` | **PATCH** ⬆️ (1.2.0 → 1.2.1) | `fix(auth): ログイン時のタイムアウトを修正` | バグ修正時 |
+| `feat!:` / `fix!:` | **MAJOR** ⬆️ (1.2.0 → 2.0.0) | `feat!: APIエンドポイントを刷新` | 破壊的変更時 |
+| `BREAKING CHANGE:` | **MAJOR** ⬆️ (1.2.0 → 2.0.0) | 本文に記載 | 破壊的変更時 |
+| `docs:`, `chore:`, `test:`, `refactor:`, `ci:`, `build:`, `perf:`, `style:` | **変更なし** | `docs: README更新` | リリースノートのみ記載 |
+
+**誤ったtypeを使用した場合の影響例**:
+
+- ❌ **間違い**: `chore: ユーザー検索機能を追加` → バージョン変更なし（本来はMINOR upであるべき）
+- ❌ **間違い**: `feat: typo修正` → MINOR up（本来はPATCH upまたはdocs:であるべき）
+- ❌ **間違い**: `fix: 新機能追加` → PATCH up（本来はMINOR upであるべき）
+- ✅ **正しい**: `feat: ユーザー検索機能を追加` → MINOR up
+- ✅ **正しい**: `fix: ログインエラーを修正` → PATCH up
+- ✅ **正しい**: `docs: インストール手順を更新` → バージョン変更なし
+
+#### Conventional Commits 形式（必須）
+
+```
+type(scope): summary
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**許可されたtype一覧**:
+
+- `feat`: 新機能追加（MINOR version up）
+- `fix`: バグ修正（PATCH version up）
+- `docs`: ドキュメントのみの変更（バージョン変更なし）
+- `test`: テストの追加・修正（バージョン変更なし）
+- `chore`: ビルドプロセスやツール変更（バージョン変更なし）
+- `refactor`: リファクタリング（バージョン変更なし）
+- `ci`: CI設定変更（バージョン変更なし）
+- `build`: ビルドシステム変更（バージョン変更なし）
+- `perf`: パフォーマンス改善（バージョン変更なし）
+- `style`: コードスタイル変更（バージョン変更なし）
+
+**破壊的変更の表記**:
+
+- type に `!` を付与: `feat!:`, `fix!:`
+- または本文に `BREAKING CHANGE:` を記載
+
+**ルール**:
+
+- `summary` は50文字以内、語尾に句読点を付けない
+- `scope` はオプションだが、推奨（例: `feat(api):`, `fix(auth):`）
+- 本文が必要な場合は空行を挟んで記述
+- フッターには `BREAKING CHANGE:`, `Closes #123` などを記載可能
+
+#### 検証手順（絶対必須）
+
+**コミット前に必ず実行**:
+
+```bash
+.specify/scripts/checks/check-commits.sh --from origin/main --to HEAD
+```
+
+このスクリプトは `npx commitlint` を呼び出し、違反コミットを明示的に列挙します。
+
+**CI検証**:
+
+- Quality Checks ワークフローで commitlint が必ず実行される
+- 違反が検出された場合、**PRマージがブロックされ、リリースが失敗する**
+
+**違反時の修正方法**:
+
+```bash
+# 直前のコミットメッセージを修正
+git commit --amend
+
+# 複数のコミットメッセージを修正
+git rebase -i HEAD~3
+
+# 再検証
+.specify/scripts/checks/check-commits.sh --from origin/main --to HEAD
+```
+
+#### 禁止事項（厳格）
+
+- ❌ commitlintが失敗した状態でのプッシュ
+- ❌ commitlintが失敗した状態でのレビュー依頼
+- ❌ commitlintが失敗した状態でのプルリク作成
+- ❌ 適当なtypeの選択（必ず変更内容に応じた正しいtypeを使用）
+- ❌ 破壊的変更を通常のfeatやfixとして記載（必ず`!`または`BREAKING CHANGE:`を使用）
+
+#### semantic-releaseの動作
+
+1. mainブランチへのマージ時、すべてのコミットメッセージを解析
+2. `feat:` が含まれる → MINOR version up
+3. `fix:` が含まれる → PATCH version up
+4. `BREAKING CHANGE:` または `!` が含まれる → MAJOR version up
+5. 新しいバージョン番号でGitタグを作成
+6. CHANGELOGを自動生成
+7. GitHubリリースを作成
+8. パッケージを公開（該当する場合）
+
+**コミットメッセージの品質 = リリースの品質** です。慎重に記述してください。
 
 ### markdownlint準拠ドキュメント（強制）
 
@@ -119,6 +220,23 @@ GitHub Actions が実行する検証を**全てローカルで事前に成功さ
 - Spec Kit コマンドはドキュメント生成・更新にのみ利用し、Git ブランチや Worktree を変更しない前提で扱う。
 - ブランチ／Worktree の新規作成・削除・切り替えが必要になった場合は、必ずメンテナに相談し指示を受ける。
 - CI やリポジトリ管理スクリプトが環境を制御しているため、手動での操作は重大な不整合を引き起こす可能性がある。
+
+**自動保護機構（Claude Code PreToolUse Hooks）**:
+
+上記のルールを強制するため、Claude Code PreToolUse Hookスクリプトが自動的に以下の操作をブロックします：
+
+- **Git操作ブロック** (`.claude/hooks/block-git-branch-ops.sh`):
+  - `git checkout`, `git switch`: ブランチ切り替えを防止
+  - `git worktree add`: 新しいWorktree作成を防止
+  - `git branch -d/-D/-m/-M`: ブランチ削除・リネームを防止
+  - 読み取り専用操作（`git branch`, `git branch --list`等）は許可
+
+- **ディレクトリ移動ブロック** (`.claude/hooks/block-cd-command.sh`):
+  - Worktree外へのcd（`cd /`, `cd ~`, `cd ../..`等）を防止
+  - Worktree内のcd（`cd .`, `cd src`等）は許可
+
+これらのHookは、コマンド実行前に自動的にチェックし、違反操作を即座にブロックします。
+詳細は [specs/SPEC-dc648675/](specs/SPEC-dc648675/) を参照してください。
 
 ### TDD遵守（妥協不可）
 
