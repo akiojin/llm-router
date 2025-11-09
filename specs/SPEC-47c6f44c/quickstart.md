@@ -1,13 +1,13 @@
 # クイックスタート: 自動マージ機能（更新版）
 
 **機能ID**: `SPEC-47c6f44c`  
-**最終更新日**: 2025-11-01
+**最終更新日**: 2025-11-07
 
 > ⚠️ **重要**: プロジェクトのカスタム運用ルールにより、開発者が任意でブランチ／Worktreeを作成したり、作業ディレクトリを変更したりすることはできません。本ドキュメントは、自動マージ機能の検証フローと期待される結果を共有する目的で提供しています。実際のブランチ操作やPR作成はすべてリポジトリメンテナが実施します。
 
 ## 概要
 
-- 自動マージ機能は GitHub Actions（`Quality Checks` → `Auto Merge`）によって制御され、手動操作なしにPRがマージされることを保証します。
+- 自動マージ機能は `pull_request_target` で動作する `Auto Merge` ワークフローによってGitHubの自動マージを全PRで有効化し、Requiredチェックが通過したタイミングでGitHub自身がMERGEコミットを作成します。
 - 開発者は現在の作業環境を変更せず、CIの実行結果を確認・フィードバックする役割を担います。
 - テストデータや検証用PRはメンテナが用意したテンプレートを使用し、自動的にクリーンアップされます。
 
@@ -23,19 +23,19 @@
 
 1. **メンテナ**: テンプレートPR生成用ワークフローを起動し、正常系シナリオを選択する。
 2. **CI**: `Quality Checks` ワークフローが起動し、tasks-check／rust-test／rust-lint／commitlint／markdownlint が順次成功する。
-3. **CI**: `Auto Merge` ワークフローがトリガーされ、PRが自動マージされる。
-4. **開発者**: PRのタイムラインで「Merged automatically by GitHub Actions」を確認し、Slackの品質チャンネルへ完了報告を行う。
+3. **CI**: PRがReady for reviewになるタイミングで `Auto Merge` ワークフローが起動し、GitHubの「Auto-merge (MERGE)」が自動で有効化される。
+4. **開発者**: Requiredチェックが全て完了した後、PRタイムラインで「Auto-merged by GitHub」を確認し、Slackの品質チャンネルへ完了報告を行う。
 
 ### シナリオ2: 異常系（未完了タスク → 自動マージスキップ）
 
 1. **メンテナ**: 検証ワークフローを「未完了タスク」モードで実行し、tasks.mdに未完了タスクを含むPRを生成する。
-2. **CI**: `Quality Checks` ワークフロー内の `tasks-check` ジョブが失敗し、PRは `Auto Merge` に進まない。
+2. **CI**: `Quality Checks` ワークフロー内の `tasks-check` ジョブが失敗し、Requiredチェックが未完了のためGitHubが自動マージを保留する（PR画面には「Auto-merge: Waiting on required checks」が表示される）。
 3. **開発者**: Actionsログで `tasks-check` の失敗内容を確認し、対応タスクをIssueに記録する。
 
 ### シナリオ3: ドラフトPR（品質チェック実行 → 自動マージスキップ）
 
 1. **メンテナ**: ドラフト状態のPRを生成するモードでワークフローを起動。
-2. **CI**: `Quality Checks` は実行されるが、PRがドラフトのため `Auto Merge` ワークフローはスキップされる。
+2. **CI**: `Quality Checks` は実行されるが、PRがドラフトのため `Auto Merge` ワークフローは「PR is draft」と記録して自動マージを有効化しない。
 3. **開発者**: PRのステータスが「Draft」であることと、`Auto Merge` ワークフローに「PR is a draft」と記録されていることを確認する。
 4. **メンテナ**: 必要に応じてドラフト解除後に再度ワークフローを起動し、マージ動作を確認する。
 
@@ -48,7 +48,7 @@
 ### シナリオ5: コンフリクト検知（Auto Merge スキップ）
 
 1. **メンテナ**: `main` と競合する変更を含むテストPRを生成。
-2. **CI**: `Quality Checks` は成功するが、`Auto Merge` で「Mergeable state: dirty」と表示され、マージが停止する。
+2. **CI**: `Quality Checks` は成功するが、`Auto Merge` で「PR mergeable state is CONFLICTING」と表示され、GitHubの自動マージが有効化されない。
 3. **開発者**: コンフリクト箇所の検討結果をメンテナに共有し、解消方針をIssueに記録する。
 
 ## トラブルシューティング
@@ -70,11 +70,11 @@
 
 ## 検証チェックリスト
 
-- [ ] 正常系: `Quality Checks` 成功後に `Auto Merge` が自動マージする
-- [ ] 未完了タスク: `tasks-check` 失敗により `Auto Merge` が起動しない
+- [ ] 正常系: `Auto Merge` が自動的に有効化され、Requiredチェック合格後にGitHubが自動マージする
+- [ ] 未完了タスク: `tasks-check` 失敗でRequiredチェックが満たされず、PR画面に「Auto-merge: Waiting on required checks」と表示される
 - [ ] コミット規約違反: `commitlint` が失敗し、メンテナ再実行待ちになる
 - [ ] ドラフトPR: `Auto Merge` がドラフト状態を検知してスキップする
-- [ ] コンフリクト: `Auto Merge` が「dirty」ステータスで停止し、手動解消が必要になる
+- [ ] コンフリクト: `Auto Merge` が「PR mergeable state is CONFLICTING」と出力し、手動解消が必要になる
 - [ ] 検証後: メンテナがPR/ブランチをクリーンアップし、ログが共有される
 
 ## 次のステップ

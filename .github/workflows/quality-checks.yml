@@ -139,7 +139,7 @@ jobs:
       - name: Run markdownlint
         run: |
           echo "📄 Checking Markdown files..."
-          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github"
+          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
 
   hook-tests:
     # 要件: SPEC-dc648675 (Worktree環境での作業境界強制システム)
