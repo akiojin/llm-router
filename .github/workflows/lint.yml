@@ -1,60 +1,21 @@
-# Quality Checks Workflow
-# 機能ID: SPEC-47c6f44c
-# 目的: PR作成時に品質チェックを並列実行
-# 要件: FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007
+# Lint Workflow
+# 機能ID: SPEC-47c6f44c (quality-checks.ymlから分離)
+# 目的: コード品質チェック（フォーマット、lint、ドキュメント）
+# 要件: FR-004 (Rust lint), FR-005 (commitlint), FR-006 (markdownlint)
 
-name: Quality Checks
+name: Lint
 
 on:
   pull_request:
-    branches: [main, develop]
-  push:
-    branches: [feature/**, hotfix/**]
+    branches: [develop]
 
 jobs:
-  tasks-check:
-    # 要件: FR-002
-    # 目的: tasks.mdの全タスク完了をチェック
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check tasks.md completion
-        run: |
-          echo "🔍 Checking tasks.md completion..."
-          chmod +x .specify/scripts/checks/check-tasks.sh
-          .specify/scripts/checks/check-tasks.sh
-        env:
-          CI: true
-
-  rust-test:
-    # 要件: FR-003
-    # 目的: Rustテストを実行（複数OS）
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        rust: [stable]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Run Rust tests
-        run: |
-          echo "🧪 Running Rust tests on ${{ matrix.os }}..."
-          cargo test --all-features --workspace -- --test-threads=1
-
   rust-lint:
     # 要件: FR-004
     # 目的: Rust lintチェック（fmt, clippy）
+    name: Rust Format & Clippy
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,27 +35,38 @@ jobs:
           echo "🔍 Running Rust linter..."
           cargo clippy --all-targets --all-features -- -D warnings
 
-  openai-proxy-tests:
-    # OpenAI互換APIの回帰テストを明示的に実行
+  markdownlint:
+    # 要件: FR-006
+    # 目的: マークダウンファイルのスタイル違反を検出
+    name: Markdown Lint
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          toolchain: stable
+          node-version: '20'
 
-      - name: Run OpenAI proxy tests
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Run markdownlint
         run: |
-          echo "🤖 Running OpenAI-compatible API tests..."
-          make openai-tests
+          echo "📄 Checking Markdown files..."
+          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
 
   commitlint:
     # 要件: FR-005
     # 目的: コミットメッセージがConventional Commits準拠かチェック
+    name: Commit Message Lint
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -108,6 +80,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
 
       - name: Install commitlint
         run: |
@@ -120,30 +94,10 @@ jobs:
           chmod +x .specify/scripts/checks/check-commits.sh
           .specify/scripts/checks/check-commits.sh --from origin/main --to HEAD
 
-  markdownlint:
-    # 要件: FR-006
-    # 目的: マークダウンファイルのスタイル違反を検出
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Run markdownlint
-        run: |
-          echo "📄 Checking Markdown files..."
-          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
-
   hook-tests:
     # 要件: SPEC-dc648675 (Worktree環境での作業境界強制システム)
     # 目的: Claude Code PreToolUse Hookの契約テストを実行
+    name: Hook Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -156,6 +110,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

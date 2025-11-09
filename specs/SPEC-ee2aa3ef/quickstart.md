@@ -170,7 +170,7 @@ gh release list
 cat CHANGELOG.md
 ```
 
-### 2. リリースPR作成（/releaseコマンド使用）
+### 2. リリースブランチ作成（/releaseコマンド使用）
 
 **Claude Codeを使用する場合**:
 
@@ -181,56 +181,47 @@ cat CHANGELOG.md
 **または直接スクリプト実行**:
 
 ```bash
-# develop → main PR を自動作成
-./scripts/release/create-release-pr.sh
+./scripts/create-release-branch.sh
 
 # 実行内容:
-# ✅ 前提条件チェック（gh, develop, main）
-# ✅ developとmainをorigin同期
-# ✅ 既存PR確認（重複防止）
-# ✅ PRテンプレート生成（コミット一覧、CHANGELOG抽出）
-# ✅ PR作成（release, auto-merge ラベル付与）
+# ✅ gh / 認証状態を確認
+# ✅ create-release.yml をトリガー
+# ✅ semantic-releaseのドライランで次バージョンを算出
+# ✅ release/vX.Y.Z ブランチを作成してpush
 
 # 出力例:
-# ✅ develop → main PR を作成しました！
-# 📎 PR URL: https://github.com/owner/repo/pull/123
-#
-# 次のステップ:
-#   1. PR を確認してください
-#   2. 品質チェック（GitHub Actions）の合格を待ちます
-#   3. 全チェック合格後、自動マージされます
-#   4. mainマージ後、正式版リリース（v1.3.0）が自動作成されます
+# ✓ Release branch created
+# Branch : release/v1.3.0
+# Version: v1.3.0
+# → releaseブランチのpushを契機に release.yml が起動します
 ```
 
-### 3. PR確認と自動マージ
+### 3. release.yml による自動マージ
 
 ```bash
-# GitHub Web UIでPRを確認
-# - コミット一覧
-# - CHANGELOG差分
-# - バージョン種別（パッチ/マイナー/メジャー）
+# releaseブランチがpushされると release.yml が自動実行
+# 1. semantic-release: バージョン計算、タグ・CHANGELOG・Cargo.toml更新
+# 2. mainへの自動マージ (--no-ff)
+# 3. developへのバックマージ
+# 4. releaseブランチ削除
 
-# GitHub Actionsが品質チェックを実行（5-10分）
-# ✅ cargo test（複数OS）
-# ✅ cargo fmt / clippy
-# ✅ commitlint
-# ✅ markdownlint
+# 進捗確認（例）
+gh run watch \$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 
-# 全チェック合格後、auto-mergeが自動実行
-# → mainブランチへマージ
+# すべてのステップ完了で main / develop が最新バージョンに揃います
 ```
 
-### 4. 正式版リリース確認
+### 4. publish.yml でのバイナリ添付と確認
 
 ```bash
-# mainマージ後、semantic-releaseとバイナリビルドが実行（20-30分）
-# 1. semantic-release: バージョン計算、タグ作成
-# 2. release-binaries: 5プラットフォームのバイナリビルド
+# mainへのマージと同時に publish.yml が自動実行（20-30分）
+# 1. 最新タグを検出
+# 2. release-binaries.yml を呼び出し、5プラットフォームのバイナリをビルド
 #    - Linux x86_64
 #    - Windows x86_64
 #    - macOS x86_64
 #    - macOS ARM64
-# 3. GitHub Releaseに全成果物を添付
+# 3. 生成物をGitHub Releaseへ添付
 
 # リリースを確認
 gh release view v1.3.0
@@ -422,30 +413,33 @@ git push --force-with-lease
 
 ### Q3. バイナリがリリースに添付されない
 
-**原因**: developブランチではバイナリビルドをスキップ
+**原因**: developブランチではアルファ版のみ（バイナリなし）
 
 **解決策**:
 
 ```bash
-# developブランチではアルファ版のみ（バイナリなし）
-# 正式版リリースが必要な場合:
+# 正式版のバイナリが必要な場合は release ブランチ経由で実行
 
-./scripts/release/create-release-pr.sh
-# develop → main PR作成 → mainマージでバイナリ添付
+./scripts/create-release-branch.sh
+# → create-release.yml → release.yml → publish.yml が自動で動作
+# → publish.yml が GitHub Release にバイナリを添付
 ```
 
-### Q4. create-release-pr.sh が "既にPRが存在します" エラー
+### Q4. create-release-branch.sh が "release/vX.Y.Z が既に存在" エラー
 
-**原因**: develop → main PR が既に開いている
+**原因**: 同名の release ブランチが既に作成済み
 
 **解決策**:
 
 ```bash
-# 既存PRを確認
-gh pr list --base main --head develop
+# 現在のreleaseブランチを確認
+git branch -r | grep 'origin/release/'
 
-# 既存PRをマージまたはクローズしてから再実行
-gh pr view 123  # 既存PRの状態確認
+# 不要なブランチがあれば削除（メンテナのみ実施）
+git push origin --delete release/v1.3.0
+
+# または既存のワークフロー完了を待ってから再実行
+./scripts/create-release-branch.sh
 ```
 
 ### Q5. ホットフィックスブランチ作成失敗

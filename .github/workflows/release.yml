@@ -1,15 +1,14 @@
 name: Release
 
-# Automated release process:
+# This workflow handles the automated release process:
 # 1. semantic-release creates version, tag, and GitHub Release
-# 2. Merge release branch into main
-# 3. Backmerge main into develop
-# 4. Delete release branch
+# 2. Direct merge to main (no PR to avoid GitHub Actions event limitations)
+# 3. Backmerge to develop
+# 4. Release branch cleanup
 on:
   push:
     branches:
       - 'release/**'
-  create:
   workflow_dispatch:
 
 permissions:
@@ -21,11 +20,7 @@ jobs:
   semantic-release:
     name: Semantic Release
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'create' && startsWith(github.event.ref, 'release/')) ||
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name != 'create' && github.event_name != 'workflow_dispatch' &&
-       !startsWith(github.event.head_commit.message, 'chore(release):'))
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
 
     outputs:
       new_release_published: ${{ steps.semantic.outputs.new_release_published }}
@@ -119,19 +114,8 @@ Automated merge of release branch for version ${VERSION}
           echo "Pushing to main..."
           git push origin main
 
-      - name: Backmerge main to develop
-        run: |
-          echo "Checking out develop..."
-          git fetch origin develop
-          git checkout develop
-
-          echo "Merging main to develop..."
-          git merge origin/main --no-ff -m "chore: backmerge main to develop after release
-
-🤖 Generated with GitHub Actions"
-
-          echo "Pushing to develop..."
-          git push origin develop
+      # Note: Backmerge to develop is now handled by publish.yml
+      # This ensures binaries are published before backmerging
 
       - name: Delete release branch
         run: |

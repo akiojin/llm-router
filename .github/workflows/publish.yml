@@ -1,32 +1,75 @@
-name: release-binaries
+# Publish Workflow
+# 由来: release-binaries.yml + claude-worktree/publish.yml統合
+# 目的: mainへのpush時にバイナリをビルド・公開し、developへbackmerge
+# トリガー: main push (chore(release): コミット) または手動実行
+
+name: Publish
 
 on:
-  workflow_call:
-    inputs:
-      target_branch:
-        type: string
-        default: main
-      release_tag:
-        type: string
-        default: ""
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      target_branch:
-        description: Branch to build binaries from
-        required: true
-        default: main
+      release_tag:
+        description: "Release tag to publish (defaults to latest tag)"
+        required: false
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  build:
+  detect-release:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      is_release: ${{ steps.resolve.outputs.is_release }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: resolve
+        env:
+          INPUT_TAG: ${{ github.event.inputs.release_tag || '' }}
+        run: |
+          set -euo pipefail
+
+          # Check if this is a release commit
+          if git log -1 --pretty=%B | grep -q '^chore(release):'; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Determine release tag
+          if [[ -n "$INPUT_TAG" ]]; then
+            tag="$INPUT_TAG"
+          else
+            git fetch --tags --force
+            tag=$(git describe --tags --abbrev=0 || true)
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "No release tag detected; skipping publish run"
+            echo "release_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Resolved release tag: $tag"
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build-binaries:
     name: Build ${{ matrix.artifact }}
+    needs: detect-release
+    if: needs.detect-release.outputs.is_release == 'true' && needs.detect-release.outputs.release_tag != ''
     runs-on: ${{ matrix.os }}
-    env:
-      # workflow_call supplies inputs.target_branch, workflow_dispatch writes to github.event.inputs;
-      # default to main when neither is provided.
-      TARGET_BRANCH: ${{ inputs.target_branch || github.event.inputs.target_branch || 'main' }}
     strategy:
       matrix:
         include:
@@ -43,19 +86,11 @@ jobs:
             target: aarch64-apple-darwin
             artifact: macos-arm64
     steps:
-      - name: Ensure main branch release
-        shell: bash
-        run: |
-          if [[ "${TARGET_BRANCH}" != "main" ]]; then
-            echo "::error::Binary packaging is restricted to the protected 'main' branch. Received '${TARGET_BRANCH}'. Merge your changes to main or rerun semantic-release on main to build release assets."
-            exit 1
-          fi
-
       - name: Checkout sources
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/heads/{0}', env.TARGET_BRANCH) || github.sha }}
+          ref: main
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -86,34 +121,19 @@ jobs:
         run: |
           set -uo pipefail
           archive="${{ steps.package_unix.outputs.archive }}"
-          echo "DEBUG: archive=$archive"
           [[ "$archive" == ollama-coordinator-* ]] || { echo "::error::unexpected archive name $archive"; exit 1; }
           [[ "$archive" == *.tar.gz ]] || { echo "::error::expected .tar.gz archive"; exit 1; }
-          echo "DEBUG: Extracting root_dir..."
           set +o pipefail
           root_dir=$(tar -tzf "$archive" 2>&1 | head -1 | cut -d/ -f1)
           set -o pipefail
-          echo "DEBUG: root_dir='$root_dir' (length: ${#root_dir})"
           [[ -n "$root_dir" ]] || { echo "::error::failed to detect root directory"; exit 1; }
-          echo "DEBUG: Creating contents.txt..."
           tar -tzf "$archive" > contents.txt 2>&1
-          tar_exit=$?
-          echo "DEBUG: tar exit code: $tar_exit"
-          if [[ $tar_exit -ne 0 ]]; then
-            echo "::error::tar failed with exit code $tar_exit"
-            cat contents.txt
-            exit 1
-          fi
-          echo "DEBUG: Archive contents:"
-          cat contents.txt
-          echo "DEBUG: Checking files..."
           grep -q "^${root_dir}/ollama-coordinator-coordinator\$" contents.txt || { echo "::error::ollama-coordinator-coordinator not found"; exit 1; }
           grep -q "^${root_dir}/ollama-coordinator-agent\$" contents.txt || { echo "::error::ollama-coordinator-agent not found"; exit 1; }
           grep -q "^${root_dir}/README.md\$" contents.txt || { echo "::error::README.md not found"; exit 1; }
           grep -q "^${root_dir}/README.ja.md\$" contents.txt || { echo "::error::README.ja.md not found"; exit 1; }
           grep -q "^${root_dir}/LICENSE\$" contents.txt || { echo "::error::LICENSE not found"; exit 1; }
           rm contents.txt
-          echo "DEBUG: Validation passed"
 
       - name: Package binaries (Windows)
         if: runner.os == 'Windows'
@@ -163,6 +183,7 @@ jobs:
             }
           }
           Remove-Item $extractDir -Recurse -Force
+
       - name: Upload release artifact (Unix)
         if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
@@ -179,10 +200,10 @@ jobs:
           path: ${{ steps.package_windows.outputs.archive }}
           if-no-files-found: error
 
-  publish:
-    name: Attach binaries to release
-    needs: build
-    if: inputs.release_tag != ''
+  publish-binaries:
+    name: Attach binaries to GitHub Release
+    needs: [detect-release, build-binaries]
+    if: needs.detect-release.outputs.is_release == 'true' && needs.detect-release.outputs.release_tag != ''
     runs-on: ubuntu-latest
     steps:
       - name: Download build artifacts
@@ -197,7 +218,36 @@ jobs:
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ inputs.release_tag }}
+          tag_name: ${{ needs.detect-release.outputs.release_tag }}
           files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backmerge-to-develop:
+    name: Backmerge to develop
+    needs: [detect-release, publish-binaries]
+    if: needs.detect-release.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Backmerge main to develop
+        run: |
+          echo "Checking out develop..."
+          git fetch origin develop
+          git checkout develop
+
+          echo "Merging main to develop..."
+          git merge origin/main --no-edit -m "chore: Backmerge main to develop [skip ci]"
+
+          echo "Pushing to develop..."
+          git push origin develop

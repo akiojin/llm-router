@@ -6,7 +6,7 @@ English | [日本語](./README.ja.md)
 
 ## Overview
 
-Ollama Coordinator is a system that provides unified management and a single API endpoint for multiple Ollama instances running across different machines. It features load balancing, automatic failure detection, and real-time monitoring.
+Ollama Coordinator is a system that provides unified management and a single API endpoint for multiple Ollama instances running across different machines. It features intelligent load balancing, automatic failure detection, and real-time monitoring capabilities.
 
 ## Key Features
 
@@ -18,6 +18,7 @@ Ollama Coordinator is a system that provides unified management and a single API
 - **Self-registering Agents**: Agents automatically register with the Coordinator
 - **WebUI Management**: Manage agent settings, monitoring, and control through browser-based dashboard
 - **Cross-Platform Support**: Works on Windows 10+, macOS 12+, and Linux
+- **GPU-Aware Routing**: Intelligent request routing based on GPU capabilities and availability
 
 ## Load Balancing
 
@@ -315,24 +316,21 @@ Manual installation is also supported. Download Ollama from [ollama.ai](https://
 
 ### Release Automation
 
-We follow a feature → develop → main promotion model:
+We follow the same release-branch workflow as `akiojin/unity-mcp-server`, with the only difference being that our `publish.yml` funnels into `release-binaries.yml` to ship Rust binaries.
 
-- `feature/*`: short-lived branches for individual changes.
-- `develop`: integration branch that always contains the latest, release-ready code.
-- `main`: production history. Every merge is expected to ship.
+1. While on `develop`, run the `/release` slash command or execute `./scripts/create-release-branch.sh`. The helper script calls `gh workflow run create-release.yml --ref develop`, which performs a semantic-release dry-run and creates `release/vX.Y.Z`.
+2. Pushing `release/vX.Y.Z` triggers `.github/workflows/release.yml`. That workflow runs semantic-release for real, updates CHANGELOG/Cargo manifests, creates the Git tag and GitHub Release, merges the release branch into `main`, backmerges `main` into `develop`, and deletes the release branch.
+3. The `main` push kicks off `.github/workflows/publish.yml`, which invokes `release-binaries.yml` to build and attach Linux/macOS/Windows archives to the GitHub Release.
 
-Flow overview (aka “Method A”):
+Monitor the pipeline with:
 
-1. While on `develop`, run the `/release` slash command or execute `./scripts/create-release-pr.sh`. The helper script refreshes `develop` and opens a PR targeting `main` with a dated title.
-2. Required checks (quality gates, specs, etc.) must pass on that PR. When they do, merge it into `main`.
-3. The merge triggers `.github/workflows/release.yml`. This workflow:
-   - Runs `semantic-release` on the `main` branch.
-   - Derives the next version from Conventional Commits.
-   - Updates `package.json`, `package-lock.json`, and `CHANGELOG.md` and commits the changes back to `main` with the GitHub Actions bot identity.
-   - Creates a Git tag like `v1.2.0`, generates GitHub Release notes, and (optionally) publishes to npm. To enable npm publication, flip `npmPublish` to `true` in `.releaserc.json` and provide an `NPM_TOKEN` secret.
-4. After a successful release, the workflow automatically fast-forwards `develop` from `main`. If conflicts occur, it opens a sync PR (`sync/main-to-develop-<timestamp>`) so humans can resolve them.
+```bash
+gh run watch $(gh run list --workflow=create-release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch $(gh run list --workflow=publish.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+```
 
-The only manual step is initiating the PR from `develop` to `main`; everything else—versioning, CHANGELOG generation, tagging, Release creation, and branch back-sync—is handled by the automation.
+Only the `/release` invocation is manual; versioning, CHANGELOG generation, tagging, release creation, and binary distribution are fully automated.
 
 #### GPU Detection
 

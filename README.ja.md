@@ -6,7 +6,7 @@
 
 ## 概要
 
-Ollama Coordinatorは、複数のマシン上で動作するOllamaインスタンスを一元管理し、統一されたAPIエンドポイントを提供するシステムです。ロードバランシング、自動障害検知、リアルタイム監視機能を備えています。
+Ollama Coordinatorは、複数のマシン上で動作するOllamaインスタンスを一元管理し、統一されたAPIエンドポイントを提供するシステムです。インテリジェントなロードバランシング、自動障害検知、リアルタイム監視機能を備えています。
 
 ## 主な特徴
 
@@ -18,6 +18,7 @@ Ollama Coordinatorは、複数のマシン上で動作するOllamaインスタ�
 - **エージェント自己登録**: エージェントが自動的にCoordinatorに登録
 - **WebUI管理**: ブラウザベースのダッシュボードでエージェント設定、監視、制御が可能
 - **クロスプラットフォーム対応**: Windows 10+、macOS 12+、Linuxで動作
+- **GPU対応ルーティング**: GPU能力と可用性に基づくインテリジェントなリクエストルーティング
 
 ## アーキテクチャ
 
@@ -217,6 +218,27 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 
 GitHubリリースには各プラットフォーム向けのバイナリを同梱します。基本手順は以下のとおりです。
 
+1. リリース用のタグを作成する前に `cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test` を通し、品質チェックを完了させる。
+2. ターゲットごとにリリースビルドを実行する。
+   ```bash
+   # Linux (x86_64)
+   cargo build --release --target x86_64-unknown-linux-gnu
+
+   # Windows
+   cargo build --release --target x86_64-pc-windows-msvc
+
+   # macOS (Apple Silicon)
+   cargo build --release --target aarch64-apple-darwin
+
+   # macOS (Intel)
+   cargo build --release --target x86_64-apple-darwin
+   ```
+3. 生成されたバイナリ（`target/<target>/release/` 配下の `ollama-coordinator-coordinator` と `ollama-coordinator-agent`）を `.tar.gz` もしくは `.zip` にまとめ、README・CHANGELOGなど必要ファイルを同梱する。
+4. GitHubリポジトリでリリースを作成し、各プラットフォーム向けアーカイブをアップロードする。リリースノートには対応プラットフォーム・ハッシュ値（任意）・既知の制限事項を記載する。
+5. 必要に応じて自動化（GitHub Actions 等）で上記手順を再現し、リリースタグ作成と同時にアーティファクトをアップロードする。  
+   本リポジトリでは `.github/workflows/semantic-release.yml` が Conventional Commits からバージョンを決定して `Cargo.toml` 群と `CHANGELOG.md` を更新し、その後 `.github/workflows/release-binaries.yml` を呼び出して各プラットフォーム向けアーカイブを生成・検証した上で GitHub Release に添付します。
+   - `main` ブランチが保護されている場合、GitHub Actions の既定トークンではリリースコミットやタグ作成がブロックされます。対象リポジトリに限定した **Fine-grained Personal Access Token** を作成し、リポジトリシークレット `PERSONAL_ACCESS_TOKEN` に登録してください。最低限必要な権限は次のとおりです: Contents (Read & write)、Metadata (Read)、Actions (Read)、Workflows (Read & write)、Issues (Read & write)、Pull requests (Read & write)、Releases (Read & write)。有効期限を短めに設定し、定期的にローテーションすることを推奨します。詳細手順は `CLAUDE.md` の「semantic-release トークン設定」を参照してください。
+
 ### リリース自動化
 
 ブランチ戦略は `feature/*` → `develop` → `main` です。
@@ -225,14 +247,13 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
 - `develop`: リリース候補を常に保持する統合ブランチ。
 - `main`: 本番/リリース履歴。ここへのマージがそのまま出荷されます。
 
-リリースフロー（方法A）は次のとおりです。
+このリポジトリでは、`akiojin/unity-mcp-server` と同じ release ブランチ方式（方法B）で正式リリースを自動化しています。
 
-1. 開発者は `develop` ブランチ上で `/release` コマンド、もしくは `./scripts/create-release-pr.sh` を実行し、`develop` → `main` のPRを自動生成します。
-2. Requiredチェック（quality checks、spec整合など）がすべてGreenになったら、そのPRを `main` へマージします。
-3. マージを検知した `.github/workflows/release.yml` が起動し、`semantic-release` を実行します。Conventional Commitsから次のバージョンを決定し、`package.json` / `package-lock.json` / `CHANGELOG.md` を更新して `main` に直接コミットし、`v1.2.0` のようなタグとGitHub Releaseを自動作成します。`@semantic-release/npm` の `npmPublish` を `true` に切り替え、`NPM_TOKEN` を設定すればnpmへの公開も自動化できます。
-4. リリース完了後は `main` → `develop` の自動マージを行い、衝突した場合は `sync/main-to-develop-<timestamp>` というPRを `gh pr create` で作成して通知します。
+1. 開発者は `develop` ブランチ上で `/release` コマンド、もしくは `./scripts/create-release-branch.sh` を実行します。内部では `scripts/create-release-branch.sh` が `gh workflow run create-release.yml --ref develop` を呼び出し、semantic-release のドライランで次バージョンを計算しつつ `release/vX.Y.Z` ブランチを作成・push します。
+2. release ブランチの push を契機に `.github/workflows/release.yml` が起動し、semantic-release 本番実行 → CHANGELOG / Cargo.toml / バージョンタグ更新 → main への自動マージ → develop へのバックマージ → release ブランチ削除までを一括で行います。
+3. main へのマージにより `.github/workflows/publish.yml` が動作し、`release-binaries.yml` を呼び出して Linux / macOS (x86_64, ARM64) / Windows 向けバイナリをビルド・検証し、GitHub Release に添付します。
 
-人手が必要なのは最初の `/release` 実行だけで、バージョン決定・CHANGELOG生成・タグ/Release作成・developへのバックポートまでがCIで一貫して行われます。
+人手が必要なのは `/release` の実行と、必要に応じた進捗モニタリング（`gh run watch …`）だけです。バージョン決定からリリースノート生成、develop への同期まで CI が自動で完了させます。
 
 ## 使い方
 
