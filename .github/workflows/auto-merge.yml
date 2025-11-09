@@ -7,120 +7,24 @@ name: Auto Merge
 
 on:
   pull_request_target:
-    types:
-      - opened
-      - reopened
-      - ready_for_review
-      - synchronize
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+      - develop
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
   auto-enable:
-    # 要件: FR-008, FR-009, FR-010, FR-011
-    # 目的: PR状態を確認し、条件を満たせばGitHub自動マージを有効化
+    name: Enable Auto Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.state == 'open'
+    if: github.event.pull_request.draft == false
+
     steps:
-      - name: Enable GitHub auto-merge
+      - name: Enable auto-merge
         env:
-          GH_TOKEN: ${{ github.token }}
-          OWNER: ${{ github.event.pull_request.base.repo.owner.login }}
-          REPO: ${{ github.event.pull_request.base.repo.name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-
-          echo "🔁 Request to enable auto-merge for PR #${PR_NUMBER} (${OWNER}/${REPO})"
-
-          MAX_ATTEMPTS=20
-          SLEEP_SECONDS=5
-          ATTEMPT=1
-          PULL_REQUEST_JSON=""
-
-          fetch_pr() {
-            gh api graphql -f query='
-              query($owner:String!, $repo:String!, $number:Int!) {
-                repository(owner:$owner, name:$repo) {
-                  pullRequest(number:$number) {
-                    id
-                    number
-                    title
-                    isDraft
-                    mergeable
-                    autoMergeRequest {
-                      enabledAt
-                      mergeMethod
-                      enabledBy { login }
-                    }
-                  }
-                }
-              }
-            ' -F owner="$OWNER" -F repo="$REPO" -F number=$PR_NUMBER
-          }
-
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            PULL_REQUEST_JSON=$(fetch_pr)
-            PR_NODE=$(echo "$PULL_REQUEST_JSON" | jq -c '.data.repository.pullRequest')
-
-            if [ "$PR_NODE" = "null" ] || [ -z "$PR_NODE" ]; then
-              echo "::error::Pull request #$PR_NUMBER not found"
-              exit 1
-            fi
-
-            IS_DRAFT=$(echo "$PR_NODE" | jq -r '.isDraft')
-            MERGEABLE=$(echo "$PR_NODE" | jq -r '.mergeable')
-
-            if [ "$IS_DRAFT" = "true" ]; then
-              echo "🚫 PR is draft; auto-merge will not be enabled."
-              exit 0
-            fi
-
-            if [ "$MERGEABLE" = "UNKNOWN" ]; then
-              echo "⏳ Mergeability unknown (attempt $ATTEMPT/${MAX_ATTEMPTS}). Waiting ${SLEEP_SECONDS}s..."
-              ATTEMPT=$((ATTEMPT + 1))
-              sleep $SLEEP_SECONDS
-              continue
-            fi
-
-            break
-          done
-
-          if [ "$MERGEABLE" = "UNKNOWN" ]; then
-            echo "⚠️ Mergeability never resolved. Skipping auto-merge enable."
-            exit 0
-          fi
-
-          if [ "$MERGEABLE" != "MERGEABLE" ]; then
-            echo "⚠️ PR mergeable state is $MERGEABLE; auto-merge not enabled."
-            exit 0
-          fi
-
-          AUTO_MERGE_STATE=$(echo "$PR_NODE" | jq -r '.autoMergeRequest.mergeMethod // empty')
-          if [ -n "$AUTO_MERGE_STATE" ]; then
-            echo "ℹ️ Auto-merge already enabled (method: $AUTO_MERGE_STATE)."
-            exit 0
-          fi
-
-          PR_ID=$(echo "$PR_NODE" | jq -r '.id')
-
-          gh api graphql -f query='
-            mutation($pullRequest:ID!) {
-              enablePullRequestAutoMerge(input:{
-                pullRequestId:$pullRequest,
-                mergeMethod:MERGE
-              }) {
-                pullRequest {
-                  number
-                  autoMergeRequest {
-                    enabledAt
-                    mergeMethod
-                  }
-                }
-              }
-            }
-          ' -F pullRequest="$PR_ID"
-
-          echo "✅ Enabled GitHub auto-merge (MERGE) for PR #$PR_NUMBER"
+          gh pr merge --auto --merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
