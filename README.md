@@ -315,12 +315,24 @@ Manual installation is also supported. Download Ollama from [ollama.ai](https://
 
 ### Release Automation
 
-Merging changes into `main` runs `.github/workflows/semantic-release.yml`, which derives the next semantic version from Conventional Commits, updates the workspace Cargo manifests and `CHANGELOG.md`, and then triggers `.github/workflows/release-binaries.yml` to build/validate platform archives and attach them to the newly published GitHub Release. The workflow produces platform-specific archives with consistent formats:
+We follow a feature → develop → main promotion model:
 
-- `ollama-coordinator-linux-*` / `ollama-coordinator-macos-*` → `.tar.gz`
-- `ollama-coordinator-windows-*` → `.zip`
+- `feature/*`: short-lived branches for individual changes.
+- `develop`: integration branch that always contains the latest, release-ready code.
+- `main`: production history. Every merge is expected to ship.
 
-Releases must include both coordinator and agent binaries together with `README.md`, `README.ja.md`, and `LICENSE` so operators can download a single archive per target environment.
+Flow overview (aka “Method A”):
+
+1. While on `develop`, run the `/release` slash command or execute `./scripts/create-release-pr.sh`. The helper script refreshes `develop` and opens a PR targeting `main` with a dated title.
+2. Required checks (quality gates, specs, etc.) must pass on that PR. When they do, merge it into `main`.
+3. The merge triggers `.github/workflows/release.yml`. This workflow:
+   - Runs `semantic-release` on the `main` branch.
+   - Derives the next version from Conventional Commits.
+   - Updates `package.json`, `package-lock.json`, and `CHANGELOG.md` and commits the changes back to `main` with the GitHub Actions bot identity.
+   - Creates a Git tag like `v1.2.0`, generates GitHub Release notes, and (optionally) publishes to npm. To enable npm publication, flip `npmPublish` to `true` in `.releaserc.json` and provide an `NPM_TOKEN` secret.
+4. After a successful release, the workflow automatically fast-forwards `develop` from `main`. If conflicts occur, it opens a sync PR (`sync/main-to-develop-<timestamp>`) so humans can resolve them.
+
+The only manual step is initiating the PR from `develop` to `main`; everything else—versioning, CHANGELOG generation, tagging, Release creation, and branch back-sync—is handled by the automation.
 
 #### GPU Detection
 

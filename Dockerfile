@@ -37,14 +37,35 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Install uv/uvx
 RUN curl -fsSL https://astral.sh/uv/install.sh | bash
 
+RUN npm i -g pnpm@latest
+
+# Setup pnpm global bin directory manually
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+RUN mkdir -p "$PNPM_HOME" && \
+    pnpm config set global-bin-dir "$PNPM_HOME" && \
+    echo 'export PNPM_HOME="/root/.local/share/pnpm"' >> /root/.bashrc && \
+    echo 'export PATH="$PNPM_HOME:$PATH"' >> /root/.bashrc
+
 RUN npm i -g \
     npm@latest \
+    pnpm@latest \
     bun@latest \
     typescript@latest \
     eslint@latest \
     prettier@latest \
     @commitlint/cli@latest \
     @commitlint/config-conventional@latest
+
+# Setup pnpm global bin directory manually
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+RUN mkdir -p "$PNPM_HOME" && \
+    pnpm config set global-bin-dir "$PNPM_HOME" && \
+    echo 'export PNPM_HOME="/root/.local/share/pnpm"' >> /root/.bashrc && \
+    echo 'export PATH="$PNPM_HOME:$PATH"' >> /root/.bashrc
 
 EXPOSE 8080
 

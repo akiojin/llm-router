@@ -70,6 +70,35 @@ sync_branches() {
     success "ブランチ同期完了"
 }
 
+# 必要なラベルの確認・作成
+ensure_labels() {
+    info "必要なラベルを確認中..."
+
+    declare -A LABEL_META=(
+        ["release"]="1f883d|Release PR tracking"
+        ["auto-merge"]="5319e7|Auto-merge eligible"
+    )
+
+    mapfile -t EXISTING_LABELS < <(gh label list --limit 200 --json name --jq '.[].name' 2>/dev/null || echo "")
+
+    for label in "${!LABEL_META[@]}"; do
+        if printf '%s\n' "${EXISTING_LABELS[@]}" | grep -Fxq "$label"; then
+            info "ラベル '$label' は既に存在します"
+            continue
+        fi
+
+        COLOR="${LABEL_META[$label]%|*}"
+        DESC="${LABEL_META[$label]#*|}"
+        warning "ラベル '$label' が存在しません。作成します..."
+
+        if gh label create "$label" --color "$COLOR" --description "$DESC" >/dev/null 2>&1; then
+            success "ラベル '$label' を作成しました"
+        else
+            error "ラベル '$label' の作成に失敗しました"
+        fi
+    done
+}
+
 # 既存PR確認
 check_existing_pr() {
     info "既存のPRを確認中..."
@@ -193,6 +222,7 @@ main() {
     echo ""
 
     check_prerequisites
+    ensure_labels
     sync_branches
     check_existing_pr
     create_pr
