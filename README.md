@@ -6,7 +6,7 @@ English | [日本語](./README.ja.md)
 
 ## Overview
 
-Ollama Coordinator is a system that provides unified management and a single API endpoint for multiple Ollama instances running across different machines. It features load balancing, automatic failure detection, and real-time monitoring.
+Ollama Coordinator is a system that provides unified management and a single API endpoint for multiple Ollama instances running across different machines. It features intelligent load balancing, automatic failure detection, and real-time monitoring capabilities.
 
 ## Key Features
 
