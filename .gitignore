@@ -13,6 +13,7 @@ yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
 .husky/_/
+package-lock.json
 
 # Build output
 dist/

@@ -1,30 +1,118 @@
-# Auto Merge Workflow
-# 機能ID: SPEC-47c6f44c
-# 目的: すべてのPRでGitHubの自動マージを有効化
-# 要件: FR-008, FR-009, FR-010, FR-011, FR-012
-
-name: Auto Merge
+name: Auto Merge PR
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
       - develop
+  workflow_dispatch:
+  push:
+    branches: [test/**]
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  auto-enable:
+  verify-auto-merge-structure:
+    name: Verify Auto Merge Workflow
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check workflow exists
+        run: |
+          if [ ! -f .github/workflows/auto-merge.yml ]; then
+            echo "❌ ERROR: auto-merge.yml does not exist"
+            exit 1
+          fi
+          echo "✅ auto-merge.yml exists"
+
+      - name: Verify workflow name
+        run: |
+          WORKFLOW_NAME=$(grep "^name:" .github/workflows/auto-merge.yml | head -1 | cut -d':' -f2- | xargs)
+          if [ "$WORKFLOW_NAME" != "Auto Merge PR" ]; then
+            echo "❌ ERROR: Workflow name is not 'Auto Merge PR' (actual: $WORKFLOW_NAME)"
+            exit 1
+          fi
+          echo "✅ Workflow name is correct"
+
+      - name: Verify triggers and branches
+        run: |
+          if ! grep -q "^  pull_request:" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: pull_request trigger not found"
+            exit 1
+          fi
+          if ! grep -q "types: \\[opened, synchronize, reopened, ready_for_review\\]" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: pull_request types mismatch"
+            exit 1
+          fi
+          for branch in main develop; do
+            if ! grep -q "      - $branch" .github/workflows/auto-merge.yml; then
+              echo "❌ ERROR: Branch '$branch' missing from trigger"
+              exit 1
+            fi
+          done
+          echo "✅ pull_request trigger and branches verified"
+
+      - name: Verify permissions and draft handling
+        run: |
+          if ! grep -q "contents: write" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: 'contents: write' permission missing"
+            exit 1
+          fi
+          if ! grep -q "pull-requests: write" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: 'pull-requests: write' permission missing"
+            exit 1
+          fi
+          if grep -Eq "^[[:space:]]+if:\s*github\.event\.pull_request\.draft == false" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: Job-level draft guard should not exist"
+            exit 1
+          fi
+          if ! grep -q "github.event.pull_request.draft" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: Inline draft handling missing"
+            exit 1
+          fi
+          echo "✅ Permissionsとドラフト制御を確認"
+
+      - name: Verify auto-merge command configuration
+        run: |
+          if ! grep -E -q "GH_TOKEN:.*secrets\.PERSONAL_ACCESS_TOKEN" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: GH_TOKEN assignment is not restricted to secrets.PERSONAL_ACCESS_TOKEN"
+            exit 1
+          fi
+          if ! grep -q "Required secret PERSONAL_ACCESS_TOKEN is not configured" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: PERSONAL_ACCESS_TOKEN presence check missing"
+            exit 1
+          fi
+          if ! grep -q "gh pr merge --auto --merge" .github/workflows/auto-merge.yml; then
+            echo "❌ ERROR: gh pr merge command missing"
+            exit 1
+          fi
+          echo "✅ auto-merge command prerequisites verified"
+
+  auto-merge:
     name: Enable Auto Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Enable auto-merge
         env:
-          GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::Required secret PERSONAL_ACCESS_TOKEN is not configured. Set secrets.PERSONAL_ACCESS_TOKEN (Personal Access Token with contents/pull-requests write) to enable auto-merge."
+            exit 1
+          fi
+
+          if [ "${{ github.event.pull_request.draft }}" = "true" ]; then
+            echo "⏭️ PR #${{ github.event.pull_request.number }} is draft. Auto-merge cannot be enabled yet."
+            exit 0
+          fi
+
+          echo "🔁 Enabling auto-merge for PR #${{ github.event.pull_request.number }} targeting ${{ github.base_ref }}"
           gh pr merge --auto --merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
