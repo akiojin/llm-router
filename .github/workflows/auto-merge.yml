@@ -6,154 +6,25 @@
 name: Auto Merge
 
 on:
-  workflow_run:
-    workflows: ["Quality Checks"]
-    types: [completed]
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+      - develop
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  auto-merge:
-    # 要件: FR-008, FR-009, FR-010, FR-011
-    # 目的: 条件判定してPRをmainにマージ
+  auto-enable:
+    name: Enable Auto Merge
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    if: github.event.pull_request.draft == false
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Get PR number
-        id: pr
-        run: |
-          echo "🔍 Getting PR number from branch: ${{ github.event.workflow_run.head_branch }}"
-          PR_NUMBER=$(gh pr list --head ${{ github.event.workflow_run.head_branch }} --json number --jq '.[0].number')
-
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
-            echo "::error::No PR found for branch ${{ github.event.workflow_run.head_branch }}"
-            exit 1
-          fi
-
-          echo "📌 PR number: $PR_NUMBER"
-          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+      - name: Enable auto-merge
         env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Check PR status
-        id: check
+          GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Checking PR status for PR #${{ steps.pr.outputs.number }}"
-
-          MAX_ATTEMPTS=20
-          SLEEP_SECONDS=15
-          ATTEMPT=1
-
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            PR_STATUS=$(gh pr view ${{ steps.pr.outputs.number }} --json isDraft,mergeable,mergeStateStatus --jq '{isDraft, mergeable, mergeStateStatus}')
-
-            IS_DRAFT=$(echo "$PR_STATUS" | jq -r '.isDraft')
-            MERGEABLE=$(echo "$PR_STATUS" | jq -r '.mergeable')
-            MERGE_STATE=$(echo "$PR_STATUS" | jq -r '.mergeStateStatus')
-
-            echo "📊 Attempt $ATTEMPT PR status: $PR_STATUS"
-            echo "  - isDraft: $IS_DRAFT"
-            echo "  - mergeable: $MERGEABLE"
-            echo "  - mergeStateStatus: $MERGE_STATE"
-
-            if [ "$IS_DRAFT" = "true" ]; then
-              echo "🚫 PR is draft. Skipping wait."
-              break
-            fi
-
-            if [ "$MERGEABLE" != "MERGEABLE" ]; then
-              echo "🚫 PR is not mergeable (status: $MERGEABLE). Skipping wait."
-              break
-            fi
-
-            if [ "$MERGE_STATE" = "CLEAN" ] || [ "$MERGE_STATE" = "UNSTABLE" ]; then
-              echo "✅ PR merge state is $MERGE_STATE. Continuing."
-              break
-            fi
-
-            if [ "$MERGE_STATE" != "BLOCKED" ]; then
-              echo "⚠️ Unexpected merge state: $MERGE_STATE. Skipping wait."
-              break
-            fi
-
-            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-              echo "::warning::Timed out waiting for merge state to become CLEAN/UNSTABLE (still $MERGE_STATE)."
-              break
-            fi
-
-            echo "⏳ Required checks still running (merge state: $MERGE_STATE). Waiting ${SLEEP_SECONDS}s before retry..."
-            ATTEMPT=$((ATTEMPT + 1))
-            sleep $SLEEP_SECONDS
-          done
-
-          echo "status=$PR_STATUS" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Merge PR
-        # 要件: FR-009, FR-010
-        # 条件: ドラフトでない、マージ可能、マージ状態が正常
-        if: |
-          fromJSON(steps.check.outputs.status).isDraft == false &&
-          fromJSON(steps.check.outputs.status).mergeable == 'MERGEABLE' &&
-          (fromJSON(steps.check.outputs.status).mergeStateStatus == 'CLEAN' || fromJSON(steps.check.outputs.status).mergeStateStatus == 'UNSTABLE')
-        run: |
-          echo "🚀 Merging PR #${{ steps.pr.outputs.number }}..."
-
-          # Get PR ID (GraphQL format)
-          PR_ID=$(gh pr view ${{ steps.pr.outputs.number }} --json id --jq '.id')
-          echo "📌 PR ID: $PR_ID"
-
-          # Merge using GraphQL API with MERGE method
-          gh api graphql -f query='
-            mutation($pr:ID!) {
-              mergePullRequest(input:{
-                pullRequestId: $pr,
-                mergeMethod: MERGE,
-                commitHeadline: "Merge pull request #${{ steps.pr.outputs.number }} from ${{ github.event.workflow_run.head_branch }}",
-                commitBody: "Auto-merged by GitHub Actions after quality checks passed.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-              }) {
-                pullRequest {
-                  number
-                  merged
-                  mergedAt
-                }
-              }
-            }
-          ' -f pr="$PR_ID"
-
-          echo "✅ PR #${{ steps.pr.outputs.number }} merged successfully"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Skip merge (conditions not met)
-        # 要件: FR-012
-        # 目的: 条件不一致の場合、スキップ理由をログ記録
-        if: |
-          fromJSON(steps.check.outputs.status).isDraft == true ||
-          fromJSON(steps.check.outputs.status).mergeable != 'MERGEABLE' ||
-          (fromJSON(steps.check.outputs.status).mergeStateStatus != 'CLEAN' && fromJSON(steps.check.outputs.status).mergeStateStatus != 'UNSTABLE')
-        run: |
-          echo "⏭️ Skipping auto-merge for PR #${{ steps.pr.outputs.number }}"
-          echo "Reasons:"
-
-          IS_DRAFT=$(echo '${{ steps.check.outputs.status }}' | jq -r '.isDraft')
-          MERGEABLE=$(echo '${{ steps.check.outputs.status }}' | jq -r '.mergeable')
-          MERGE_STATE=$(echo '${{ steps.check.outputs.status }}' | jq -r '.mergeStateStatus')
-
-          if [ "$IS_DRAFT" == "true" ]; then
-            echo "  ❌ PR is a draft"
-          fi
-
-          if [ "$MERGEABLE" != "MERGEABLE" ]; then
-            echo "  ❌ PR is not mergeable (status: $MERGEABLE)"
-          fi
-
-          if [ "$MERGE_STATE" != "CLEAN" ] && [ "$MERGE_STATE" != "UNSTABLE" ]; then
-            echo "  ❌ Merge state is not clean or unstable (status: $MERGE_STATE)"
-          fi
+          gh pr merge --auto --merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
