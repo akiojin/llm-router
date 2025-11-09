@@ -18,12 +18,12 @@
 
 ## Phase 3.1: セットアップ
 
-- [ ] T001 [P] Bats-coreをインストールしてテスト環境をセットアップ
+- [x] T001 [P] Bats-coreをインストールしてテスト環境をセットアップ
   - 実行: `npm install --save-dev bats` または システムパッケージマネージャーで bats をインストール
   - 確認: `bats --version` でバージョン表示
   - パス: プロジェクトルート
 
-- [ ] T002 [P] テストディレクトリ構造を作成
+- [x] T002 [P] テストディレクトリ構造を作成
   - 作成: `tests/hooks/` ディレクトリ
   - 作成: `tests/hooks/.gitkeep` (ディレクトリ追跡用)
   - パス: `tests/hooks/`
@@ -32,7 +32,7 @@
 
 **重要: これらのテストは既存実装が合格することを検証する**
 
-- [ ] T003 [P] block-git-branch-ops.shの契約テストを作成
+- [x] T003 [P] block-git-branch-ops.shの契約テストを作成
   - 作成: `tests/hooks/test-block-git-branch-ops.bats`
   - テストケース:
     - `git branch` (引数なし) → allow (exit 0)
@@ -46,7 +46,7 @@
   - 期待: 既存実装が全テストに合格
   - パス: `tests/hooks/test-block-git-branch-ops.bats`
 
-- [ ] T004 [P] block-cd-command.shの契約テストを作成
+- [x] T004 [P] block-cd-command.shの契約テストを作成
   - 作成: `tests/hooks/test-block-cd-command.bats`
   - テストケース:
     - `cd .` → allow (exit 0)
@@ -61,14 +61,14 @@
 
 ## Phase 3.3: コア実装 (テスト合格確認後)
 
-- [ ] T005 既存hook実装のテスト合格確認と微調整
+- [x] T005 既存hook実装のテスト合格確認と微調整
   - 実行: T003とT004のテストスイート
   - 確認: すべてのテストが合格
   - 必要に応じて: hook スクリプトの微調整（テストケースに合わせる）
   - コミット: テスト合格の証明
   - パス: `.claude/hooks/block-git-branch-ops.sh`, `.claude/hooks/block-cd-command.sh`
 
-- [ ] T006 [P] quickstart.mdを作成
+- [x] T006 [P] quickstart.mdを作成
   - 作成: `specs/SPEC-dc648675/quickstart.md`
   - 内容:
     - Hook設定の確認手順
@@ -79,7 +79,7 @@
 
 ## Phase 3.4: 統合
 
-- [ ] T007 GitHub ActionsワークフローでHookテストを追加
+- [x] T007 GitHub ActionsワークフローでHookテストを追加
   - 作成: `.github/workflows/test-hooks.yml`
   - 内容:
     - ubuntu-latestで実行
@@ -89,14 +89,14 @@
   - トリガー: push, pull_request
   - パス: `.github/workflows/test-hooks.yml`
 
-- [ ] T008 既存Quality ChecksワークフローにHookテストを統合
+- [x] T008 既存Quality ChecksワークフローにHookテストを統合
   - 編集: `.github/workflows/quality-checks.yml` (存在する場合)
   - 追加: Hookテストステップ
   - または: T007で作成した独立ワークフローを使用
   - 確認: PRでCI/CDが実行され、全テストが合格
   - パス: `.github/workflows/quality-checks.yml`
 
-- [ ] T009 Makefileにhookテストターゲットを追加
+- [x] T009 Makefileにhookテストターゲットを追加
   - 編集: `Makefile`
   - 追加: `test-hooks` ターゲット
     ```makefile
@@ -110,14 +110,14 @@
 
 ## Phase 3.5: 仕上げ
 
-- [ ] T010 [P] パフォーマンステストを実施
+- [x] T010 [P] パフォーマンステストを実施
   - 作成: `tests/hooks/benchmark-hooks.sh`
   - 測定: hook実行時間（100回実行して平均）
   - 目標: < 100ms/実行
   - 記録: ベンチマーク結果を`specs/SPEC-dc648675/performance.md`に記録
   - パス: `tests/hooks/benchmark-hooks.sh`, `specs/SPEC-dc648675/performance.md`
 
-- [ ] T011 [P] README.mdにhook機能の説明を追加
+- [x] T011 [P] README.mdにhook機能の説明を追加
   - 編集: `README.md`
   - 追加セクション:
     - "Claude Code Worktree Hooks" 概要
@@ -125,28 +125,28 @@
     - specs/SPEC-dc648675/へのリンク
   - パス: `README.md`
 
-- [ ] T012 [P] CLAUDE.mdのWorktree運用セクションを更新
+- [x] T012 [P] CLAUDE.mdのWorktree運用セクションを更新
   - 編集: `CLAUDE.md`
   - 更新: "Worktree＆ブランチ運用"セクション
   - 追加: hookスクリプトによる自動保護の説明
   - 参照: specs/SPEC-dc648675/へのリンク
   - パス: `CLAUDE.md`
 
-- [ ] T013 重複コードの削減とリファクタリング
+- [x] T013 重複コードの削減とリファクタリング
   - レビュー: block-git-branch-ops.sh と block-cd-command.sh
   - 抽出: 共通関数（JSON出力、複合コマンド解析など）
   - オプション: 共通ライブラリ `.claude/hooks/common.sh` 作成
   - テスト: 全Batsテストが引き続き合格することを確認
   - パス: `.claude/hooks/block-git-branch-ops.sh`, `.claude/hooks/block-cd-command.sh`
 
-- [ ] T014 specs/SPEC-dc648675/のドキュメント最終化
+- [x] T014 specs/SPEC-dc648675/のドキュメント最終化
   - レビュー: spec.md, plan.md, tasks.md, quickstart.md
   - 追加: performance.md（T010の結果）
   - 更新: チェックリスト（`specs/SPEC-dc648675/checklists/`）
   - 確認: markdownlint合格
   - パス: `specs/SPEC-dc648675/*.md`
 
-- [ ] T015 最終動作確認とドキュメント検証
+- [x] T015 最終動作確認とドキュメント検証
   - 実行: quickstart.mdの全手順
   - 確認: 手動テスト・自動テスト全て合格
   - 実行: CI/CDパイプライン全体
