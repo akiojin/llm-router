@@ -1,4 +1,9 @@
-name: publish
+# Publish Workflow
+# 由来: release-binaries.yml + claude-worktree/publish.yml統合
+# 目的: mainへのpush時にバイナリをビルド・公開し、developへbackmerge
+# トリガー: main push (chore(release): コミット) または手動実行
+
+name: Publish
 
 on:
   push:
@@ -12,14 +17,16 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   detect-release:
     name: Resolve release tag
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(release):')
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     outputs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
+      is_release: ${{ steps.resolve.outputs.is_release }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -33,6 +40,15 @@ jobs:
           INPUT_TAG: ${{ github.event.inputs.release_tag || '' }}
         run: |
           set -euo pipefail
+
+          # Check if this is a release commit
+          if git log -1 --pretty=%B | grep -q '^chore(release):'; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Determine release tag
           if [[ -n "$INPUT_TAG" ]]; then
             tag="$INPUT_TAG"
           else
@@ -49,12 +65,189 @@ jobs:
           echo "Resolved release tag: $tag"
           echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
 
-  publish-binaries:
-    name: Build and attach binaries
+  build-binaries:
+    name: Build ${{ matrix.artifact }}
     needs: detect-release
-    if: needs.detect-release.result == 'success' && needs.detect-release.outputs.release_tag != ''
-    uses: ./.github/workflows/release-binaries.yml
-    with:
-      target_branch: main
-      release_tag: ${{ needs.detect-release.outputs.release_tag }}
-    secrets: inherit
+    if: needs.detect-release.outputs.is_release == 'true' && needs.detect-release.outputs.release_tag != ''
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: windows-x86_64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: macos-x86_64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact: macos-arm64
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binaries
+        run: cargo build --release --target ${{ matrix.target }} -p ollama-coordinator-coordinator -p ollama-coordinator-agent
+
+      - name: Package binaries (Unix)
+        if: runner.os != 'Windows'
+        id: package_unix
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="ollama-coordinator-${{ matrix.artifact }}.tar.gz"
+          staging="dist/ollama-coordinator-${{ matrix.artifact }}"
+          mkdir -p "$staging"
+          cp "target/${{ matrix.target }}/release/ollama-coordinator-coordinator" "$staging/"
+          cp "target/${{ matrix.target }}/release/ollama-coordinator-agent" "$staging/"
+          cp README.md README.ja.md LICENSE "$staging/"
+          tar czf "$archive" -C dist "$(basename "$staging")"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Validate archive contents (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -uo pipefail
+          archive="${{ steps.package_unix.outputs.archive }}"
+          [[ "$archive" == ollama-coordinator-* ]] || { echo "::error::unexpected archive name $archive"; exit 1; }
+          [[ "$archive" == *.tar.gz ]] || { echo "::error::expected .tar.gz archive"; exit 1; }
+          set +o pipefail
+          root_dir=$(tar -tzf "$archive" 2>&1 | head -1 | cut -d/ -f1)
+          set -o pipefail
+          [[ -n "$root_dir" ]] || { echo "::error::failed to detect root directory"; exit 1; }
+          tar -tzf "$archive" > contents.txt 2>&1
+          grep -q "^${root_dir}/ollama-coordinator-coordinator\$" contents.txt || { echo "::error::ollama-coordinator-coordinator not found"; exit 1; }
+          grep -q "^${root_dir}/ollama-coordinator-agent\$" contents.txt || { echo "::error::ollama-coordinator-agent not found"; exit 1; }
+          grep -q "^${root_dir}/README.md\$" contents.txt || { echo "::error::README.md not found"; exit 1; }
+          grep -q "^${root_dir}/README.ja.md\$" contents.txt || { echo "::error::README.ja.md not found"; exit 1; }
+          grep -q "^${root_dir}/LICENSE\$" contents.txt || { echo "::error::LICENSE not found"; exit 1; }
+          rm contents.txt
+
+      - name: Package binaries (Windows)
+        if: runner.os == 'Windows'
+        id: package_windows
+        shell: pwsh
+        run: |
+          $archive = "ollama-coordinator-${{ matrix.artifact }}.zip"
+          $staging = Join-Path "dist" "ollama-coordinator-${{ matrix.artifact }}"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/ollama-coordinator-coordinator.exe" $staging
+          Copy-Item "target/${{ matrix.target }}/release/ollama-coordinator-agent.exe" $staging
+          Copy-Item README.md,README.ja.md,LICENSE $staging
+          Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $archive -Force
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+
+      - name: Validate archive contents (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = "${{ steps.package_windows.outputs.archive }}"
+          if (-not ($archive -like "ollama-coordinator-*")) {
+            Write-Error "unexpected archive name $archive"
+            exit 1
+          }
+          if (-not ($archive.EndsWith(".zip"))) {
+            Write-Error "expected .zip archive"
+            exit 1
+          }
+          $extractDir = Join-Path $PWD "validate"
+          if (Test-Path $extractDir) {
+            Remove-Item $extractDir -Recurse -Force
+          }
+          Expand-Archive -Path $archive -DestinationPath $extractDir -Force
+          $files = Get-ChildItem -Path $extractDir -File -Recurse
+          $binaryPrefixes = @("ollama-coordinator-coordinator","ollama-coordinator-agent")
+          foreach ($prefix in $binaryPrefixes) {
+            if (-not ($files.Name | Where-Object { $_ -like "$prefix*.exe" })) {
+              Write-Error "missing executable matching $prefix*.exe in archive"
+              exit 1
+            }
+          }
+          $staticFiles = @("README.md","README.ja.md","LICENSE")
+          foreach ($name in $staticFiles) {
+            if (-not ($files.Name -contains $name)) {
+              Write-Error "missing $name in archive"
+              exit 1
+            }
+          }
+          Remove-Item $extractDir -Recurse -Force
+
+      - name: Upload release artifact (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ steps.package_unix.outputs.archive }}
+          if-no-files-found: error
+
+      - name: Upload release artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ steps.package_windows.outputs.archive }}
+          if-no-files-found: error
+
+  publish-binaries:
+    name: Attach binaries to GitHub Release
+    needs: [detect-release, build-binaries]
+    if: needs.detect-release.outputs.is_release == 'true' && needs.detect-release.outputs.release_tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: List downloaded assets
+        run: ls -R release
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.detect-release.outputs.release_tag }}
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backmerge-to-develop:
+    name: Backmerge to develop
+    needs: [detect-release, publish-binaries]
+    if: needs.detect-release.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Backmerge main to develop
+        run: |
+          echo "Checking out develop..."
+          git fetch origin develop
+          git checkout develop
+
+          echo "Merging main to develop..."
+          git merge origin/main --no-edit -m "chore: Backmerge main to develop [skip ci]"
+
+          echo "Pushing to develop..."
+          git push origin develop

@@ -1,0 +1,74 @@
+# Test Workflow
+# 機能ID: SPEC-47c6f44c (quality-checks.ymlから分離)
+# 目的: テスト実行とタスク完了チェック
+# 要件: FR-002 (tasks.md check), FR-003 (Rust tests), OpenAI API tests
+
+name: Test
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  tasks-check:
+    # 要件: FR-002
+    # 目的: tasks.mdの全タスク完了をチェック
+    name: Tasks Completion Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check tasks.md completion
+        run: |
+          echo "🔍 Checking tasks.md completion..."
+          chmod +x .specify/scripts/checks/check-tasks.sh
+          .specify/scripts/checks/check-tasks.sh
+        env:
+          CI: true
+
+  rust-test:
+    # 要件: FR-003
+    # 目的: Rustテストを実行（複数OS）
+    name: Rust Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        rust: [stable]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Run Rust tests
+        run: |
+          echo "🧪 Running Rust tests on ${{ matrix.os }}..."
+          cargo test --all-features --workspace -- --test-threads=1
+
+  openai-proxy-tests:
+    # 要件: OpenAI互換APIの回帰テスト
+    # 目的: OpenAI APIとの互換性を確認
+    name: OpenAI API Compatibility Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run OpenAI proxy tests
+        run: |
+          echo "🤖 Running OpenAI-compatible API tests..."
+          make openai-tests

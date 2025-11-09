@@ -1,0 +1,95 @@
+# Lint Workflow
+# 機能ID: SPEC-47c6f44c (quality-checks.ymlから分離)
+# 目的: コード品質チェック（フォーマット、lint、ドキュメント）
+# 要件: FR-004 (Rust lint), FR-005 (commitlint), FR-006 (markdownlint)
+
+name: Lint
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  rust-lint:
+    # 要件: FR-004
+    # 目的: Rust lintチェック（fmt, clippy）
+    name: Rust Format & Clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+
+      - name: Run cargo fmt
+        run: |
+          echo "🎨 Checking Rust formatting..."
+          cargo fmt --all -- --check
+
+      - name: Run cargo clippy
+        run: |
+          echo "🔍 Running Rust linter..."
+          cargo clippy --all-targets --all-features -- -D warnings
+
+  markdownlint:
+    # 要件: FR-006
+    # 目的: マークダウンファイルのスタイル違反を検出
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Run markdownlint
+        run: |
+          echo "📄 Checking Markdown files..."
+          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
+
+  commitlint:
+    # 要件: FR-005
+    # 目的: コミットメッセージがConventional Commits準拠かチェック
+    name: Commit Message Lint
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install commitlint
+        run: |
+          echo "📦 Installing commitlint..."
+          pnpm install --frozen-lockfile
+
+      - name: Check commit messages
+        run: |
+          echo "📝 Checking commit messages..."
+          chmod +x .specify/scripts/checks/check-commits.sh
+          .specify/scripts/checks/check-commits.sh --from origin/main --to HEAD
