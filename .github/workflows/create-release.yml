@@ -1,0 +1,108 @@
+name: create-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create-release-branch:
+    name: Create release branch
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    steps:
+      - name: Ensure Personal Access Token is configured
+        run: |
+          if [[ -z "${RELEASE_TOKEN:-}" ]]; then
+            echo "::error::PERSONAL_ACCESS_TOKEN secret is not configured." >&2
+            exit 1
+          fi
+
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ env.RELEASE_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Determine next release version
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Detecting next release version from develop..."
+          OUTPUT=$(pnpm exec semantic-release --dry-run --no-ci --branches develop 2>&1)
+          echo "$OUTPUT"
+
+          VERSION_LINE=$(echo "$OUTPUT" | grep -oP 'The next release version is \K[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z\.-]+)?' | head -1 || true)
+
+          if [[ -z "${VERSION_LINE:-}" ]]; then
+            echo "::error::Could not determine the next release version. Ensure develop contains releasable commits." >&2
+            exit 1
+          fi
+
+          FINAL_VERSION=$(echo "$VERSION_LINE" | sed 's/-alpha.*$//')
+
+          if [[ -z "$FINAL_VERSION" ]]; then
+            echo "::error::Failed to normalize version from $VERSION_LINE" >&2
+            exit 1
+          fi
+
+          echo "Next release version: v$FINAL_VERSION"
+          echo "version=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_branch=release/v$FINAL_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push release branch
+        env:
+          RELEASE_BRANCH: ${{ steps.version.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RELEASE_BRANCH" ]]; then
+            echo "::error::Release branch name is empty" >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            echo "::error::Release branch $RELEASE_BRANCH already exists" >&2
+            exit 1
+          fi
+
+          git checkout -b "$RELEASE_BRANCH"
+          git push --no-verify origin "$RELEASE_BRANCH"
+
+          echo "Created $RELEASE_BRANCH"
+
+      - name: Summary
+        env:
+          RELEASE_BRANCH: ${{ steps.version.outputs.release_branch }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "==========================================="
+          echo "✓ Release branch created"
+          echo "Branch : $RELEASE_BRANCH"
+          echo "Version: v$RELEASE_VERSION"
+          echo "-------------------------------------------"
+          echo "Semantic-release will now run on that branch"
+          echo "and automate the release workflow."
+          echo "==========================================="
