@@ -84,6 +84,7 @@ jobs:
       - name: Create release branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           RELEASE_BRANCH="release/v${VERSION}"
 
@@ -93,6 +94,9 @@ jobs:
           fi
 
           git checkout -b "$RELEASE_BRANCH"
+
+          # Use PERSONAL_ACCESS_TOKEN explicitly for push to trigger workflows
+          git remote set-url origin "https://x-access-token:${PERSONAL_ACCESS_TOKEN}@github.com/akiojin/ollama-coordinator.git"
           git push --no-verify origin "$RELEASE_BRANCH"
 
           echo "✓ Created and pushed $RELEASE_BRANCH"
