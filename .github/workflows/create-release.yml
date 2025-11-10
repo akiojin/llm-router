@@ -67,7 +67,6 @@ jobs:
       - name: Create release branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_BRANCH="release/v${VERSION}"
 
