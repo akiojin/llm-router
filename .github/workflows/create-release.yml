@@ -86,8 +86,13 @@ jobs:
 
           # Trigger release.yml workflow explicitly
           # GitHub Actions from Actions don't trigger other workflows automatically
+          echo "Waiting for GitHub to recognize the new branch..."
+          sleep 10
+
           echo "Triggering release.yml workflow..."
-          gh workflow run release.yml --ref "$RELEASE_BRANCH"
+          # Use GitHub REST API directly to ensure correct ref
+          gh api repos/akiojin/ollama-coordinator/actions/workflows/release.yml/dispatches \
+            -f ref="$RELEASE_BRANCH"
 
           echo "✓ Release workflow triggered"
           echo ""
