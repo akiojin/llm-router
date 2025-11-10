@@ -64,27 +64,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Verify token configuration
-        env:
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Checking token configuration..."
-          if [ -n "$PERSONAL_ACCESS_TOKEN" ]; then
-            echo "✓ PERSONAL_ACCESS_TOKEN is set (length: ${#PERSONAL_ACCESS_TOKEN})"
-            # Get token info using GitHub API
-            TOKEN_TYPE=$(curl -s -H "Authorization: token $PERSONAL_ACCESS_TOKEN" \
-              https://api.github.com/user \
-              -I | grep -i "x-oauth-scopes" || echo "Failed to check scopes")
-            echo "Token scopes: $TOKEN_TYPE"
-          else
-            echo "❌ PERSONAL_ACCESS_TOKEN is NOT set - will use GITHUB_TOKEN"
-          fi
-
       - name: Create release branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           RELEASE_BRANCH="release/v${VERSION}"
 
@@ -94,9 +76,6 @@ jobs:
           fi
 
           git checkout -b "$RELEASE_BRANCH"
-
-          # Use PERSONAL_ACCESS_TOKEN explicitly for push to trigger workflows
-          git remote set-url origin "https://x-access-token:${PERSONAL_ACCESS_TOKEN}@github.com/akiojin/ollama-coordinator.git"
           git push --no-verify origin "$RELEASE_BRANCH"
 
           echo "✓ Created and pushed $RELEASE_BRANCH"
