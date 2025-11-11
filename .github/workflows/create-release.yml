@@ -69,7 +69,6 @@ jobs:
       - name: Create release branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_BRANCH="release/v${VERSION}"
 
@@ -82,19 +81,7 @@ jobs:
           git push --no-verify origin "$RELEASE_BRANCH"
 
           echo "✓ Created and pushed $RELEASE_BRANCH"
-          echo ""
-
-          # Trigger release.yml workflow explicitly
-          # GitHub Actions from Actions don't trigger other workflows automatically
-          echo "Waiting for GitHub to recognize the new branch..."
-          sleep 10
-
-          echo "Triggering release.yml workflow..."
-          # Use GitHub REST API directly to ensure correct ref
-          gh api repos/akiojin/ollama-coordinator/actions/workflows/release.yml/dispatches \
-            -f ref="$RELEASE_BRANCH"
-
-          echo "✓ Release workflow triggered"
+          echo "Semantic-release will now run on this branch automatically."
           echo ""
           echo "Next steps:"
           echo "1. Wait for release.yml to complete"
