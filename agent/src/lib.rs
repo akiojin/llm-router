@@ -16,16 +16,11 @@ pub mod metrics;
 /// 登録フロー補助ロジック
 pub mod registration;
 
-/// GUI（システムトレイ、設定ウィンドウ）
-///
-/// 将来的にGUIアプリケーションとして実装予定（SPEC-32e2b31a T062）
-pub mod gui {
-    // 未実装: GUIモジュール
-}
+/// GUI連携（システムトレイなど）
+pub mod gui;
 
-/// 設定管理（設定ファイル読み込み）
-///
-/// 将来的にTOMLベースの設定ファイル対応を追加予定（SPEC-32e2b31a T071）
-pub mod config {
-    // 未実装: 設定ファイル読み込み
-}
+/// 設定管理（Webパネル+永続化）
+pub mod settings;
+
+/// 設定管理（将来的にTOML対応予定）
+pub mod config;

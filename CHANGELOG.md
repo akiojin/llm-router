@@ -1,3 +1,19 @@
+# [1.2.0](https://github.com/akiojin/ollama-coordinator/compare/v1.1.1...v1.2.0) (2025-11-12)
+
+
+### Bug Fixes
+
+* **agent:** address tray clippy warnings ([ee119e0](https://github.com/akiojin/ollama-coordinator/commit/ee119e04c467339c5a940d982a45a52f7e3c62a1))
+* **agent:** silence windows lint warnings ([17dcebc](https://github.com/akiojin/ollama-coordinator/commit/17dcebc6f5a2f21ecbdfd3699fe28990a1fd95f5))
+* satisfy clippy on tray module ([c5a38be](https://github.com/akiojin/ollama-coordinator/commit/c5a38beaac113d2edfbb9b0a1e5a2c39f251f114))
+
+
+### Features
+
+* **agent:** add system tray gui and installers ([727fd2d](https://github.com/akiojin/ollama-coordinator/commit/727fd2dc5f69ed577d474e0dfdd5b3eaf8b95894))
+* **agent:** switch settings to env vars and panel ([a3fa0a3](https://github.com/akiojin/ollama-coordinator/commit/a3fa0a30601b00d0ee541d2ff9682d9ea8d21d6c))
+* **docker:** macOS SDKを使用したクロスコンパイル環境を追加 ([4b5b527](https://github.com/akiojin/ollama-coordinator/commit/4b5b527c6456b6a5b2c1a8ca06987e696887997d))
+
 ## [1.1.1](https://github.com/akiojin/ollama-coordinator/compare/v1.1.0...v1.1.1) (2025-11-11)
 
 

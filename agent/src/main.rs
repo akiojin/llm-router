@@ -1,30 +1,72 @@
 //! Ollama Coordinator Agent Entry Point
-
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use ollama_coordinator_agent::gui::tray::{run_with_system_tray, TrayOptions};
+use ollama_coordinator_agent::settings::{
+    load_settings_from_disk, start_settings_panel, StoredSettings,
+};
 use ollama_coordinator_agent::{
     client::CoordinatorClient, metrics::MetricsCollector, ollama::OllamaManager,
     registration::gpu_devices_valid,
 };
 use ollama_coordinator_common::{
-    error::AgentResult,
+    error::{AgentError, AgentResult},
     protocol::{HealthCheckRequest, RegisterRequest, RegisterResponse},
 };
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use tokio::runtime::Builder;
 use tokio::{
     task::yield_now,
     time::{interval, sleep, Duration},
 };
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::thread;
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn main() {
+    let stored_settings = load_settings_from_disk();
+    let settings_panel =
+        start_settings_panel(stored_settings.clone()).expect("failed to start settings panel");
+    println!("Settings panel URL: {}", settings_panel.url());
+
+    let config = LaunchConfig::from_env_or_settings(&stored_settings);
+    let tray_options = TrayOptions::new(&config.coordinator_url, settings_panel.url());
+
+    run_with_system_tray(tray_options, move |proxy| {
+        let agent_config = config.clone();
+        thread::spawn(move || {
+            let runtime = Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build Tokio runtime for system tray mode");
+            if let Err(err) = runtime.block_on(run_agent(agent_config)) {
+                eprintln!("Agent runtime exited: {}", err);
+            }
+            proxy.notify_agent_exit();
+        });
+    });
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 #[tokio::main]
 async fn main() {
+    let stored_settings = load_settings_from_disk();
+    let settings_panel =
+        start_settings_panel(stored_settings.clone()).expect("failed to start settings panel");
+    println!("Settings panel URL: {}", settings_panel.url());
+
+    let config = LaunchConfig::from_env_or_settings(&stored_settings);
+    if let Err(err) = run_agent(config).await {
+        eprintln!("Agent runtime exited: {}", err);
+    }
+}
+
+async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     println!("Ollama Coordinator Agent v{}", env!("CARGO_PKG_VERSION"));
 
-    // 設定（将来的には設定ファイルから読み込む）
-    let coordinator_url =
-        std::env::var("COORDINATOR_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
-    let ollama_port: u16 = std::env::var("OLLAMA_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(11434);
-    let heartbeat_interval_secs = 10;
+    let coordinator_url = config.coordinator_url.clone();
+    let ollama_port = config.ollama_port;
+    let heartbeat_interval_secs = config.heartbeat_interval_secs;
 
     // Ollamaマネージャーを初期化
     let mut ollama_manager = OllamaManager::new(ollama_port);
@@ -32,7 +74,7 @@ async fn main() {
     println!("Ensuring Ollama is running...");
     if let Err(e) = ollama_manager.ensure_running().await {
         eprintln!("Failed to start Ollama: {}", e);
-        return;
+        return Err(e);
     }
 
     // マシン情報を取得
@@ -59,7 +101,9 @@ async fn main() {
     let gpu_devices = metrics_collector.gpu_devices();
     if !gpu_devices_valid(&gpu_devices) {
         eprintln!("GPU hardware not detected or invalid. Skipping coordinator registration.");
-        return;
+        return Err(AgentError::Registration(
+            "GPU hardware not detected or invalid".to_string(),
+        ));
     }
     let total_gpu_count: u32 = gpu_devices.iter().map(|device| device.count).sum();
     let primary_gpu_model = gpu_devices.first().map(|device| device.model.clone());
@@ -80,7 +124,7 @@ async fn main() {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Failed to register with Coordinator: {}", e);
-            return;
+            return Err(e);
         }
     };
 
@@ -168,6 +212,53 @@ async fn main() {
             }
         }
     }
+
+    #[allow(unreachable_code)]
+    {
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct LaunchConfig {
+    coordinator_url: String,
+    ollama_port: u16,
+    heartbeat_interval_secs: u64,
+}
+
+impl LaunchConfig {
+    fn from_env_or_settings(stored: &StoredSettings) -> Self {
+        let coordinator_url = std::env::var("COORDINATOR_URL")
+            .ok()
+            .or_else(|| stored.coordinator_url())
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+
+        let ollama_port = env_u16("OLLAMA_PORT")
+            .or(stored.ollama_port)
+            .unwrap_or(11434);
+
+        let heartbeat_interval_secs = env_u64("AGENT_HEARTBEAT_INTERVAL_SECS")
+            .or(stored.heartbeat_interval_secs)
+            .unwrap_or(10);
+
+        Self {
+            coordinator_url,
+            ollama_port,
+            heartbeat_interval_secs,
+        }
+    }
+}
+
+fn env_u16(key: &str) -> Option<u16> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+}
+
+fn env_u64(key: &str) -> Option<u64> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
 }
 
 /// ローカルIPアドレスを取得

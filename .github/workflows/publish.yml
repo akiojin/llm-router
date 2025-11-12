@@ -27,6 +27,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       is_release: ${{ steps.resolve.outputs.is_release }}
+      release_version: ${{ steps.resolve.outputs.release_version }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -59,17 +60,28 @@ jobs:
           if [[ -z "$tag" ]]; then
             echo "No release tag detected; skipping publish run"
             echo "release_tag=" >> "$GITHUB_OUTPUT"
+            echo "release_version=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "Resolved release tag: $tag"
           echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
 
+          sanitized="${tag#v}"
+          sanitized="${sanitized%%-*}"
+          if [[ -z "$sanitized" ]]; then
+            sanitized="0.0.0"
+          fi
+          echo "release_version=$sanitized" >> "$GITHUB_OUTPUT"
+
   build-binaries:
     name: Build ${{ matrix.artifact }}
     needs: detect-release
     if: needs.detect-release.outputs.is_release == 'true' && needs.detect-release.outputs.release_tag != ''
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_TAG: ${{ needs.detect-release.outputs.release_tag }}
+      RELEASE_VERSION: ${{ needs.detect-release.outputs.release_version }}
     strategy:
       matrix:
         include:
@@ -99,6 +111,11 @@ jobs:
 
       - name: Build release binaries
         run: cargo build --release --target ${{ matrix.target }} -p ollama-coordinator-coordinator -p ollama-coordinator-agent
+
+      - name: Install WiX Toolset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install wixtoolset --version 3.11.2 -y
 
       - name: Package binaries (Unix)
         if: runner.os != 'Windows'
@@ -184,6 +201,52 @@ jobs:
           }
           Remove-Item $extractDir -Recurse -Force
 
+      - name: Build macOS installer (.pkg)
+        if: matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin'
+        id: package_macos_installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_VERSION}"
+          if [[ -z "$version" ]]; then
+            echo "::error::Release version is not available."
+            exit 1
+          fi
+          pkg_root="$(pwd)/pkgroot"
+          install_dir="$pkg_root/usr/local/bin"
+          mkdir -p "$install_dir"
+          install -m 0755 "target/${{ matrix.target }}/release/ollama-coordinator-coordinator" "$install_dir/"
+          install -m 0755 "target/${{ matrix.target }}/release/ollama-coordinator-agent" "$install_dir/"
+          pkg_name="ollama-coordinator-${{ matrix.artifact }}.pkg"
+          pkgbuild \
+            --root "$pkg_root" \
+            --identifier "io.ollama.coordinator" \
+            --version "$version" \
+            --install-location "/" \
+            "$pkg_name"
+          rm -rf "$pkg_root"
+          echo "pkg=$pkg_name" >> "$GITHUB_OUTPUT"
+
+      - name: Build Windows installer (.msi)
+        if: runner.os == 'Windows'
+        id: package_windows_installer
+        shell: pwsh
+        run: |
+          $version = "${env:RELEASE_VERSION}"
+          if ([string]::IsNullOrEmpty($version)) {
+            Write-Error "Release version is not available."
+            exit 1
+          }
+          $binaryDir = Join-Path $PWD "target/${{ matrix.target }}/release"
+          $wxs = Join-Path $PWD "installers/windows/ollama-coordinator.wxs"
+          $obj = "ollama-coordinator.wixobj"
+          $msi = "ollama-coordinator-${{ matrix.artifact }}.msi"
+          $wixPath = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
+          $env:PATH = "$wixPath;$env:PATH"
+          candle.exe $wxs -out $obj -dBinariesDir="$binaryDir" -dProductVersion="$version"
+          light.exe $obj -out $msi
+          "msi=$msi" >> $env:GITHUB_OUTPUT
+
       - name: Upload release artifact (Unix)
         if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
@@ -198,6 +261,22 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ steps.package_windows.outputs.archive }}
+          if-no-files-found: error
+
+      - name: Upload macOS installer artifact
+        if: (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin') && steps.package_macos_installer.outputs.pkg != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-pkg
+          path: ${{ steps.package_macos_installer.outputs.pkg }}
+          if-no-files-found: error
+
+      - name: Upload Windows installer artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-msi
+          path: ${{ steps.package_windows_installer.outputs.msi }}
           if-no-files-found: error
 
   publish-binaries:

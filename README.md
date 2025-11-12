@@ -293,10 +293,10 @@ cargo build --release
 cd agent
 cargo build --release
 
-# Start Agent
+# Start Agent (環境変数で上書き)
 COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator-agent
 
-# Or start without environment variable (default: http://localhost:8080)
+# 環境変数を指定しない場合はローカル設定パネルで保存した値、なければ http://localhost:8080
 ./target/release/ollama-coordinator-agent
 ```
 
@@ -314,6 +314,13 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 
 Manual installation is also supported. Download Ollama from [ollama.ai](https://ollama.ai).
 
+#### System tray & settings panel (Windows / macOS)
+
+- On Windows 10+ and macOS 12+, the agent now resides in the system tray / menu bar as soon as it starts (settings panel is accessible directly from the tray).
+- Double-clicking the tray icon (or using **Open Settings**) launches the local settings panel in your browser. There you can edit the coordinator URL, Ollama port, and heartbeat interval; the values are stored in `~/.ollama-coordinator/agent-settings.json` and override defaults unless `COORDINATOR_URL`/`OLLAMA_PORT`/`AGENT_HEARTBEAT_INTERVAL_SECS` environment variables are provided.
+- **Open Dashboard** still jumps to `COORDINATOR_URL/dashboard`, and **Quit Agent** stops the background process.
+- Linux builds continue to run as a headless CLI daemon (the settings panel URL is printed to stdout).
+
 ### Release Automation
 
 We follow the same release-branch workflow as `akiojin/unity-mcp-server`, with the only difference being that our `publish.yml` funnels into `release-binaries.yml` to ship Rust binaries.
@@ -321,6 +328,7 @@ We follow the same release-branch workflow as `akiojin/unity-mcp-server`, with t
 1. While on `develop`, run the `/release` slash command or execute `./scripts/create-release-branch.sh`. The helper script calls `gh workflow run create-release.yml --ref develop`, which performs a semantic-release dry-run and creates `release/vX.Y.Z`.
 2. Pushing `release/vX.Y.Z` triggers `.github/workflows/release.yml`. That workflow runs semantic-release for real, updates CHANGELOG/Cargo manifests, creates the Git tag and GitHub Release, merges the release branch into `main`, backmerges `main` into `develop`, and deletes the release branch.
 3. The `main` push kicks off `.github/workflows/publish.yml`, which invokes `release-binaries.yml` to build and attach Linux/macOS/Windows archives to the GitHub Release.
+   - During this phase the workflow now also builds platform installers: `.pkg` bundles for macOS (Intel/Apple Silicon) via `pkgbuild`, and `.msi` installers for Windows via WiX. These ship alongside the existing `.tar.gz` / `.zip` archives so current release consumers stay unaffected.
 
 Monitor the pipeline with:
 

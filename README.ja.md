@@ -205,14 +205,21 @@ cargo build --release
 cd agent
 cargo build --release
 
-# Agentを起動
+# Agentを起動（環境変数で上書き）
 COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator-agent
 
-# または環境変数なしで起動（デフォルト: http://localhost:8080）
+# 環境変数を指定しない場合は設定パネルで保存した値、なければ http://localhost:8080
 ./target/release/ollama-coordinator-agent
 ```
 
 **注意**: Agentは起動時にOllamaの存在を確認し、未インストールなら自動的にバイナリをダウンロード・検証・展開してから起動します。手動インストールが必要な場合は[ollama.ai](https://ollama.ai)から取得できます。
+
+#### システムトレイ & 設定パネル（Windows / macOS）
+
+- Windows 10 以降 / macOS 12 以降では、起動と同時にトレイ常駐します。
+- ダブルクリック、もしくはトレイメニューの **設定パネルを開く** からローカル設定画面を表示し、コーディネーターURL / Ollamaポート / ハートビート間隔を編集できます。値は `~/.ollama-coordinator/agent-settings.json` に保存され、環境変数 (`COORDINATOR_URL` など) を指定しない限りこちらが優先されます。
+- **Dashboardを開く** は `COORDINATOR_URL/dashboard` を開き、**Agentを終了** で常駐プロセスを停止します。
+- Linux 版は従来通り CLI 常駐ですが、起動時にブラウザで開ける設定パネルURLを標準出力に表示します。
 
 ### リリースバイナリの作成と公開
 
@@ -252,6 +259,7 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
 1. 開発者は `develop` ブランチ上で `/release` コマンド、もしくは `./scripts/create-release-branch.sh` を実行します。内部では `scripts/create-release-branch.sh` が `gh workflow run create-release.yml --ref develop` を呼び出し、semantic-release のドライランで次バージョンを計算しつつ `release/vX.Y.Z` ブランチを作成・push します。
 2. release ブランチの push を契機に `.github/workflows/release.yml` が起動し、semantic-release 本番実行 → CHANGELOG / Cargo.toml / バージョンタグ更新 → main への自動マージ → develop へのバックマージ → release ブランチ削除までを一括で行います。
 3. main へのマージにより `.github/workflows/publish.yml` が動作し、`release-binaries.yml` を呼び出して Linux / macOS (x86_64, ARM64) / Windows 向けバイナリをビルド・検証し、GitHub Release に添付します。
+   - この publish フェーズでは従来の `.tar.gz` / `.zip` アーカイブに加えて、`pkgbuild` で作成した macOS 用 `.pkg` と、WiX Toolset で作成した Windows 用 `.msi` も同時に生成・添付されます。既存のリリース資産は削除せず、そのまま維持します。
 
 人手が必要なのは `/release` の実行と、必要に応じた進捗モニタリング（`gh run watch …`）だけです。バージョン決定からリリースノート生成、develop への同期まで CI が自動で完了させます。
 
@@ -358,6 +366,61 @@ make quality-checks
 # OpenAI互換APIのみ個別に実行する場合
 make openai-tests
 ```
+
+### macOSビルド（クロスコンパイル）
+
+Linux環境（Docker）からmacOS向けバイナリをビルドできます。
+
+#### 前提条件
+
+1. macOS SDKの取得（Mac上で実施）
+
+   詳細は [docs/macos-sdk-setup.md](./docs/macos-sdk-setup.md) を参照してください。
+
+   ```bash
+   # macOS上で実行（概要）
+   cd /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/
+   tar -cJf ~/MacOSX14.2.sdk.tar.xz MacOSX14.2.sdk
+
+   # プロジェクトに配置
+   mkdir -p /path/to/ollama-coordinator/.sdk
+   cp ~/MacOSX14.2.sdk.tar.xz /path/to/ollama-coordinator/.sdk/
+   ```
+
+2. Dockerイメージのビルド
+
+   ```bash
+   # SDKバージョンを指定してビルド（デフォルト: 14.2）
+   docker-compose build
+
+   # または環境変数で指定
+   SDK_VERSION=14.5 docker-compose build
+   ```
+
+#### ビルド手順
+
+```bash
+# Docker環境に入る
+docker-compose run --rm ollama-coordinator bash
+
+# Intel Mac向けビルド
+make build-macos-x86_64
+
+# Apple Silicon向けビルド
+make build-macos-aarch64
+
+# 両方のアーキテクチャをビルド
+make build-macos-all
+```
+
+成果物は以下に出力されます：
+
+- `target/x86_64-apple-darwin/release/ollama-coordinator-coordinator`
+- `target/x86_64-apple-darwin/release/ollama-coordinator-agent`
+- `target/aarch64-apple-darwin/release/ollama-coordinator-coordinator`
+- `target/aarch64-apple-darwin/release/ollama-coordinator-agent`
+
+**注意**: macOSバイナリのコード署名とnotarizationは、macOS環境で実施する必要があります。
 
 ### Spec-Driven Development
 
