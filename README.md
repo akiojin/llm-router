@@ -1,6 +1,6 @@
 # Ollama Coordinator
 
-A centralized management system for Ollama instances across multiple machines
+A centralized management system for coordinating Ollama instances across multiple machines
 
 English | [日本語](./README.ja.md)
 
