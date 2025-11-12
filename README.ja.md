@@ -214,6 +214,13 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 
 **注意**: Agentは起動時にOllamaの存在を確認し、未インストールなら自動的にバイナリをダウンロード・検証・展開してから起動します。手動インストールが必要な場合は[ollama.ai](https://ollama.ai)から取得できます。
 
+#### システムトレイ表示（Windows / macOS）
+
+- Windows 10 以降および macOS 12 以降では、Agent 起動と同時にシステムトレイ（メニューバー）へ常駐アイコンが表示されます。
+- アイコンをダブルクリック、またはトレイメニューの **Dashboardを開く** を選択すると、既定ブラウザで `COORDINATOR_URL/dashboard` が開きます。
+- トレイメニューの **Agentを終了** から常駐プロセスを安全に停止できます。
+- Linux 版はこれまで通り CLI 常駐プロセスであり、トレイアイコンは表示されません。
+
 ### リリースバイナリの作成と公開
 
 GitHubリリースには各プラットフォーム向けのバイナリを同梱します。基本手順は以下のとおりです。
@@ -252,6 +259,7 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
 1. 開発者は `develop` ブランチ上で `/release` コマンド、もしくは `./scripts/create-release-branch.sh` を実行します。内部では `scripts/create-release-branch.sh` が `gh workflow run create-release.yml --ref develop` を呼び出し、semantic-release のドライランで次バージョンを計算しつつ `release/vX.Y.Z` ブランチを作成・push します。
 2. release ブランチの push を契機に `.github/workflows/release.yml` が起動し、semantic-release 本番実行 → CHANGELOG / Cargo.toml / バージョンタグ更新 → main への自動マージ → develop へのバックマージ → release ブランチ削除までを一括で行います。
 3. main へのマージにより `.github/workflows/publish.yml` が動作し、`release-binaries.yml` を呼び出して Linux / macOS (x86_64, ARM64) / Windows 向けバイナリをビルド・検証し、GitHub Release に添付します。
+   - この publish フェーズでは従来の `.tar.gz` / `.zip` アーカイブに加えて、`pkgbuild` で作成した macOS 用 `.pkg` と、WiX Toolset で作成した Windows 用 `.msi` も同時に生成・添付されます。既存のリリース資産は削除せず、そのまま維持します。
 
 人手が必要なのは `/release` の実行と、必要に応じた進捗モニタリング（`gh run watch …`）だけです。バージョン決定からリリースノート生成、develop への同期まで CI が自動で完了させます。
 
