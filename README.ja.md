@@ -359,6 +359,61 @@ make quality-checks
 make openai-tests
 ```
 
+### macOSビルド（クロスコンパイル）
+
+Linux環境（Docker）からmacOS向けバイナリをビルドできます。
+
+#### 前提条件
+
+1. macOS SDKの取得（Mac上で実施）
+
+   詳細は [docs/macos-sdk-setup.md](./docs/macos-sdk-setup.md) を参照してください。
+
+   ```bash
+   # macOS上で実行（概要）
+   cd /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/
+   tar -cJf ~/MacOSX14.2.sdk.tar.xz MacOSX14.2.sdk
+
+   # プロジェクトに配置
+   mkdir -p /path/to/ollama-coordinator/.sdk
+   cp ~/MacOSX14.2.sdk.tar.xz /path/to/ollama-coordinator/.sdk/
+   ```
+
+2. Dockerイメージのビルド
+
+   ```bash
+   # SDKバージョンを指定してビルド（デフォルト: 14.2）
+   docker-compose build
+
+   # または環境変数で指定
+   SDK_VERSION=14.5 docker-compose build
+   ```
+
+#### ビルド手順
+
+```bash
+# Docker環境に入る
+docker-compose run --rm ollama-coordinator bash
+
+# Intel Mac向けビルド
+make build-macos-x86_64
+
+# Apple Silicon向けビルド
+make build-macos-aarch64
+
+# 両方のアーキテクチャをビルド
+make build-macos-all
+```
+
+成果物は以下に出力されます：
+
+- `target/x86_64-apple-darwin/release/ollama-coordinator-coordinator`
+- `target/x86_64-apple-darwin/release/ollama-coordinator-agent`
+- `target/aarch64-apple-darwin/release/ollama-coordinator-coordinator`
+- `target/aarch64-apple-darwin/release/ollama-coordinator-agent`
+
+**注意**: macOSバイナリのコード署名とnotarizationは、macOS環境で実施する必要があります。
+
 ### Spec-Driven Development
 
 本プロジェクトはSpec-Driven Developmentに従っています：
