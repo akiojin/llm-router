@@ -1,3 +1,47 @@
+# ==============================================================================
+# Stage 1: osxcross Build Environment
+# ==============================================================================
+FROM ubuntu:22.04 AS osxcross-builder
+
+ARG SDK_VERSION=14.2
+ARG OSX_VERSION_MIN=11.0
+
+# Install build dependencies for osxcross
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    clang \
+    cmake \
+    git \
+    curl \
+    wget \
+    libxml2-dev \
+    libssl-dev \
+    libbz2-dev \
+    libz-dev \
+    liblzma-dev \
+    llvm-dev \
+    uuid-dev \
+    patch \
+    python3 \
+    python-is-python3 \
+    xz-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone osxcross
+WORKDIR /opt
+RUN git clone https://github.com/tpoechtrager/osxcross.git
+
+# Copy macOS SDK (must be provided by user)
+COPY .sdk/MacOSX${SDK_VERSION}.sdk.tar.xz /opt/osxcross/tarballs/
+
+# Build osxcross
+WORKDIR /opt/osxcross
+RUN UNATTENDED=yes OSX_VERSION_MIN=${OSX_VERSION_MIN} ./build.sh
+
+# ==============================================================================
+# Stage 2: Development Environment with osxcross
+# ==============================================================================
 FROM node:22-bookworm
 
 RUN apt-get update && apt-get install -y \
@@ -8,8 +52,18 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     vim \
+    clang \
+    libxml2 \
+    libssl3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy osxcross toolchain from builder stage
+COPY --from=osxcross-builder /opt/osxcross/target /opt/osxcross/target
+
+# Add osxcross to PATH
+ENV PATH="/opt/osxcross/target/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/osxcross/target/lib:${LD_LIBRARY_PATH}"
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -33,6 +87,9 @@ RUN set -eux; \
 # Install Rust toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Add macOS targets for cross-compilation
+RUN rustup target add x86_64-apple-darwin aarch64-apple-darwin
 
 # Install uv/uvx
 RUN curl -fsSL https://astral.sh/uv/install.sh | bash
