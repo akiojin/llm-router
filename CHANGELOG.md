@@ -1,3 +1,11 @@
+## [1.2.1](https://github.com/akiojin/ollama-coordinator/compare/v1.2.0...v1.2.1) (2025-11-13)
+
+
+### Bug Fixes
+
+* **ci:** backmerge even if publish fails ([b0f54d8](https://github.com/akiojin/ollama-coordinator/commit/b0f54d8d72de93acecc95d18e2811c4ca58b8c47))
+* **ci:** set macos linker for publish ([f590be2](https://github.com/akiojin/ollama-coordinator/commit/f590be2971dd2839758dd8ebe307a0cec749ef55))
+
 # [1.2.0](https://github.com/akiojin/ollama-coordinator/compare/v1.1.1...v1.2.0) (2025-11-12)
 
 
