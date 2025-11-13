@@ -312,7 +312,7 @@ jobs:
 
   backmerge-to-develop:
     name: Backmerge to develop
-    needs: [detect-release, publish-binaries]
+    needs: [detect-release]
     if: needs.detect-release.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     steps:
