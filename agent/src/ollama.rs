@@ -16,6 +16,7 @@ use std::time::Duration as StdDuration;
 use sysinfo::System;
 use tar::Archive;
 use tokio::time::{sleep, Duration};
+use tracing::{info, warn};
 use zip::ZipArchive;
 
 /// Ollamaマネージャー
@@ -81,13 +82,13 @@ impl OllamaManager {
     pub async fn ensure_running(&mut self) -> AgentResult<()> {
         // Ollamaがインストールされているか確認
         if !self.is_installed() {
-            println!("Ollama not found. Downloading...");
+            info!("Ollama not found. Downloading...");
             self.download().await?;
         }
 
         // Ollamaが起動しているか確認
         if !self.is_running().await {
-            println!("Starting Ollama...");
+            info!("Starting Ollama...");
             self.start()?;
 
             // 起動を待つ
@@ -103,13 +104,13 @@ impl OllamaManager {
     /// デフォルトモデル（環境変数で上書き可能）を確保
     async fn ensure_default_model(&self) -> AgentResult<()> {
         if let Some(override_model) = default_model_override() {
-            println!("Using explicit default model override: {}", override_model);
+            info!("Using explicit default model override: {}", override_model);
             return self.ensure_model(&override_model).await;
         }
 
         let (selected_model, total_memory_gib) = select_default_model_for_memory();
         if selected_model != DEFAULT_MODEL {
-            println!(
+            warn!(
                 "System memory {:.1} GiB is below the recommended threshold for {}. Falling back to {}.",
                 total_memory_gib,
                 DEFAULT_MODEL,
@@ -128,15 +129,15 @@ impl OllamaManager {
         }
 
         if self.model_exists(name).await? {
-            println!("Model {} already available", name);
+            info!("Model {} already available", name);
             return Ok(());
         }
 
-        println!("Model {} not found. Pulling...", name);
+        info!("Model {} not found. Pulling...", name);
         self.pull_model(name).await?;
 
         if self.model_exists(name).await? {
-            println!("Model {} downloaded", name);
+            info!("Model {} downloaded", name);
             Ok(())
         } else {
             Err(AgentError::OllamaConnection(format!(
@@ -364,7 +365,7 @@ impl OllamaManager {
     async fn download(&self) -> AgentResult<()> {
         let download_url = get_ollama_download_url();
 
-        println!("Downloading Ollama from {}", download_url);
+        info!("Downloading Ollama from {}", download_url);
 
         // ダウンロードディレクトリを作成
         if let Some(parent) = self.ollama_path.parent() {
@@ -423,15 +424,15 @@ impl OllamaManager {
 
         // チェックサム検証（環境変数で有効化）
         if std::env::var("OLLAMA_VERIFY_CHECKSUM").is_ok() {
-            println!("Verifying checksum...");
+            info!("Verifying checksum...");
             let expected_checksum = fetch_checksum_from_url(&client, &download_url).await?;
             verify_checksum(&buffer, &expected_checksum)?;
-            println!("Checksum verification successful");
+            info!("Checksum verification successful");
         }
 
         save_ollama_binary(&buffer, &download_url, &self.ollama_path)?;
 
-        println!("Ollama downloaded successfully to {:?}", self.ollama_path);
+        info!("Ollama downloaded successfully to {:?}", self.ollama_path);
         Ok(())
     }
 
@@ -456,7 +457,7 @@ impl OllamaManager {
             .map_err(|e| AgentError::OllamaConnection(format!("Failed to start Ollama: {}", e)))?;
 
         self.process = Some(child);
-        println!("Ollama process started");
+        info!("Ollama process started");
         Ok(())
     }
 
@@ -495,7 +496,7 @@ impl OllamaManager {
                 }
             }
             if self.is_running().await {
-                println!("Ollama is ready");
+                info!("Ollama is ready");
                 return Ok(());
             }
             sleep(Duration::from_secs(1)).await;
@@ -533,7 +534,7 @@ impl OllamaManager {
             process.kill().map_err(|e| {
                 AgentError::Internal(format!("Failed to kill Ollama process: {}", e))
             })?;
-            println!("Ollama process stopped");
+            info!("Ollama process stopped");
         }
         Ok(())
     }
@@ -866,7 +867,7 @@ where
                     )));
                 }
 
-                println!(
+                warn!(
                     "HTTP request failed (attempt {}/{}): {}. Retrying in {} seconds...",
                     attempt, max_retries, e, backoff_secs
                 );
@@ -950,7 +951,7 @@ async fn fetch_checksum_from_url(
     // チェックサムURLを生成（.sha256拡張子を追加）
     let checksum_url = format!("{}.sha256", download_url);
 
-    println!("Fetching checksum from {}", checksum_url);
+    info!("Fetching checksum from {}", checksum_url);
 
     let (max_retries, max_backoff_secs) = get_retry_config();
 

@@ -31,6 +31,9 @@ pub mod metrics;
 /// モデル管理（GPU選択ロジック）
 pub mod models;
 
+/// ロギング初期化ユーティリティ
+pub mod logging;
+
 /// GUIユーティリティ（トレイアイコン等）
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 pub mod gui;

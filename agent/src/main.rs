@@ -5,7 +5,7 @@ use ollama_coordinator_agent::settings::{
     load_settings_from_disk, start_settings_panel, StoredSettings,
 };
 use ollama_coordinator_agent::{
-    api, client::CoordinatorClient, metrics::MetricsCollector, ollama::OllamaManager,
+    api, client::CoordinatorClient, logging, metrics::MetricsCollector, ollama::OllamaManager,
     registration::gpu_devices_valid,
 };
 use ollama_coordinator_common::{
@@ -20,16 +20,18 @@ use tokio::{
     task::yield_now,
     time::{interval, sleep, Duration},
 };
+use tracing::{error, info, warn};
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::thread;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn main() {
+    logging::init().expect("failed to initialize agent logging");
     let stored_settings = load_settings_from_disk();
     let settings_panel =
         start_settings_panel(stored_settings.clone()).expect("failed to start settings panel");
-    println!("Settings panel URL: {}", settings_panel.url());
+    info!("Settings panel URL: {}", settings_panel.url());
 
     let config = LaunchConfig::from_env_or_settings(&stored_settings);
     let tray_options = TrayOptions::new(&config.coordinator_url, settings_panel.url());
@@ -42,7 +44,7 @@ fn main() {
                 .build()
                 .expect("failed to build Tokio runtime for system tray mode");
             if let Err(err) = runtime.block_on(run_agent(agent_config)) {
-                eprintln!("Agent runtime exited: {}", err);
+                error!("Agent runtime exited: {}", err);
             }
             proxy.notify_agent_exit();
         });
@@ -52,19 +54,20 @@ fn main() {
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 #[tokio::main]
 async fn main() {
+    logging::init().expect("failed to initialize agent logging");
     let stored_settings = load_settings_from_disk();
     let settings_panel =
         start_settings_panel(stored_settings.clone()).expect("failed to start settings panel");
-    println!("Settings panel URL: {}", settings_panel.url());
+    info!("Settings panel URL: {}", settings_panel.url());
 
     let config = LaunchConfig::from_env_or_settings(&stored_settings);
     if let Err(err) = run_agent(config).await {
-        eprintln!("Agent runtime exited: {}", err);
+        error!("Agent runtime exited: {}", err);
     }
 }
 
 async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
-    println!("Ollama Coordinator Agent v{}", env!("CARGO_PKG_VERSION"));
+    info!("Ollama Coordinator Agent v{}", env!("CARGO_PKG_VERSION"));
 
     let coordinator_url = config.coordinator_url.clone();
     let ollama_port = config.ollama_port;
@@ -73,9 +76,9 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     // Ollamaマネージャーを初期化
     let mut ollama_manager = OllamaManager::new(ollama_port);
 
-    println!("Ensuring Ollama is running...");
+    info!("Ensuring Ollama is running...");
     if let Err(e) = ollama_manager.ensure_running().await {
-        eprintln!("Failed to start Ollama: {}", e);
+        error!("Failed to start Ollama: {}", e);
         return Err(e);
     }
 
@@ -87,9 +90,9 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         .await
         .unwrap_or_else(|_| "unknown".to_string());
 
-    println!("Machine: {}", machine_name);
-    println!("IP: {}", ip_address);
-    println!("Ollama version: {}", ollama_version);
+    info!("Machine: {}", machine_name);
+    info!("IP: {}", ip_address);
+    info!("Ollama version: {}", ollama_version);
 
     // Coordinatorクライアントを初期化
     let mut coordinator_client = CoordinatorClient::new(coordinator_url.clone());
@@ -102,7 +105,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     // エージェント登録
     let gpu_devices = metrics_collector.gpu_devices();
     if !gpu_devices_valid(&gpu_devices) {
-        eprintln!("GPU hardware not detected or invalid. Skipping coordinator registration.");
+        error!("GPU hardware not detected or invalid. Skipping coordinator registration.");
         return Err(AgentError::Registration(
             "GPU hardware not detected or invalid".to_string(),
         ));
@@ -121,22 +124,29 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         gpu_model: primary_gpu_model,
     };
 
-    println!("Registering with Coordinator...");
+    info!(
+        "Registering with Coordinator at {}...",
+        coordinator_client.coordinator_url()
+    );
     let register_response = match register_with_retry(&mut coordinator_client, register_req).await {
         Ok(res) => res,
         Err(e) => {
-            eprintln!("Failed to register with Coordinator: {}", e);
+            error!(
+                "Failed to register with Coordinator at {}: {}",
+                coordinator_client.coordinator_url(),
+                e
+            );
             return Err(e);
         }
     };
 
     let agent_id = register_response.agent_id;
-    println!("Registered successfully! Agent ID: {}", agent_id);
+    info!("Registered successfully! Agent ID: {}", agent_id);
 
     // GPU能力情報を取得（静的な情報、起動時のみ）
     let gpu_capability = metrics_collector.get_gpu_capability();
     if let Some(ref capability) = gpu_capability {
-        println!(
+        info!(
             "GPU Detected: {} (Compute {}.{}, {}MHz, {}MB, Score: {})",
             capability.model_name,
             capability.compute_capability.0,
@@ -163,7 +173,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     let app = api::create_router(state);
     let bind_addr = format!("0.0.0.0:{}", agent_api_port);
 
-    println!("Starting agent HTTP server on {}", bind_addr);
+    info!("Starting agent HTTP server on {}", bind_addr);
 
     // HTTPサーバーをバックグラウンドで起動
     tokio::spawn(async move {
@@ -178,7 +188,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     // ハートビート送信タスク
     let mut heartbeat_timer = interval(Duration::from_secs(heartbeat_interval_secs));
 
-    println!("Starting heartbeat loop...");
+    info!("Starting heartbeat loop...");
     loop {
         heartbeat_timer.tick().await;
 
@@ -186,7 +196,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         let metrics = match metrics_collector.collect_metrics() {
             Ok(metrics) => metrics,
             Err(e) => {
-                eprintln!("Failed to collect metrics: {}", e);
+                warn!("Failed to collect metrics: {}", e);
                 continue;
             }
         };
@@ -197,7 +207,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
             match ollama.list_models().await {
                 Ok(list) => list,
                 Err(err) => {
-                    eprintln!("Failed to list Ollama models: {}", err);
+                    warn!("Failed to list Ollama models: {}", err);
                     Vec::new()
                 }
             }
@@ -225,19 +235,23 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         };
 
         match coordinator_client.send_heartbeat(heartbeat_req).await {
-            Err(e) => eprintln!("Failed to send heartbeat: {}", e),
+            Err(e) => warn!(
+                "Failed to send heartbeat to {}: {}",
+                coordinator_client.coordinator_url(),
+                e
+            ),
             Ok(_) => {
                 if let (Some(gpu), Some(gpu_mem), Some(temp)) = (
                     metrics.gpu_usage,
                     metrics.gpu_memory_usage,
                     metrics.gpu_temperature,
                 ) {
-                    println!(
+                    info!(
                         "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%, GPU: {:.1}%, GPU Memory: {:.1}%, GPU Temp: {:.1}°C",
                         metrics.cpu_usage, metrics.memory_usage, gpu, gpu_mem, temp
                     );
                 } else {
-                    println!(
+                    info!(
                         "Heartbeat sent - CPU: {:.1}%, Memory: {:.1}%",
                         metrics.cpu_usage, metrics.memory_usage
                     );
@@ -389,6 +403,28 @@ async fn register_with_retry(
     let retry_interval = registration_retry_interval();
     let max_attempts = registration_retry_limit();
     let mut attempts = 0usize;
+    let coordinator_url = client.coordinator_url().to_string();
+    const GPU_HELP_MESSAGE: &str = r#"
+========================================
+ERROR: GPU Required
+========================================
+This coordinator requires agents to have GPU available.
+GPU was not detected on this machine.
+
+To run in Docker or environments where GPU detection fails,
+set the following environment variables:
+
+  OLLAMA_GPU_AVAILABLE=true
+  OLLAMA_GPU_MODEL="Your GPU Model Name"
+  OLLAMA_GPU_COUNT=1
+
+Example:
+  docker run -e OLLAMA_GPU_AVAILABLE=true \
+             -e OLLAMA_GPU_MODEL="Apple M4" \
+             -e OLLAMA_GPU_COUNT=1 \
+             your-agent-image
+========================================
+"#;
 
     loop {
         attempts = attempts.saturating_add(1);
@@ -398,34 +434,20 @@ async fn register_with_retry(
                 // Check for 403 Forbidden (GPU not available)
                 let err_msg = err.to_string();
                 if err_msg.contains("403") || err_msg.contains("Forbidden") {
-                    eprintln!("\n========================================");
-                    eprintln!("ERROR: GPU Required");
-                    eprintln!("========================================");
-                    eprintln!("This coordinator requires agents to have GPU available.");
-                    eprintln!("GPU was not detected on this machine.");
-                    eprintln!();
-                    eprintln!("To run in Docker or environments where GPU detection fails,");
-                    eprintln!("set the following environment variables:");
-                    eprintln!();
-                    eprintln!("  OLLAMA_GPU_AVAILABLE=true");
-                    eprintln!("  OLLAMA_GPU_MODEL=\"Your GPU Model Name\"");
-                    eprintln!("  OLLAMA_GPU_COUNT=1");
-                    eprintln!();
-                    eprintln!("Example:");
-                    eprintln!("  docker run -e OLLAMA_GPU_AVAILABLE=true \\");
-                    eprintln!("             -e OLLAMA_GPU_MODEL=\"Apple M4\" \\");
-                    eprintln!("             -e OLLAMA_GPU_COUNT=1 \\");
-                    eprintln!("             your-agent-image");
-                    eprintln!("========================================\n");
+                    error!(
+                        "Coordinator {} rejected registration due to GPU requirement.",
+                        coordinator_url
+                    );
+                    error!("{}", GPU_HELP_MESSAGE.trim());
                     return Err(err);
                 }
 
                 let target = max_attempts
                     .map(|limit| limit.to_string())
                     .unwrap_or_else(|| "∞".to_string());
-                eprintln!(
-                    "Failed to register with Coordinator (attempt {} of {}): {}",
-                    attempts, target, err
+                warn!(
+                    "Failed to register with Coordinator at {} (attempt {} of {}): {}",
+                    coordinator_url, attempts, target, err
                 );
 
                 if let Some(limit) = max_attempts {

@@ -46,6 +46,9 @@
         <button type="button" class="tab-button" data-tab="history">
           リクエスト履歴
         </button>
+        <button type="button" class="tab-button" data-tab="logs">
+          ログ
+        </button>
       </nav>
 
       <div class="tab-panel tab-panel--active" id="tab-dashboard">
@@ -300,6 +303,53 @@
         </div>
       </section>
       </div>
+
+      <div class="tab-panel" id="tab-logs">
+        <section class="logs-grid">
+          <article class="log-card" aria-labelledby="logs-coordinator-title">
+            <header class="log-card__header">
+              <div>
+                <h2 id="logs-coordinator-title">コーディネーターログ</h2>
+                <p class="log-card__path" id="logs-coordinator-path"></p>
+              </div>
+              <div class="log-card__actions">
+                <button type="button" id="logs-coordinator-refresh" class="btn btn--secondary">
+                  再読み込み
+                </button>
+              </div>
+            </header>
+            <p class="log-card__status" id="logs-coordinator-status">-</p>
+            <div
+              class="log-viewer"
+              id="logs-coordinator-list"
+              role="log"
+              aria-live="polite"
+            ></div>
+          </article>
+
+          <article class="log-card" aria-labelledby="logs-agent-title">
+            <header class="log-card__header">
+              <div>
+                <h2 id="logs-agent-title">エージェントログ</h2>
+                <p class="log-card__path" id="logs-agent-path"></p>
+              </div>
+              <div class="log-card__actions">
+                <label class="log-agent-select">
+                  <span>エージェント</span>
+                  <select id="logs-agent-select">
+                    <option value="">選択してください</option>
+                  </select>
+                </label>
+                <button type="button" id="logs-agent-refresh" class="btn btn--secondary">
+                  再読み込み
+                </button>
+              </div>
+            </header>
+            <p class="log-card__status" id="logs-agent-status">-</p>
+            <div class="log-viewer" id="logs-agent-list" role="log" aria-live="polite"></div>
+          </article>
+        </section>
+      </div>
     </main>
 
     <footer class="page-footer">
@@ -394,6 +444,24 @@
                 role="img"
               ></canvas>
             </div>
+          </section>
+          <section class="modal__logs" id="agent-log-section" aria-label="エージェントログ">
+            <div class="modal__logs-header">
+              <h3>最新ログ</h3>
+              <div class="modal__logs-actions">
+                <span id="agent-log-path" class="modal__logs-path"></span>
+                <button type="button" id="agent-log-refresh" class="btn btn--secondary">
+                  再読み込み
+                </button>
+              </div>
+            </div>
+            <p id="agent-log-status" class="modal__logs-status">ログを読み込み中…</p>
+            <div
+              class="log-viewer log-viewer--compact"
+              id="agent-log-viewer"
+              role="log"
+              aria-live="polite"
+            ></div>
           </section>
         </section>
         <footer class="modal__footer">

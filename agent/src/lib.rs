@@ -27,3 +27,6 @@ pub mod settings;
 
 /// 設定管理（将来的にTOML対応予定）
 pub mod config;
+
+/// ロギング初期化
+pub mod logging;
