@@ -12,7 +12,10 @@ use ollama_coordinator_common::{
     error::{AgentError, AgentResult},
     protocol::{HealthCheckRequest, RegisterRequest, RegisterResponse},
 };
-use std::sync::Arc;
+use std::{
+    io::{self, Write},
+    sync::Arc,
+};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tokio::runtime::Builder;
 use tokio::{
@@ -106,6 +109,9 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     let gpu_devices = metrics_collector.gpu_devices();
     if !gpu_devices_valid(&gpu_devices) {
         error!("GPU hardware not detected or invalid. Skipping coordinator registration.");
+        wait_for_user_ack(
+            "GPU ハードウェアが検出できません。GPU を搭載したマシンでのみエージェントを利用できます。",
+        );
         return Err(AgentError::Registration(
             "GPU hardware not detected or invalid".to_string(),
         ));
@@ -394,6 +400,15 @@ fn normalize_machine_name(value: &str) -> Option<String> {
 fn looks_like_container_id(name: &str) -> bool {
     let trimmed = name.trim();
     trimmed.len() == 12 && trimmed.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn wait_for_user_ack(message: &str) {
+    eprintln!("{}", message);
+    eprintln!("Enter キーを押すと終了します。");
+
+    let _ = io::stderr().flush();
+    let mut buffer = String::new();
+    let _ = io::stdin().read_line(&mut buffer);
 }
 
 async fn register_with_retry(

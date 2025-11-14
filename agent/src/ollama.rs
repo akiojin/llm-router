@@ -443,13 +443,6 @@ impl OllamaManager {
             .arg("serve")
             .env("OLLAMA_HOST", format!("0.0.0.0:{}", self.port));
 
-        if std::env::var("OLLAMA_NO_GPU").is_err()
-            && std::env::var("OLLAMA_GPU").is_err()
-            && std::env::var("OLLAMA_USE_GPU").is_err()
-        {
-            command.env("OLLAMA_NO_GPU", "1");
-        }
-
         let child = command
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
