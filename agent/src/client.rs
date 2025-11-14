@@ -6,6 +6,7 @@ use ollama_coordinator_common::{
     error::{AgentError, AgentResult},
     protocol::{HealthCheckRequest, RegisterRequest, RegisterResponse},
 };
+use tracing::info;
 use uuid::Uuid;
 
 /// Coordinatorクライアント
@@ -52,7 +53,7 @@ impl CoordinatorClient {
         // エージェントIDを保存
         self.agent_id = Some(register_response.agent_id);
 
-        println!(
+        info!(
             "Registered with Coordinator: agent_id = {}",
             register_response.agent_id
         );
@@ -85,6 +86,11 @@ impl CoordinatorClient {
     /// 保存されたエージェントIDを取得
     pub fn get_agent_id(&self) -> Option<Uuid> {
         self.agent_id
+    }
+
+    /// 利用中のコーディネーターURLを取得
+    pub fn coordinator_url(&self) -> &str {
+        &self.coordinator_url
     }
 }
 

@@ -117,6 +117,12 @@ pub struct AppError(
     String,
 );
 
+impl From<String> for AppError {
+    fn from(value: String) -> Self {
+        AppError(value)
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         error!("API error: {}", self.0);

@@ -27,6 +27,7 @@ use tray_icon::MouseButtonState;
 const DOUBLE_CLICK_WINDOW: Duration = Duration::from_millis(450);
 
 use image;
+use tracing::error;
 
 /// システムトレイ起動オプション。
 #[derive(Debug, Clone)]
@@ -253,7 +254,7 @@ impl TrayMenu {
 
 fn open_url(url: &str, label: &str) {
     if let Err(err) = launch_url(url) {
-        eprintln!("Failed to open {}: {err}", label);
+        error!("Failed to open {}: {err}", label);
     }
 }
 
