@@ -3,7 +3,7 @@ members = ["common", "coordinator", "agent"]
 resolver = "2"
 
 [workspace.package]
-version = "1.2.1"
+version = "1.2.2"
 edition = "2021"
 authors = ["Ollama Coordinator Contributors"]
 license = "Apache-2.0"
