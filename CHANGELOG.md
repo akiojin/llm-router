@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/akiojin/ollama-coordinator/compare/v1.3.0...v1.3.1) (2025-11-14)
+
+
+### Bug Fixes
+
+* **installer:** embed cab into windows msi ([9ad1797](https://github.com/akiojin/ollama-coordinator/commit/9ad1797cea81222f0676d1147f4f95b94ee2ba1b))
+
 # [1.3.0](https://github.com/akiojin/ollama-coordinator/compare/v1.2.3...v1.3.0) (2025-11-14)
 
 
