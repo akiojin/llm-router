@@ -180,6 +180,8 @@ pub enum RequestType {
     Chat,
     /// /api/generate エンドポイント
     Generate,
+    /// /v1/embeddings エンドポイント
+    Embeddings,
 }
 
 /// レコードステータス
