@@ -1,3 +1,13 @@
+## [Unreleased]
+
+### Features
+
+* **coordinator:** add a Windows/macOS system tray icon that opens the dashboard
+
+### Bug Fixes
+
+* **installer:** embed cab contents into the Windows MSI to avoid cab1.cab prompts
+
 ## [1.2.3](https://github.com/akiojin/ollama-coordinator/compare/v1.2.2...v1.2.3) (2025-11-14)
 
 
