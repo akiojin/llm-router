@@ -5,6 +5,7 @@
 pub mod agent;
 pub mod dashboard;
 pub mod health;
+pub mod logs;
 pub mod metrics;
 pub mod models;
 pub mod proxy;
@@ -68,6 +69,14 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/dashboard/request-responses/export",
             get(dashboard::export_request_responses),
+        )
+        .route(
+            "/api/dashboard/logs/coordinator",
+            get(logs::get_coordinator_logs),
+        )
+        .route(
+            "/api/dashboard/logs/agents/:agent_id",
+            get(logs::get_agent_logs),
         )
         .route("/api/health", post(health::health_check))
         .route("/api/chat", post(proxy::proxy_chat))

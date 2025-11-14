@@ -16,3 +16,4 @@ config = "0.13"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"

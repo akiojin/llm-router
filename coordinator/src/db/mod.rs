@@ -21,6 +21,7 @@ use ollama_coordinator_common::{
 };
 use std::path::PathBuf;
 use tokio::fs;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// データファイルのパスを取得
@@ -120,7 +121,7 @@ pub async fn load_agents() -> CoordinatorResult<Vec<Agent>> {
     match serde_json::from_str::<Vec<Agent>>(&content) {
         Ok(agents) => Ok(agents),
         Err(err) => {
-            println!(
+            warn!(
                 "Detected corrupted agents.json, attempting recovery: {}",
                 err
             );
@@ -172,12 +173,12 @@ async fn recover_corrupted_agents_file(data_file: &PathBuf) -> CoordinatorResult
     let backup_path = parent_dir.join(backup_name);
 
     if let Err(rename_err) = fs::rename(data_file, &backup_path).await {
-        println!(
+        warn!(
             "Failed to move corrupted agents.json: {}. Attempting to overwrite with empty file.",
             rename_err
         );
     } else {
-        println!(
+        info!(
             "Moved corrupted agents.json to backup: {}",
             backup_path.display()
         );

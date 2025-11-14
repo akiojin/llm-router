@@ -15,3 +15,6 @@ pub mod config;
 
 /// エラー型定義
 pub mod error;
+
+/// ログユーティリティ
+pub mod log;

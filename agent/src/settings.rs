@@ -21,6 +21,7 @@ use serde::{
 use tokio::{net::TcpListener, runtime::Builder};
 
 use ollama_coordinator_common::error::AgentError;
+use tracing::error;
 
 const SETTINGS_FILE_NAME: &str = "agent-settings.json";
 const SETTINGS_SUBTITLE: &str = "変更を保存後、エージェントを再起動すると反映されます。";
@@ -147,12 +148,12 @@ async fn run_settings_server(
     };
     let url = format!("http://{}/", addr);
     if ready_tx.send(Ok(url.clone())).is_err() {
-        eprintln!("Failed to notify settings panel startup");
+        error!("Failed to notify settings panel startup");
         return;
     }
 
     if let Err(err) = axum::serve(listener, router).await {
-        eprintln!("Settings panel server exited: {err}");
+        error!("Settings panel server exited: {err}");
     }
 }
 

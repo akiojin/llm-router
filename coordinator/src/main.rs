@@ -1,6 +1,7 @@
 //! Ollama Coordinator Server Entry Point
 
-use ollama_coordinator_coordinator::{api, balancer, health, registry, tasks, AppState};
+use ollama_coordinator_coordinator::{api, balancer, health, logging, registry, tasks, AppState};
+use tracing::info;
 
 #[derive(Clone)]
 struct ServerConfig {
@@ -43,6 +44,7 @@ impl ServerConfig {
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn main() {
+    logging::init().expect("failed to initialize logging");
     use ollama_coordinator_coordinator::gui::tray::{run_with_system_tray, TrayOptions};
     use std::thread;
     use tokio::runtime::Builder;
@@ -66,19 +68,20 @@ fn main() {
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 #[tokio::main]
 async fn main() {
+    logging::init().expect("failed to initialize logging");
     run_server(ServerConfig::from_env()).await;
 }
 
 async fn run_server(config: ServerConfig) {
-    println!("Ollama Coordinator v{}", env!("CARGO_PKG_VERSION"));
+    info!("Ollama Coordinator v{}", env!("CARGO_PKG_VERSION"));
 
-    println!("Initializing storage at ~/.ollama-coordinator/");
+    info!("Initializing storage at ~/.ollama-coordinator/");
     let registry = registry::AgentRegistry::with_storage()
         .await
         .expect("Failed to initialize agent registry");
 
     let load_manager = balancer::LoadManager::new(registry.clone());
-    println!("Storage initialized successfully");
+    info!("Storage initialized successfully");
 
     let health_check_interval_secs: u64 = std::env::var("HEALTH_CHECK_INTERVAL")
         .ok()
@@ -98,7 +101,7 @@ async fn run_server(config: ServerConfig) {
 
     let load_balancer_mode =
         std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
-    println!("Load balancer mode: {}", load_balancer_mode);
+    info!("Load balancer mode: {}", load_balancer_mode);
 
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new()
@@ -124,7 +127,7 @@ async fn run_server(config: ServerConfig) {
         .await
         .expect("Failed to bind to address");
 
-    println!("Coordinator server listening on {}", bind_addr);
+    info!("Coordinator server listening on {}", bind_addr);
 
     axum::serve(listener, app).await.expect("Server error");
 }
