@@ -1,3 +1,22 @@
+# [1.3.0](https://github.com/akiojin/ollama-coordinator/compare/v1.2.3...v1.3.0) (2025-11-14)
+
+
+### Bug Fixes
+
+* **installer:** mark windows components as 64-bit ([2c0e10f](https://github.com/akiojin/ollama-coordinator/commit/2c0e10fac0dcd96ec2da8b7b619983d8059fb909))
+* **lint:** needless_borrows_for_generic_argsエラーを修正 ([f05bc48](https://github.com/akiojin/ollama-coordinator/commit/f05bc481166c05bc2f0c7c6a31359f5cc781ccb3))
+
+
+### Features
+
+* **agent:** エージェント側HTTPサーバーとモデルプルAPI実装 (T033) ([2142f53](https://github.com/akiojin/ollama-coordinator/commit/2142f53bc67d11550d7569bcc5b3c4e8848a36fb))
+* **coordinator:** エージェント登録時の自動モデル配布機能を実装 (T032) ([7935be0](https://github.com/akiojin/ollama-coordinator/commit/7935be05098c0ad458609dc53af66f94caf442bb))
+* **coordinator:** コーディネーター主導のモデル配布機能を実装 (Phase 3.1-3.3) ([62edaf7](https://github.com/akiojin/ollama-coordinator/commit/62edaf7435e82cacd177ae3eb6939a0be72ff129))
+* **error:** エラーハンドリング強化 (T039) ([5350a31](https://github.com/akiojin/ollama-coordinator/commit/5350a31bd9dae6b6c7690d25767ab18e1c3a42cb))
+* **logging:** ロギング強化 (T040) ([8cd8575](https://github.com/akiojin/ollama-coordinator/commit/8cd85758bcaa5eeeef5e77e8d4dbb6ed8091f80e))
+* **models:** 進捗報告機能とエージェント自動配布を実装 (T034, T032拡張) ([9c81c48](https://github.com/akiojin/ollama-coordinator/commit/9c81c4894c25b6403feafc802faf6adabd0b7404))
+* **ui:** モデル管理ダッシュボードUIを実装 (T036-T038) ([4b4ccb7](https://github.com/akiojin/ollama-coordinator/commit/4b4ccb77261482550d9b9dcbebec4a196ec0ed0b))
+
 ## [1.2.3](https://github.com/akiojin/ollama-coordinator/compare/v1.2.2...v1.2.3) (2025-11-14)
 
 
