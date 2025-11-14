@@ -323,6 +323,7 @@ Manual installation is also supported. Download Ollama from [ollama.ai](https://
 - On Windows 10+ and macOS 12+, both the **agent** *and* the **coordinator** expose tray / menu bar icons when launched as binaries.
 - The agent tray icon behaves as before: double-click or **Open Settings** to launch the local settings panel, edit coordinator URL / Ollama port / heartbeat interval, and jump to `COORDINATOR_URL/dashboard`. **Quit Agent** stops the background process. Linux builds continue to run as a headless CLI daemon (settings URL is printed to stdout).
 - The coordinator tray icon lets you open the local dashboard (`http://127.0.0.1:<port>/dashboard` by default) or exit the server directly from the system tray. Double-clicking the icon also launches the dashboard in your default browser.
+- Tray icons are derived from [Open Iconic](https://github.com/iconic/open-iconic) (MIT License); a copy of the license is included at `assets/icons/ICON-LICENSE.txt`.
 
 ### Release Automation
 
