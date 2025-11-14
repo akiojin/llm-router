@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+build = "build.rs"
 
 [dependencies]
 ollama-coordinator-common = { path = "../common" }
@@ -43,6 +44,9 @@ whoami = "1.4"
 indicatif = "0.17"
 sha2 = "0.10"
 dirs = "5.0"
+
+[build-dependencies]
+winresource = "0.1.27"
 
 # GPU検出 (プラットフォーム別)
 [target.'cfg(target_os = "macos")'.dependencies]

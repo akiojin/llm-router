@@ -32,7 +32,15 @@
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="Ollama Coordinator" />
       </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Ollama Coordinator" />
+      </Directory>
     </Directory>
+  </Fragment>
+
+  <Fragment>
+    <Icon Id="CoordinatorShortcutIcon" SourceFile="..\\..\\assets\\icons\\coordinator.ico" />
+    <Icon Id="AgentShortcutIcon" SourceFile="..\\..\\assets\\icons\\agent.ico" />
   </Fragment>
 
   <Fragment>
@@ -51,6 +59,33 @@
           KeyPath="yes"
           Source="$(var.BinariesDir)\ollama-coordinator-agent.exe"
         />
+      </Component>
+
+      <Component Id="CoordinatorStartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{66D07D25-2201-47C1-9535-FA9244062B1F}" Win64="yes">
+        <Shortcut
+          Id="CoordinatorShortcut"
+          Name="Ollama Coordinator"
+          Description="Ollama Coordinator を起動"
+          Target="[INSTALLFOLDER]ollama-coordinator-coordinator.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="CoordinatorShortcutIcon"
+          IconIndex="0"
+        />
+        <RemoveFolder Id="RemoveCoordinatorProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\\OllamaCoordinator" Name="CoordinatorShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <Component Id="AgentStartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{B32759F0-6604-4281-8211-244CC30417B5}" Win64="yes">
+        <Shortcut
+          Id="AgentShortcut"
+          Name="Ollama Coordinator Agent"
+          Description="Ollama Coordinator Agent を起動"
+          Target="[INSTALLFOLDER]ollama-coordinator-agent.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="AgentShortcutIcon"
+          IconIndex="0"
+        />
+        <RegistryValue Root="HKLM" Key="Software\\OllamaCoordinator" Name="AgentShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Fragment>
