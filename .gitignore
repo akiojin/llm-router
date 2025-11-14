@@ -87,3 +87,9 @@ Cargo.lock
 **/*.rs.bk
 *.pdb
 .worktrees/
+
+# macOS SDK files (must be obtained separately, do not commit)
+.sdk/
+*.sdk/
+*.sdk.tar.xz
+*.sdk.tar.gz

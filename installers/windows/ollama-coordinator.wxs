@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="Ollama Coordinator"
+    Language="1041"
+    Version="$(var.ProductVersion)"
+    Manufacturer="Ollama Coordinator"
+    UpgradeCode="{B5064C44-1AB8-4AEA-86A1-0B36FEC7B6B7}"
+  >
+    <Package
+      InstallerVersion="500"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Platform="x64"
+    />
+
+    <MediaTemplate />
+
+    <MajorUpgrade
+      AllowDowngrades="no"
+      DowngradeErrorMessage="A newer version of Ollama Coordinator is already installed."
+    />
+
+    <Feature Id="MainFeature" Title="Ollama Coordinator" Level="1">
+      <ComponentGroupRef Id="RuntimeComponents" />
+    </Feature>
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Ollama Coordinator" />
+      </Directory>
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="RuntimeComponents">
+      <Component Id="CoordinatorBinary" Directory="INSTALLFOLDER" Guid="{0859444E-7EA4-45FC-8F0F-4B1E4C0C5B2C}">
+        <File
+          Id="CoordinatorExe"
+          KeyPath="yes"
+          Source="$(var.BinariesDir)\ollama-coordinator-coordinator.exe"
+        />
+      </Component>
+
+      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="{A34E05F3-4200-4B88-B583-6D4509708D52}">
+        <File
+          Id="AgentExe"
+          KeyPath="yes"
+          Source="$(var.BinariesDir)\ollama-coordinator-agent.exe"
+        />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

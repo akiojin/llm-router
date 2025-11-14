@@ -2,6 +2,7 @@ SHELL := /bin/sh
 
 .PHONY: quality-checks fmt clippy test markdownlint specify-checks specify-tasks specify-tests specify-compile specify-commits
 .PHONY: openai-tests test-hooks
+.PHONY: build-macos-x86_64 build-macos-aarch64 build-macos-all
 
 TASKS ?= $(shell find specs -name tasks.md)
 
@@ -15,7 +16,7 @@ test:
 	cargo test
 
 markdownlint:
-	npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git
+	pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
 
 specify-tasks:
 	@for file in $(TASKS); do \
@@ -41,3 +42,19 @@ openai-tests:
 
 test-hooks:
 	npx bats tests/hooks/test-block-git-branch-ops.bats tests/hooks/test-block-cd-command.bats
+
+# macOS cross-compilation targets
+build-macos-x86_64:
+	@echo "Building for macOS x86_64 (Intel)..."
+	cargo build --release --target x86_64-apple-darwin \
+		-p ollama-coordinator-coordinator \
+		-p ollama-coordinator-agent
+
+build-macos-aarch64:
+	@echo "Building for macOS aarch64 (Apple Silicon)..."
+	cargo build --release --target aarch64-apple-darwin \
+		-p ollama-coordinator-coordinator \
+		-p ollama-coordinator-agent
+
+build-macos-all: build-macos-x86_64 build-macos-aarch64
+	@echo "All macOS builds completed successfully!"

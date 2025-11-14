@@ -75,7 +75,7 @@ pub enum RecordStatus {
 **フィールド詳細**:
 
 | フィールド | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
+| --- | --- | --- | --- |
 | `id` | `Uuid` | Yes | レコードの一意識別子、`Uuid::new_v4()` で生成 |
 | `timestamp` | `DateTime<Utc>` | Yes | リクエスト受信時刻（UTCタイムゾーン） |
 | `request_type` | `RequestType` | Yes | "chat" または "generate" |

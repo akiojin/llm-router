@@ -10,3 +10,13 @@ rustflags = ["-C", "target-feature=+crt-static"]
 
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# macOS x86_64 (Intel) cross-compilation with osxcross
+[target.x86_64-apple-darwin]
+linker = "x86_64-apple-darwin23-clang"
+ar = "x86_64-apple-darwin23-ar"
+
+# macOS aarch64 (Apple Silicon) cross-compilation with osxcross
+[target.aarch64-apple-darwin]
+linker = "aarch64-apple-darwin23-clang"
+ar = "aarch64-apple-darwin23-ar"

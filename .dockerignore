@@ -51,6 +51,9 @@ docker-compose*.yml
 .specify/
 specs/
 
+# IMPORTANT: DO NOT ignore .sdk directory - it's needed for macOS cross-compilation
+# .sdk/ <- Do not uncomment this line
+
 # MCP cache
 .serena/
 

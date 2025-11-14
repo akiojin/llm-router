@@ -1,3 +1,89 @@
+## [1.2.2](https://github.com/akiojin/ollama-coordinator/compare/v1.2.1...v1.2.2) (2025-11-14)
+
+
+### Bug Fixes
+
+* **ci:** macOSリンカ設定とbackmerge制御を復元 ([f5af5ae](https://github.com/akiojin/ollama-coordinator/commit/f5af5ae002a395dcce30f4edaeea7dba2ba9ef8e))
+* **docs:** stabilize markdownlint table rules ([7a86925](https://github.com/akiojin/ollama-coordinator/commit/7a8692570885cb4b44e0027dafe2285032b90c24))
+* **lint:** normalize markdown tables and lint tooling ([0af3f37](https://github.com/akiojin/ollama-coordinator/commit/0af3f37e7caf1d4922e9e4f1ae66f986ee1e8167))
+
+## [1.2.1](https://github.com/akiojin/ollama-coordinator/compare/v1.2.0...v1.2.1) (2025-11-13)
+
+
+### Bug Fixes
+
+* **ci:** backmerge even if publish fails ([b0f54d8](https://github.com/akiojin/ollama-coordinator/commit/b0f54d8d72de93acecc95d18e2811c4ca58b8c47))
+* **ci:** set macos linker for publish ([f590be2](https://github.com/akiojin/ollama-coordinator/commit/f590be2971dd2839758dd8ebe307a0cec749ef55))
+
+# [1.2.0](https://github.com/akiojin/ollama-coordinator/compare/v1.1.1...v1.2.0) (2025-11-12)
+
+
+### Bug Fixes
+
+* **agent:** address tray clippy warnings ([ee119e0](https://github.com/akiojin/ollama-coordinator/commit/ee119e04c467339c5a940d982a45a52f7e3c62a1))
+* **agent:** silence windows lint warnings ([17dcebc](https://github.com/akiojin/ollama-coordinator/commit/17dcebc6f5a2f21ecbdfd3699fe28990a1fd95f5))
+* satisfy clippy on tray module ([c5a38be](https://github.com/akiojin/ollama-coordinator/commit/c5a38beaac113d2edfbb9b0a1e5a2c39f251f114))
+
+
+### Features
+
+* **agent:** add system tray gui and installers ([727fd2d](https://github.com/akiojin/ollama-coordinator/commit/727fd2dc5f69ed577d474e0dfdd5b3eaf8b95894))
+* **agent:** switch settings to env vars and panel ([a3fa0a3](https://github.com/akiojin/ollama-coordinator/commit/a3fa0a30601b00d0ee541d2ff9682d9ea8d21d6c))
+* **docker:** macOS SDKを使用したクロスコンパイル環境を追加 ([4b5b527](https://github.com/akiojin/ollama-coordinator/commit/4b5b527c6456b6a5b2c1a8ca06987e696887997d))
+
+## [1.1.1](https://github.com/akiojin/ollama-coordinator/compare/v1.1.0...v1.1.1) (2025-11-11)
+
+
+### Bug Fixes
+
+* **docs:** improve README subtitle clarity ([151672a](https://github.com/akiojin/ollama-coordinator/commit/151672a3b1b89638c1cc82ab6810f2609d88da0b))
+* **lint:** disable MD001, MD012, MD025 for CHANGELOG compatibility ([c709a60](https://github.com/akiojin/ollama-coordinator/commit/c709a60db66a2d0f2f472f9b913bd3f937f19acc))
+
+# [1.1.0](https://github.com/akiojin/ollama-coordinator/compare/v1.0.0...v1.1.0) (2025-11-11)
+
+
+### Bug Fixes
+
+* **ci:** correct required status checks with actual check names ([be4cef2](https://github.com/akiojin/ollama-coordinator/commit/be4cef2d0d1dc229eb1f402892ced5d21d50e89d))
+* **ci:** hookテストワークフローをpnpmに対応 ([0bd14e4](https://github.com/akiojin/ollama-coordinator/commit/0bd14e489153785c25ae217b8b8593f7b2c02ffb))
+* **ci:** pnpm/action-setup@v4のバージョン競合を解消 ([d151529](https://github.com/akiojin/ollama-coordinator/commit/d1515291ba5a8172d82fce67cef21f4062f829e4))
+* **ci:** restrict semantic-release to main branch only ([135f9fb](https://github.com/akiojin/ollama-coordinator/commit/135f9fb9f966376903b7db097b0839357a059f81))
+* **ci:** unify pnpm version to 10.20.0 across all workflows ([1808297](https://github.com/akiojin/ollama-coordinator/commit/180829759629b7865c05dce5b2ec2345b5fcbf43))
+* **ci:** unity-mcp-serverの設定でAuto Mergeワークフローを更新 ([2e27a43](https://github.com/akiojin/ollama-coordinator/commit/2e27a433bdd4eb75ba7b4608755bf61584d3d2af))
+* **docker:** change global package installation from pnpm to npm ([0d4ee13](https://github.com/akiojin/ollama-coordinator/commit/0d4ee1349e73527252e4fcb46fd072264a58501c))
+* **docker:** change global package installation from pnpm to npm ([b86a34f](https://github.com/akiojin/ollama-coordinator/commit/b86a34f7fe2622fd83e083412cec7ddb690771e7))
+* **docker:** update .codex volume mapping and sync auth.json from host ([340f409](https://github.com/akiojin/ollama-coordinator/commit/340f409080e8944e6bd0f11b3237bc16dcd6f226))
+* **docs:** CHANGELOGのmarkdownlintエラーを修正 ([b5036da](https://github.com/akiojin/ollama-coordinator/commit/b5036da026a6aaa690368d2472933d06b0d1ba5d))
+* **docs:** CHANGELOGのmarkdownlintエラーを再修正 ([38980ac](https://github.com/akiojin/ollama-coordinator/commit/38980ac6c26f8642d30f1d067497d057a00aadd2))
+* **docs:** CHANGELOGの連続空白行を修正し、worktreesを除外 ([9b4b7b0](https://github.com/akiojin/ollama-coordinator/commit/9b4b7b00d98910157b78fbe01756e0f83a870c8b))
+* **docs:** ドキュメントの表現を改善 ([44dba3e](https://github.com/akiojin/ollama-coordinator/commit/44dba3eacce6bc1a98514f14da03f8d915adeb97))
+* **release:** add GH_TOKEN to trigger release.yml workflow ([8bbbd89](https://github.com/akiojin/ollama-coordinator/commit/8bbbd890d4bf84070b584b679b5af1caa0bb557b))
+* **release:** add patch release test marker ([52ab19d](https://github.com/akiojin/ollama-coordinator/commit/52ab19d5d9a3def30e5855808c180cf2bb7b4bdb))
+* **release:** align workflows with unity repo ([7ec2363](https://github.com/akiojin/ollama-coordinator/commit/7ec2363290560ce7a916f1b8caeabe4867e78fc7))
+* **release:** append patch release verification note ([d1dec52](https://github.com/akiojin/ollama-coordinator/commit/d1dec529c9047b1c8c84e2bbbb3da5941d61035a))
+* **release:** explicitly trigger release.yml via gh workflow run ([bd990a4](https://github.com/akiojin/ollama-coordinator/commit/bd990a4c8f0e26ebaf3efb86cfafdde0118f35ba))
+* **release:** explicitly use PERSONAL_ACCESS_TOKEN for git push ([6b981c2](https://github.com/akiojin/ollama-coordinator/commit/6b981c2108dc2cc28c58f7b8d7651668a49351e6))
+* **release:** remove ANSI color codes before version extraction ([12afb18](https://github.com/akiojin/ollama-coordinator/commit/12afb18c8b24d4ca4ba878d544c7840fc71b5c96))
+* **release:** remove redundant release shell ([971c5ea](https://github.com/akiojin/ollama-coordinator/commit/971c5ea1c6d8f65d6a6eeaadbd6566150121962c))
+* **release:** revert to simple form matching unity-mcp-server v2.35.1 ([919a2d8](https://github.com/akiojin/ollama-coordinator/commit/919a2d86648d486bee2b7deec26a27e2fb6f6a19))
+* **release:** unity mcp serverフローに合わせて更新 ([df0c7e9](https://github.com/akiojin/ollama-coordinator/commit/df0c7e9569e011268e48b112f240462dcf42d574))
+* **release:** unity-mcp-serverと完全に同じリリースフローに統一 ([f4219d0](https://github.com/akiojin/ollama-coordinator/commit/f4219d053512cf5149855dce332c855bbeadc52b))
+* **release:** unity-mcp-serverと完全に同じリリースフローに統一 ([eb9da11](https://github.com/akiojin/ollama-coordinator/commit/eb9da11ab728e9dfc65f0d93bfb26c3b62fdbab6))
+* **release:** unity-mcp-serverと完全に同じリリースフローに統一 ([cc142b2](https://github.com/akiojin/ollama-coordinator/commit/cc142b297487a143af7c1c802f2ddfa6b627adbf))
+* **release:** wait and use REST API for workflow dispatch ([2d05fe9](https://github.com/akiojin/ollama-coordinator/commit/2d05fe9a8c8de2af879b291305a9fc769ce9e779))
+* **release:** yaml syntax error in merge commit message ([c32ccf7](https://github.com/akiojin/ollama-coordinator/commit/c32ccf77d045297a22cb57eb8818097131166bfd))
+* **workflow:** draftチェック検証を安定化 ([0975ec5](https://github.com/akiojin/ollama-coordinator/commit/0975ec592f6c7cdafd0aa793074cb943e5d383a4))
+* **workflow:** PAT必須でauto-merge権限を保証 ([f5aed47](https://github.com/akiojin/ollama-coordinator/commit/f5aed47040ca097f46c05b37c3ab218fe69f084a))
+* **workflow:** PERSONAL_ACCESS_TOKENを使用 ([0cb6e2c](https://github.com/akiojin/ollama-coordinator/commit/0cb6e2c3d1ea59a183ae8838da2a34a3d5d66ee7))
+
+
+### Features
+
+* **docs:** add gpu-aware routing feature description ([c98e193](https://github.com/akiojin/ollama-coordinator/commit/c98e1939f8bd5906da673c198167c15acd7d0793))
+* **hooks:** claude-worktreeのフック機構を統合 ([27275e0](https://github.com/akiojin/ollama-coordinator/commit/27275e05a89602f49c8e322a07a75892b1b6fa54))
+* **release:** add automated release workflows ([23391e3](https://github.com/akiojin/ollama-coordinator/commit/23391e38c64916288904e3273191f86068dd3b7e))
+* **workflow:** auto-mergeフローをupstream同期 ([45c81be](https://github.com/akiojin/ollama-coordinator/commit/45c81befa5c4eaa6523e5b1bee7a312d6120848d))
+
 ## [1.0.1-alpha.3](https://github.com/akiojin/ollama-coordinator/compare/v1.0.1-alpha.2...v1.0.1-alpha.3) (2025-11-07)
 
 ### Bug Fixes
