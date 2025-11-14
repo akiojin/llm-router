@@ -11,17 +11,21 @@ pub mod proxy;
 
 use crate::AppState;
 use axum::{
-    routing::{delete, get, get_service, post, put},
+    body::Body,
+    extract::Path as AxumPath,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+    routing::{delete, get, post, put},
     Router,
 };
-use tower_http::services::ServeDir;
+use include_dir::{include_dir, Dir, File};
+use mime_guess::MimeGuess;
+
+static DASHBOARD_ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/web/static");
+const DASHBOARD_INDEX: &str = "index.html";
 
 /// APIルーターを作成
 pub fn create_router(state: AppState) -> Router {
-    let static_dir = format!("{}/src/web/static", env!("CARGO_MANIFEST_DIR"));
-    let static_files =
-        get_service(ServeDir::new(static_dir).append_index_html_on_directories(true));
-
     Router::new()
         .route(
             "/api/agents",
@@ -84,8 +88,51 @@ pub fn create_router(state: AppState) -> Router {
             "/api/tasks/:task_id/progress",
             post(models::update_progress),
         )
-        .nest_service("/dashboard", static_files)
+        .route("/dashboard", get(serve_dashboard_index))
+        .route("/dashboard/", get(serve_dashboard_index))
+        .route("/dashboard/*path", get(serve_dashboard_asset))
         .with_state(state)
+}
+
+async fn serve_dashboard_index() -> Response {
+    embedded_dashboard_response(DASHBOARD_INDEX)
+}
+
+async fn serve_dashboard_asset(AxumPath(request_path): AxumPath<String>) -> Response {
+    let normalized = normalize_dashboard_path(&request_path);
+    match normalized {
+        Some(path) => embedded_dashboard_response(&path),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+fn embedded_dashboard_response(path: &str) -> Response {
+    match DASHBOARD_ASSETS.get_file(path) {
+        Some(file) => file_response(file),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+fn file_response(file: &File<'_>) -> Response {
+    let mime = MimeGuess::from_path(file.path())
+        .first_or_octet_stream()
+        .to_string();
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime)
+        .body(Body::from(file.contents().to_vec()))
+        .expect("failed to build embedded dashboard response")
+}
+
+fn normalize_dashboard_path(request_path: &str) -> Option<String> {
+    let trimmed = request_path.trim_matches('/');
+    if trimmed.is_empty() {
+        return Some(DASHBOARD_INDEX.to_string());
+    }
+    if trimmed.contains("..") || trimmed.contains('\\') {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 #[cfg(test)]

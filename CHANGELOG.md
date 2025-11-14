@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/akiojin/ollama-coordinator/compare/v1.4.0...v1.4.1) (2025-11-14)
+
+
+### Bug Fixes
+
+* **coordinator:** ダッシュボードをバイナリに同梱 ([b8c6c7d](https://github.com/akiojin/ollama-coordinator/commit/b8c6c7de14aec59a740f29d51d13511eff8dcbb4))
+
 # [1.4.0](https://github.com/akiojin/ollama-coordinator/compare/v1.3.1...v1.4.0) (2025-11-14)
 
 
