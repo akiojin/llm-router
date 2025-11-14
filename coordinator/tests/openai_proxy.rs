@@ -7,7 +7,7 @@ use ollama_coordinator_coordinator::{
     api, balancer::LoadManager, registry::AgentRegistry, tasks::DownloadTaskManager, AppState,
 };
 use tower::ServiceExt;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn build_state_with_mock(mock: &MockServer) -> AppState {
@@ -364,4 +364,378 @@ async fn test_proxy_generate_no_agents() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn test_openai_chat_completions_success() {
+    let mock_server = MockServer::start().await;
+
+    let upstream = serde_json::json!({
+        "object": "chat.completion",
+        "choices": [{
+            "message": { "role": "assistant", "content": "Hello from OpenAI route" },
+            "finish_reason": "stop",
+            "index": 0
+        }]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(upstream))
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let payload = serde_json::json!({
+        "model": "test-model",
+        "messages": [
+            { "role": "user", "content": "hi?" }
+        ],
+        "stream": false
+    });
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["object"], "chat.completion");
+    assert_eq!(
+        json["choices"][0]["message"]["content"],
+        "Hello from OpenAI route"
+    );
+}
+
+#[tokio::test]
+async fn test_openai_chat_completions_streaming_passthrough() {
+    let mock_server = MockServer::start().await;
+    let sse_payload = "data: {\"choices\":[{\"delta\":{\"content\":\"Hello stream\"}}]}\n\n";
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "text/event-stream")
+                .set_body_bytes(sse_payload.as_bytes().to_vec()),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let payload = serde_json::json!({
+        "model": "test-model",
+        "messages": [
+            { "role": "user", "content": "stream?" }
+        ],
+        "stream": true
+    });
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(CONTENT_TYPE).unwrap(),
+        "text/event-stream"
+    );
+    let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    assert_eq!(std::str::from_utf8(&body).unwrap(), sse_payload);
+}
+
+#[tokio::test]
+async fn test_openai_completions_success() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "response": "Generated via OpenAI route",
+            "done": true
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let payload = serde_json::json!({
+        "model": "test-model",
+        "prompt": "say hello",
+        "stream": false
+    });
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/completions")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["response"], "Generated via OpenAI route");
+}
+
+#[tokio::test]
+async fn test_openai_completions_streaming_passthrough() {
+    let mock_server = MockServer::start().await;
+    let ndjson_payload = "{\"response\":\"chunk-1\"}\n{\"response\":\"chunk-2\"}\n";
+
+    Mock::given(method("POST"))
+        .and(path("/v1/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/x-ndjson")
+                .set_body_bytes(ndjson_payload.as_bytes().to_vec()),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let payload = serde_json::json!({
+        "model": "test-model",
+        "prompt": "stream please",
+        "stream": true
+    });
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/completions")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(CONTENT_TYPE).unwrap(),
+        "application/x-ndjson"
+    );
+    let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    assert_eq!(std::str::from_utf8(&body).unwrap(), ndjson_payload);
+}
+
+#[tokio::test]
+async fn test_openai_chat_completions_preserves_extra_fields() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_partial_json(serde_json::json!({
+            "temperature": 0.5,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hi"},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+                    ]
+                }
+            ]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [{
+                "message": {"role": "assistant", "content": "ok"},
+                "finish_reason": "stop",
+                "index": 0
+            }]
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let payload = serde_json::json!({
+        "model": "test-model",
+        "temperature": 0.5,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    { "type": "text", "text": "hi" },
+                    { "type": "image_url", "image_url": { "url": "data:image/png;base64,AAAA" } }
+                ]
+            }
+        ]
+    });
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_openai_embeddings_success() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/embeddings"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "data": [{
+                "index": 0,
+                "object": "embedding",
+                "embedding": [0.1, 0.2, 0.3]
+            }],
+            "model": "test-embed",
+            "object": "list"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let payload = serde_json::json!({
+        "model": "test-embed",
+        "input": "embed me"
+    });
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/embeddings")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let value: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["object"], "list");
+}
+
+#[tokio::test]
+async fn test_openai_models_list_success() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "object": "list",
+            "data": [{
+                "id": "llama3",
+                "object": "model",
+                "owned_by": "ollama"
+            }]
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let value: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["data"][0]["id"], "llama3");
+}
+
+#[tokio::test]
+async fn test_openai_model_detail_success() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/models/phi3"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "phi3",
+            "object": "model",
+            "owned_by": "ollama"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let state = build_state_with_mock(&mock_server).await;
+    let router = api::create_router(state);
+
+    let response = router
+        .oneshot(
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/v1/models/phi3")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
 }
