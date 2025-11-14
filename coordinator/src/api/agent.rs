@@ -216,6 +216,18 @@ impl IntoResponse for AppError {
             CoordinatorError::NoAgentsAvailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
             }
+            CoordinatorError::AgentOffline(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
+            }
+            CoordinatorError::InvalidModelName(_) => {
+                (StatusCode::BAD_REQUEST, self.0.to_string())
+            }
+            CoordinatorError::InsufficientStorage(_) => {
+                (
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    self.0.to_string(),
+                )
+            }
             CoordinatorError::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
             }

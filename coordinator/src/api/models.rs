@@ -18,6 +18,50 @@ use crate::{
 };
 use ollama_coordinator_common::error::CoordinatorError;
 
+/// モデル名の妥当性を検証
+///
+/// 有効なモデル名の形式: `name:tag` または `name`
+/// - name: 小文字英数字、ハイフン、アンダースコア
+/// - tag: 英数字、ピリオド、ハイフン
+fn validate_model_name(model_name: &str) -> Result<(), CoordinatorError> {
+    if model_name.is_empty() {
+        return Err(CoordinatorError::InvalidModelName(
+            "モデル名が空です".to_string(),
+        ));
+    }
+
+    // 基本的な形式チェック
+    let parts: Vec<&str> = model_name.split(':').collect();
+    if parts.len() > 2 {
+        return Err(CoordinatorError::InvalidModelName(format!(
+            "無効なモデル名形式: {}",
+            model_name
+        )));
+    }
+
+    // 名前部分の検証
+    let name = parts[0];
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' || c == '.') {
+        return Err(CoordinatorError::InvalidModelName(format!(
+            "無効なモデル名: {}",
+            model_name
+        )));
+    }
+
+    // タグ部分の検証（存在する場合）
+    if parts.len() == 2 {
+        let tag = parts[1];
+        if tag.is_empty() || !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == 'b') {
+            return Err(CoordinatorError::InvalidModelName(format!(
+                "無効なモデルタグ: {}",
+                model_name
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// 利用可能なモデル一覧のレスポンス
 #[derive(Debug, Serialize)]
 pub struct AvailableModelsResponse {
@@ -87,6 +131,18 @@ impl IntoResponse for AppError {
             CoordinatorError::NoAgentsAvailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
             }
+            CoordinatorError::AgentOffline(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
+            }
+            CoordinatorError::InvalidModelName(_) => {
+                (StatusCode::BAD_REQUEST, self.0.to_string())
+            }
+            CoordinatorError::InsufficientStorage(_) => {
+                (
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    self.0.to_string(),
+                )
+            }
             CoordinatorError::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
             }
@@ -122,6 +178,9 @@ pub async fn distribute_models(
     State(state): State<AppState>,
     Json(request): Json<DistributeModelsRequest>,
 ) -> Result<(StatusCode, Json<DistributeModelsResponse>), AppError> {
+    // モデル名のバリデーション
+    validate_model_name(&request.model_name)?;
+
     // ターゲットエージェントを決定
     let agent_ids = match request.target.as_str() {
         "all" => {
@@ -143,6 +202,11 @@ pub async fn distribute_models(
     for agent_id in agent_ids {
         // エージェントが存在することを確認
         let agent = state.registry.get(agent_id).await?;
+
+        // エージェントがオンラインであることを確認
+        if agent.status != ollama_coordinator_common::types::AgentStatus::Online {
+            return Err(CoordinatorError::AgentOffline(agent_id).into());
+        }
 
         // タスクを作成
         let task = state
@@ -219,8 +283,16 @@ pub async fn pull_model_to_agent(
     Path(agent_id): Path<Uuid>,
     Json(request): Json<PullModelRequest>,
 ) -> Result<(StatusCode, Json<PullModelResponse>), AppError> {
+    // モデル名のバリデーション
+    validate_model_name(&request.model_name)?;
+
     // エージェントが存在することを確認
     let agent = state.registry.get(agent_id).await?;
+
+    // エージェントがオンラインであることを確認
+    if agent.status != ollama_coordinator_common::types::AgentStatus::Online {
+        return Err(CoordinatorError::AgentOffline(agent_id).into());
+    }
 
     // タスクを作成
     let task = state
