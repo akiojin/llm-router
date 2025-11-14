@@ -131,7 +131,7 @@ jobs:
       - name: Install WiX Toolset
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install wixtoolset --version 3.11.2 -y
+        run: choco install wixtoolset --version 3.11.2 -y --allow-downgrade --force
 
       - name: Package binaries (Unix)
         if: runner.os != 'Windows'
