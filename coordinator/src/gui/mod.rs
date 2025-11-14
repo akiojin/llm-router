@@ -1,4 +1,4 @@
-//! GUI utilities for the coordinator (Windows/macOS only).
+//! GUIユーティリティ（トレイアイコンなど、Windows/macOSのみ）。
 
 #![cfg(any(target_os = "windows", target_os = "macos"))]
 

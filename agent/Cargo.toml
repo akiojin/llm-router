@@ -51,6 +51,7 @@ metal = "0.29"
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tray-icon = "0.21.2"
 winit = "0.30"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

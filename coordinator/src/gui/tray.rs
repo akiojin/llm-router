@@ -23,7 +23,7 @@ use tray_icon::MouseButtonState;
 #[cfg(target_os = "macos")]
 const DOUBLE_CLICK_WINDOW: Duration = Duration::from_millis(450);
 
-const ICON_SIZE: u32 = 32;
+use image;
 
 /// Options required to build the coordinator tray.
 #[derive(Debug, Clone)]
@@ -252,20 +252,14 @@ fn launch_url(url: &str) -> std::io::Result<()> {
 }
 
 fn create_icon() -> Icon {
-    let mut rgba = Vec::with_capacity((ICON_SIZE * ICON_SIZE * 4) as usize);
-    for y in 0..ICON_SIZE {
-        for x in 0..ICON_SIZE {
-            let gradient = ((x + y) as f32 / (ICON_SIZE * 2) as f32 * 40.0) as u8;
-            let base = 40u8;
-            let color = (
-                base.saturating_add(gradient),
-                (110 + gradient).min(255),
-                (200 + gradient).min(255),
-            );
+    load_icon_from_png(include_bytes!("../../../assets/icons/coordinator.png"))
+}
 
-            rgba.extend([color.0, color.1, color.2, 255u8]);
-        }
-    }
-
-    Icon::from_rgba(rgba, ICON_SIZE, ICON_SIZE).expect("failed to create tray icon rgba buffer")
+fn load_icon_from_png(bytes: &[u8]) -> Icon {
+    let image = image::load_from_memory(bytes)
+        .expect("failed to decode coordinator tray icon")
+        .to_rgba8();
+    let (width, height) = image.dimensions();
+    Icon::from_rgba(image.into_raw(), width, height)
+        .expect("failed to create tray icon rgba buffer")
 }
