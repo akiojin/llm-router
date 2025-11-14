@@ -257,7 +257,7 @@ async fn test_progress_display_during_download() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/tasks/{}", task_id))
+                .uri(format!("/api/tasks/{}", task_id))
                 .body(Body::empty())
                 .unwrap(),
         )

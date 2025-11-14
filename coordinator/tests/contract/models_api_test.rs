@@ -195,7 +195,7 @@ async fn test_get_agent_models_contract() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/agents/{}/models", agent_id))
+                .uri(format!("/api/agents/{}/models", agent_id))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -279,7 +279,7 @@ async fn test_pull_model_contract() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/agents/{}/models/pull", agent_id))
+                .uri(format!("/api/agents/{}/models/pull", agent_id))
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                 .unwrap(),
@@ -360,7 +360,7 @@ async fn test_get_task_progress_contract() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/agents/{}/models/pull", agent_id))
+                .uri(format!("/api/agents/{}/models/pull", agent_id))
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                 .unwrap(),
@@ -381,7 +381,7 @@ async fn test_get_task_progress_contract() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/tasks/{}", task_id))
+                .uri(format!("/api/tasks/{}", task_id))
                 .body(Body::empty())
                 .unwrap(),
         )

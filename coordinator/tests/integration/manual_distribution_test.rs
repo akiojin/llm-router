@@ -260,7 +260,7 @@ async fn test_progress_tracking_multiple_agents() {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(&format!("/api/tasks/{}", task_id_str))
+                    .uri(format!("/api/tasks/{}", task_id_str))
                     .body(Body::empty())
                     .unwrap(),
             )

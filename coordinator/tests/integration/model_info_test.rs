@@ -148,7 +148,7 @@ async fn test_list_installed_models_on_agent() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/agents/{}/models", agent_id))
+                .uri(format!("/api/agents/{}/models", agent_id))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -232,7 +232,7 @@ async fn test_model_matrix_view_multiple_agents() {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(&format!("/api/agents/{}/models", agent_id))
+                    .uri(format!("/api/agents/{}/models", agent_id))
                     .body(Body::empty())
                     .unwrap(),
             )
