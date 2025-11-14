@@ -129,7 +129,7 @@ From spec.md success criteria:
 
 ### Code Quality
 
-- [x] `npx markdownlint-cli 'specs/SPEC-dc648675/**/*.md'` passes
+- [x] `pnpm dlx markdownlint-cli2 "specs/SPEC-dc648675/**/*.md"` passes
 - [x] No lint warnings or errors
 - [x] Conventional Commits format used for all commits
 - [x] All commits properly attributed to Claude

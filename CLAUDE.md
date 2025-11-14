@@ -54,7 +54,7 @@ GitHub Actions が実行する検証を**全てローカルで事前に成功さ
   - `cargo clippy -- -D warnings`
   - `cargo test`
   - `.specify/scripts/checks/check-tasks.sh`
-  - `npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git`
+  - `pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"`
 - コミット対象に応じて `.specify/scripts/checks/check-commits.sh` やその他ワークフロー相当のスクリプト
 - まとめて実行する場合は `make quality-checks`（OpenAI互換APIテスト `make openai-tests` を内包）を推奨。
 - OpenAI互換APIのみを個別に確認したい場合は `make openai-tests` を実行すること。
@@ -172,7 +172,7 @@ git rebase -i HEAD~3
 
 ### markdownlint準拠ドキュメント（強制）
 
-- Markdown ファイルは commit 前に `npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git` を実行して lint を通過させる。対象が限定される場合でもルールに従ったグロブを使用し、必ず全ファイルを検証する。
+- Markdown ファイルは commit 前に `pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"` を実行して lint を通過させる。対象が限定される場合でもルールに従ったグロブを使用し、必ず全ファイルを検証する。
 - 各ドキュメントは MD013（行長）、MD029（リスト番号）、MD041（見出しタイトル）など既定ルールを満たすよう編集する。必要な場合のみ、`.markdownlint.json` で合意された例外設定を追加する。
 - lint で検出された警告を放置した状態でのコミット・プッシュは禁止。修正が困難な場合は lint ルール変更の提案を issue に記録し、承認なしでローカル例外を入れない。
 - CI の Quality Checks でも markdownlint が実行されるため、ローカルで合格しない限り PR がブロックされる。CLI での改善結果を再チェックし、ゼロ警告を確認してからレビューを依頼する。

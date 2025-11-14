@@ -74,20 +74,20 @@ pub enum RecordStatus {
 
 **フィールド詳細**:
 
-| フィールド | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| `id` | `Uuid` | Yes | レコードの一意識別子、`Uuid::new_v4()` で生成 |
-| `timestamp` | `DateTime<Utc>` | Yes | リクエスト受信時刻（UTCタイムゾーン） |
-| `request_type` | `RequestType` | Yes | "chat" または "generate" |
-| `model` | `String` | Yes | モデル名（例: "llama2", "codellama"） |
-| `agent_id` | `Uuid` | Yes | エージェントID（Agent構造体のidと一致） |
-| `agent_machine_name` | `String` | Yes | エージェントのマシン名（表示用） |
-| `agent_ip` | `IpAddr` | Yes | エージェントのIPアドレス（デバッグ用） |
-| `request_body` | `serde_json::Value` | Yes | リクエスト本文全体をJSON Value として保存 |
-| `response_body` | `Option<serde_json::Value>` | No | レスポンス本文、エラー時は None |
-| `duration_ms` | `u64` | Yes | リクエスト開始から完了までの時間（ミリ秒） |
-| `status` | `RecordStatus` | Yes | Success または Error |
-| `completed_at` | `DateTime<Utc>` | Yes | レスポンス完了時刻（UTCタイムゾーン） |
+| フィールド | 型                      | 必須 | 説明 |
+| ---------- | ----------------------- | ---- | ---- |
+| `id` | `Uuid`                  | Yes  | レコードの一意識別子、`Uuid::new_v4()` で生成 |
+| `timestamp` | `DateTime<Utc>`         | Yes  | リクエスト受信時刻（UTCタイムゾーン） |
+| `request_type` | `RequestType`           | Yes  | "chat" または "generate" |
+| `model` | `String`                | Yes  | モデル名（例: "llama2", "codellama"） |
+| `agent_id` | `Uuid`                  | Yes  | エージェントID（Agent構造体のidと一致） |
+| `agent_machine_name` | `String`                | Yes  | エージェントのマシン名（表示用） |
+| `agent_ip` | `IpAddr`                | Yes  | エージェントのIPアドレス（デバッグ用） |
+| `request_body` | `serde_json::Value`      | Yes  | リクエスト本文全体をJSON Value として保存 |
+| `response_body` | `Option<serde_json::Value>` | No   | レスポンス本文、エラー時は None |
+| `duration_ms` | `u64`                   | Yes  | リクエスト開始から完了までの時間（ミリ秒） |
+| `status` | `RecordStatus`          | Yes  | Success または Error |
+| `completed_at` | `DateTime<Utc>`         | Yes  | レスポンス完了時刻（UTCタイムゾーン） |
 
 **バリデーションルール**:
 - `id`: 重複不可（UUIDv4なので実質重複しない）

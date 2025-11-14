@@ -39,7 +39,7 @@ GitHub Actionsを使用して、PR作成後の品質チェック（tests、lint�
 ## 技術コンテキスト
 
 **言語/バージョン**: Bash 5.x, GitHub Actions YAML, Rust 1.75
-**主要依存関係**: GitHub CLI (gh), GitHub Actions, commitlint, markdownlint-cli
+**主要依存関係**: GitHub CLI (gh), GitHub Actions, commitlint, markdownlint-cli2
 **ストレージ**: N/A (ステートレス)
 **テスト**: GitHub Actions自体の実行でテスト (ダミーPRでの動作確認)
 **対象プラットフォーム**: GitHub-hosted runners (ubuntu-latest, windows-latest)
