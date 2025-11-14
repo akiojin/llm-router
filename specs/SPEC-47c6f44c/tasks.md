@@ -58,7 +58,7 @@
     - Job 2: `rust-test` - `cargo test --all-features --workspace` (matrix: ubuntu-latest, windows-latest)
     - Job 3: `rust-lint` - `cargo fmt --check` + `cargo clippy`
     - Job 4: `commitlint` - `.specify/scripts/checks/check-commits.sh`呼び出し（PR時のみ）
-    - Job 5: `markdownlint` - `npx markdownlint-cli`
+    - Job 5: `markdownlint` - `pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"`
   - **トリガー**: `pull_request` (main), `push` (feature/**)
   - **コミット**: `feat(workflow): quality-checksワークフロー実装`
 
@@ -162,7 +162,7 @@
 
 - [x] **T016** [P] ドキュメント最終確認とmarkdownlintチェック
   - **ファイル**: `CLAUDE.md`, `finish-feature.sh` のコメント、新規作成ワークフローYAML
-  - **コマンド**: `npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git`
+  - **コマンド**: `pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"`
   - **修正**: markdownlint警告/エラーを修正
   - **コミット**: `style(docs): markdownlint修正`
 

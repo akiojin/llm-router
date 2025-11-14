@@ -1,3 +1,20 @@
+## [1.2.2](https://github.com/akiojin/ollama-coordinator/compare/v1.2.1...v1.2.2) (2025-11-14)
+
+
+### Bug Fixes
+
+* **ci:** macOSリンカ設定とbackmerge制御を復元 ([f5af5ae](https://github.com/akiojin/ollama-coordinator/commit/f5af5ae002a395dcce30f4edaeea7dba2ba9ef8e))
+* **docs:** stabilize markdownlint table rules ([7a86925](https://github.com/akiojin/ollama-coordinator/commit/7a8692570885cb4b44e0027dafe2285032b90c24))
+* **lint:** normalize markdown tables and lint tooling ([0af3f37](https://github.com/akiojin/ollama-coordinator/commit/0af3f37e7caf1d4922e9e4f1ae66f986ee1e8167))
+
+## [1.2.1](https://github.com/akiojin/ollama-coordinator/compare/v1.2.0...v1.2.1) (2025-11-13)
+
+
+### Bug Fixes
+
+* **ci:** backmerge even if publish fails ([b0f54d8](https://github.com/akiojin/ollama-coordinator/commit/b0f54d8d72de93acecc95d18e2811c4ca58b8c47))
+* **ci:** set macos linker for publish ([f590be2](https://github.com/akiojin/ollama-coordinator/commit/f590be2971dd2839758dd8ebe307a0cec749ef55))
+
 # [1.2.0](https://github.com/akiojin/ollama-coordinator/compare/v1.1.1...v1.2.0) (2025-11-12)
 
 

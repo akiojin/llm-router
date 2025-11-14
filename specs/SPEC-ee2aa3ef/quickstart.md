@@ -504,7 +504,7 @@ cargo fmt --check           # コードフォーマット
 cargo clippy -- -D warnings # Lintチェック
 cargo test --workspace      # 全テスト実行
 make openai-tests           # OpenAI互換APIテスト
-npx markdownlint-cli '**/*.md'  # マークダウンLint
+pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"  # マークダウンLint
 
 # コミットメッセージ検証
 .specify/scripts/checks/check-commits.sh --from origin/main --to HEAD
@@ -647,7 +647,7 @@ vim src/lib.rs
 cargo fmt --check
 cargo clippy -- -D warnings
 cargo test
-npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git
+pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
 
 # コミット（fix: で始めることでパッチバージョン上昇）
 git add .

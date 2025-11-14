@@ -16,7 +16,7 @@ test:
 	cargo test
 
 markdownlint:
-	npx markdownlint-cli '**/*.md' --ignore node_modules --ignore .git
+	pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
 
 specify-tasks:
 	@for file in $(TASKS); do \
