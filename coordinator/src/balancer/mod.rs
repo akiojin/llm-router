@@ -58,6 +58,7 @@ mod tests {
         vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }]
     }
 

@@ -13,14 +13,24 @@ use ollama_coordinator_common::{
 };
 use serde::Deserialize;
 use serde_json::json;
+use tracing::{error, info};
 
 /// POST /api/agents - エージェント登録
 pub async fn register_agent(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
+    info!(
+        "Agent registration request: machine={}, ip={}, gpu_available={}",
+        req.machine_name, req.ip_address, req.gpu_available
+    );
+
     // GPU必須要件の検証（詳細なエラーメッセージ）
     if !req.gpu_available {
+        error!(
+            "Agent registration rejected: GPU not available (machine={})",
+            req.machine_name
+        );
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
                 "GPU hardware is required for agent registration. gpu_available must be true."
@@ -30,6 +40,10 @@ pub async fn register_agent(
     }
 
     if req.gpu_devices.is_empty() {
+        error!(
+            "Agent registration rejected: No GPU devices (machine={})",
+            req.machine_name
+        );
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
                 "GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
@@ -39,6 +53,10 @@ pub async fn register_agent(
     }
 
     if !req.gpu_devices.iter().all(|device| device.is_valid()) {
+        error!(
+            "Agent registration rejected: Invalid GPU device info (machine={})",
+            req.machine_name
+        );
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
                 "GPU hardware is required for agent registration. Invalid GPU device information (empty model or zero count)."
@@ -58,7 +76,82 @@ pub async fn register_agent(
         req.gpu_model = req.gpu_devices.first().map(|device| device.model.clone());
     }
 
-    let response = state.registry.register(req).await?;
+    // GPUメモリ情報からモデルを選択（reqを移動する前に取得）
+    // gpu_devicesの最大メモリ容量を使用（複数GPU時は最大のものを選ぶ想定）
+    let gpu_memory_bytes = req
+        .gpu_devices
+        .iter()
+        .filter_map(|d| d.memory)
+        .max()
+        .unwrap_or(16_000_000_000); // デフォルトは16GB（gpt-oss:20b）
+
+    let model_name = crate::models::gpu_selector::select_model_by_gpu_memory(gpu_memory_bytes);
+
+    info!(
+        "Selected model for auto-distribution: model={}, gpu_memory_gb={:.2}",
+        model_name,
+        gpu_memory_bytes as f64 / 1_000_000_000.0
+    );
+
+    let mut response = state.registry.register(req).await?;
+
+    // エージェント登録成功後、最適なモデルを自動配布
+    let agent_id = response.agent_id;
+    let task_manager = state.task_manager.clone();
+    let registry = state.registry.clone();
+
+    // タスクを作成（同期的に実行し、レスポンスに含める）
+    let task = task_manager.create_task(agent_id, model_name.clone()).await;
+    let task_id = task.id;
+
+    info!(
+        "Auto-distribution started: agent_id={}, model={}, task_id={}",
+        agent_id, model_name, task_id
+    );
+
+    // レスポンスに自動配布情報を追加
+    response.auto_distributed_model = Some(model_name.clone());
+    response.download_task_id = Some(task_id);
+
+    // エージェントにモデルプル要求を送信（バックグラウンド）
+    tokio::spawn(async move {
+        match registry.get(agent_id).await {
+            Ok(agent) => {
+                // エージェントAPIのポート（デフォルト: Ollama port + 1）
+                let agent_api_port = agent.ollama_port + 1;
+                let agent_url = format!("http://{}:{}/pull", agent.ip_address, agent_api_port);
+
+                info!("Sending pull request to agent: {}", agent_url);
+
+                let client = reqwest::Client::new();
+                let pull_request = serde_json::json!({
+                    "model": model_name,
+                    "task_id": task_id,
+                });
+
+                match client.post(&agent_url).json(&pull_request).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            info!("Successfully sent pull request to agent {}", agent_id);
+                        } else {
+                            error!(
+                                "Agent {} returned error status: {}",
+                                agent_id,
+                                response.status()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to send pull request to agent {}: {}", agent_id, e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to get agent {} info: {}", agent_id, e);
+            }
+        }
+    });
+
     Ok(Json(response))
 }
 
@@ -146,6 +239,13 @@ impl IntoResponse for AppError {
             CoordinatorError::NoAgentsAvailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
             }
+            CoordinatorError::AgentOffline(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
+            }
+            CoordinatorError::InvalidModelName(_) => (StatusCode::BAD_REQUEST, self.0.to_string()),
+            CoordinatorError::InsufficientStorage(_) => {
+                (StatusCode::INSUFFICIENT_STORAGE, self.0.to_string())
+            }
             CoordinatorError::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
             }
@@ -181,6 +281,7 @@ mod tests {
     use crate::{
         balancer::{LoadManager, MetricsUpdate, RequestOutcome},
         registry::AgentRegistry,
+        tasks::DownloadTaskManager,
     };
     use axum::body::to_bytes;
     use ollama_coordinator_common::{
@@ -195,10 +296,12 @@ mod tests {
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
+        let task_manager = DownloadTaskManager::new();
         AppState {
             registry,
             load_manager,
             request_history,
+            task_manager,
         }
     }
 
@@ -206,6 +309,7 @@ mod tests {
         vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }]
     }
 

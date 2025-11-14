@@ -40,6 +40,12 @@ pub struct RegisterResponse {
     pub agent_id: Uuid,
     /// ステータス ("registered" または "updated")
     pub status: RegisterStatus,
+    /// 自動配布されたモデル名（オプション）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_distributed_model: Option<String>,
+    /// ダウンロードタスクID（オプション）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_task_id: Option<Uuid>,
 }
 
 /// 登録ステータス
@@ -204,6 +210,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "NVIDIA RTX 4090".to_string(),
                 count: 2,
+                memory: None,
             }],
             gpu_count: Some(2),
             gpu_model: Some("NVIDIA RTX 4090".to_string()),

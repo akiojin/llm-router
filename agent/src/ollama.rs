@@ -121,7 +121,7 @@ impl OllamaManager {
     }
 
     /// 指定モデルが存在しなければプルする
-    async fn ensure_model(&self, model: &str) -> AgentResult<()> {
+    pub async fn ensure_model(&self, model: &str) -> AgentResult<()> {
         let name = model.trim();
         if name.is_empty() {
             return Ok(());

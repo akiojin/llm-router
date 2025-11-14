@@ -29,6 +29,7 @@ async fn test_round_robin_load_balancing() {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -71,6 +72,7 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -89,6 +91,7 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -169,6 +172,7 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -187,6 +191,7 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),

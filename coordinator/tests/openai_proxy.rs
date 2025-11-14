@@ -4,7 +4,7 @@ use ollama_coordinator_common::{
     types::GpuDeviceInfo,
 };
 use ollama_coordinator_coordinator::{
-    api, balancer::LoadManager, registry::AgentRegistry, AppState,
+    api, balancer::LoadManager, registry::AgentRegistry, tasks::DownloadTaskManager, AppState,
 };
 use tower::ServiceExt;
 use wiremock::matchers::{method, path};
@@ -16,10 +16,12 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
+    let task_manager = DownloadTaskManager::new();
     let state = AppState {
         registry,
         load_manager,
         request_history,
+        task_manager,
     };
 
     // 登録済みエージェントを追加
@@ -34,6 +36,7 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -204,10 +207,12 @@ async fn test_proxy_chat_no_agents() {
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
+    let task_manager = DownloadTaskManager::new();
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
+        task_manager,
     });
 
     let payload = ChatRequest {
@@ -330,10 +335,12 @@ async fn test_proxy_generate_no_agents() {
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
+    let task_manager = DownloadTaskManager::new();
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
+        task_manager,
     });
 
     let payload = GenerateRequest {

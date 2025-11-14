@@ -33,6 +33,22 @@
     <main>
       <section class="banner hidden" id="error-banner"></section>
 
+      <nav class="tabs-nav">
+        <button type="button" class="tab-button tab-button--active" data-tab="dashboard">
+          ダッシュボード
+        </button>
+        <button type="button" class="tab-button" data-tab="agents">
+          エージェント一覧
+        </button>
+        <button type="button" class="tab-button" data-tab="models">
+          モデル管理
+        </button>
+        <button type="button" class="tab-button" data-tab="history">
+          リクエスト履歴
+        </button>
+      </nav>
+
+      <div class="tab-panel tab-panel--active" id="tab-dashboard">
       <section class="stats-grid">
         <article class="stat-card">
           <h2>登録エージェント</h2>
@@ -73,7 +89,9 @@
           </p>
         </article>
       </section>
+      </div>
 
+      <div class="tab-panel" id="tab-agents">
       <section class="agents-section">
         <header class="section-header">
           <h2>エージェント一覧</h2>
@@ -176,7 +194,59 @@
           <canvas id="requests-chart" aria-label="Requests per minute" role="img"></canvas>
         </div>
       </section>
+      </div>
 
+      <div class="tab-panel" id="tab-models">
+        <section class="models-section">
+          <header class="section-header">
+            <h2>モデル管理</h2>
+          </header>
+
+          <div class="models-container">
+            <div class="models-sidebar">
+              <h3>利用可能なモデル</h3>
+              <div id="available-models-list" class="models-list">
+                <p class="loading-message">モデル一覧を読み込み中...</p>
+              </div>
+            </div>
+
+            <div class="models-main">
+              <div class="models-toolbar">
+                <h3>配布先エージェント</h3>
+                <div class="toolbar-buttons">
+                  <button type="button" id="select-all-agents" class="btn btn--secondary">
+                    すべて選択
+                  </button>
+                  <button type="button" id="deselect-all-agents" class="btn btn--secondary">
+                    選択解除
+                  </button>
+                  <button
+                    type="button"
+                    id="distribute-model-button"
+                    class="btn btn--primary"
+                    disabled
+                  >
+                    選択したモデルを配布
+                  </button>
+                </div>
+              </div>
+
+              <div id="agents-for-distribution" class="agents-checklist">
+                <p class="loading-message">エージェント一覧を読み込み中...</p>
+              </div>
+
+              <div class="download-tasks-section">
+                <h3>ダウンロードタスク</h3>
+                <div id="download-tasks-list" class="tasks-list">
+                  <p class="empty-message">実行中のタスクはありません</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="tab-panel" id="tab-history">
       <section class="request-history-section">
         <header class="section-header">
           <h2>リクエスト履歴一覧</h2>
@@ -229,6 +299,7 @@
           <button type="button" id="history-page-next" class="btn" aria-label="次のページ">&gt;</button>
         </div>
       </section>
+      </div>
     </main>
 
     <footer class="page-footer">
@@ -386,6 +457,7 @@
       </div>
     </div>
 
+    <script src="/dashboard/models.js" defer></script>
     <script src="/dashboard/app.js" defer></script>
   </body>
 </html>

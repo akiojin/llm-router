@@ -2,6 +2,8 @@
 //!
 //! エージェントの状態をメモリ内で管理し、データベースと同期
 
+pub mod models;
+
 use chrono::Utc;
 use ollama_coordinator_common::{
     error::{CoordinatorError, CoordinatorResult},
@@ -81,7 +83,11 @@ impl AgentRegistry {
             if agent.gpu_devices.is_empty() {
                 if let Some(model) = agent.gpu_model.clone() {
                     let count = agent.gpu_count.unwrap_or(1).max(1);
-                    agent.gpu_devices = vec![GpuDeviceInfo { model, count }];
+                    agent.gpu_devices = vec![GpuDeviceInfo {
+                        model,
+                        count,
+                        memory: None,
+                    }];
                     sanitized = true;
                 } else {
                     info!(
@@ -214,7 +220,12 @@ impl AgentRegistry {
         drop(agents);
         self.save_to_storage(&agent).await?;
 
-        Ok(RegisterResponse { agent_id, status })
+        Ok(RegisterResponse {
+            agent_id,
+            status,
+            auto_distributed_model: None,
+            download_task_id: None,
+        })
     }
 
     /// エージェントを取得
@@ -422,6 +433,7 @@ mod tests {
         vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }]
     }
 

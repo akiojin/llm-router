@@ -1,6 +1,6 @@
 //! Ollama Coordinator Server Entry Point
 
-use ollama_coordinator_coordinator::{api, balancer, health, registry, AppState};
+use ollama_coordinator_coordinator::{api, balancer, health, registry, tasks, AppState};
 
 #[tokio::main]
 async fn main() {
@@ -53,11 +53,15 @@ async fn main() {
         request_history.clone(),
     );
 
+    // ダウンロードタスクマネージャーを初期化
+    let task_manager = tasks::DownloadTaskManager::new();
+
     // アプリケーション状態を初期化
     let state = AppState {
         registry,
         load_manager,
         request_history,
+        task_manager,
     };
 
     // ルーター作成

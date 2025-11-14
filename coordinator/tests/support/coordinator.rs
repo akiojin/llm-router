@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use ollama_coordinator_coordinator::{
-    api, balancer::LoadManager, registry::AgentRegistry, AppState,
+    api, balancer::LoadManager, registry::AgentRegistry, tasks::DownloadTaskManager, AppState,
 };
 use reqwest::{Client, Response};
 use serde_json::json;
@@ -15,10 +15,12 @@ pub async fn spawn_coordinator() -> TestServer {
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
+    let task_manager = DownloadTaskManager::new();
     let state = AppState {
         registry,
         load_manager,
         request_history,
+        task_manager,
     };
 
     let router = api::create_router(state);

@@ -27,6 +27,7 @@ async fn test_heartbeat_sending_after_registration() {
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
@@ -81,6 +82,7 @@ async fn test_heartbeat_with_real_metrics() {
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
@@ -182,6 +184,7 @@ async fn test_multiple_heartbeats() {
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),

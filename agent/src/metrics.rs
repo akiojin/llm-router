@@ -199,8 +199,18 @@ impl MetricsCollector {
         }
 
         match (self.gpu_model(), self.gpu_count()) {
-            (Some(model), Some(count)) if count > 0 => vec![GpuDeviceInfo { model, count }],
-            (Some(model), _) => vec![GpuDeviceInfo { model, count: 1 }],
+            (Some(model), Some(count)) if count > 0 => {
+                vec![GpuDeviceInfo {
+                    model,
+                    count,
+                    memory: None,
+                }]
+            }
+            (Some(model), _) => vec![GpuDeviceInfo {
+                model,
+                count: 1,
+                memory: None,
+            }],
             _ => Vec::new(),
         }
     }

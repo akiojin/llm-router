@@ -15,6 +15,7 @@ fn gpu_devices_validation_accepts_positive_counts() {
     let devices = vec![GpuDeviceInfo {
         model: "NVIDIA RTX 4090".to_string(),
         count: 2,
+        memory: None,
     }];
     assert!(gpu_devices_valid(&devices));
 }

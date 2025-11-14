@@ -432,6 +432,7 @@ mod tests {
     use crate::{
         balancer::{LoadManager, MetricsUpdate, RequestOutcome},
         registry::AgentRegistry,
+        tasks::DownloadTaskManager,
     };
     use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::{IpAddr, Ipv4Addr};
@@ -442,10 +443,12 @@ mod tests {
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
+        let task_manager = DownloadTaskManager::new();
         AppState {
             registry,
             load_manager,
             request_history,
+            task_manager,
         }
     }
 
@@ -453,6 +456,7 @@ mod tests {
         vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }]
     }
 

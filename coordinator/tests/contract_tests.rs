@@ -24,5 +24,8 @@ mod test_proxy_generate;
 #[path = "contract/test_metrics.rs"]
 mod test_metrics;
 
+#[path = "contract/models_api_test.rs"]
+mod models_api_test;
+
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.

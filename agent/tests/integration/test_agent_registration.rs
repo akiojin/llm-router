@@ -27,6 +27,7 @@ async fn test_agent_registration_to_coordinator() {
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
@@ -73,6 +74,7 @@ async fn test_agent_re_registration() {
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),
@@ -113,6 +115,7 @@ async fn test_agent_registration_invalid_coordinator() {
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
             count: 1,
+            memory: None,
         }],
         gpu_count: Some(1),
         gpu_model: Some("Test GPU".to_string()),

@@ -13,6 +13,7 @@ use ollama_coordinator_coordinator::{
     api,
     balancer::{LoadManager, MetricsUpdate, RequestOutcome},
     registry::AgentRegistry,
+    tasks::DownloadTaskManager,
     AppState,
 };
 use serde_json::Value;
@@ -28,10 +29,12 @@ fn build_router() -> (Router, AgentRegistry, LoadManager) {
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
+    let task_manager = DownloadTaskManager::new();
     let state = AppState {
         registry: registry.clone(),
         load_manager: load_manager.clone(),
         request_history,
+        task_manager,
     };
     let router = api::create_router(state);
     (router, registry, load_manager)
@@ -41,6 +44,7 @@ fn sample_gpu_devices(model: &str) -> Vec<GpuDeviceInfo> {
     vec![GpuDeviceInfo {
         model: model.to_string(),
         count: 1,
+        memory: None,
     }]
 }
 

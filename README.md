@@ -16,9 +16,13 @@ Ollama Coordinator is a system that provides unified management and a single API
 - **Real-time Monitoring**: Visualize all agent states via web dashboard
 - **Request History Tracking**: Complete request/response logging with 7-day retention
 - **Self-registering Agents**: Agents automatically register with the Coordinator
-- **WebUI Management**: Manage agent settings, monitoring, and control through browser-based dashboard
+- **Model Auto-Distribution**: Automatically distribute AI models to agents based
+  on GPU memory capacity
+- **WebUI Management**: Manage agent settings, monitoring, and control through
+  browser-based dashboard
 - **Cross-Platform Support**: Works on Windows 10+, macOS 12+, and Linux
-- **GPU-Aware Routing**: Intelligent request routing based on GPU capabilities and availability
+- **GPU-Aware Routing**: Intelligent request routing based on GPU capabilities
+  and availability
 
 ## Load Balancing
 
@@ -668,7 +672,120 @@ Update agent metrics for load balancing (Agent→Coordinator).
 
 **Response:** `204 No Content`
 
+#### GET /api/models/available
+
+Get list of available models for distribution.
+
+**Response:**
+
+```json
+{
+  "models": [
+    {
+      "name": "gpt-oss:20b",
+      "display_name": "GPT OSS (20B)",
+      "size_gb": 12.5,
+      "description": "Large language model, 20 billion parameters"
+    }
+  ],
+  "source": "ollama_library"
+}
+```
+
+#### POST /api/models/distribute
+
+Distribute a model to one or more agents.
+
+**Request:**
+
+```json
+{
+  "model_name": "gpt-oss:7b",
+  "target": "all"
+}
+```
+
+Or for specific agents:
+
+```json
+{
+  "model_name": "gpt-oss:7b",
+  "target": "specific",
+  "agent_ids": [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "660f9511-f39c-52e5-c827-557766551111"
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "task_ids": [
+    "770ea622-g49d-63f6-d938-668877662222",
+    "880fb733-h59e-74g7-e049-779988773333"
+  ]
+}
+```
+
+#### POST /api/agents/:id/models/pull
+
+Instruct a specific agent to pull a model.
+
+**Request:**
+
+```json
+{
+  "model_name": "llama3.2:3b"
+}
+```
+
+**Response:**
+
+```json
+{
+  "task_id": "990gc844-i69f-85h8-f150-880099884444"
+}
+```
+
+#### GET /api/agents/:id/models
+
+Get list of installed models on a specific agent.
+
+**Response:**
+
+```json
+[
+  {
+    "name": "gpt-oss:20b",
+    "size_gb": 12.5,
+    "installed_at": "2025-11-14T10:00:00Z"
+  }
+]
+```
+
+#### GET /api/tasks/:id
+
+Get progress of a model download task.
+
+**Response:**
+
+```json
+{
+  "id": "770ea622-g49d-63f6-d938-668877662222",
+  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "model_name": "gpt-oss:7b",
+  "status": "downloading",
+  "progress": 0.45,
+  "download_speed_bps": 10485760,
+  "created_at": "2025-11-14T10:00:00Z",
+  "updated_at": "2025-11-14T10:05:30Z"
+}
+```
+
 #### POST /api/chat
+
 Proxy endpoint for Ollama Chat API.
 
 **Request/Response:** Conforms to [Ollama Chat API specification](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-chat-completion)

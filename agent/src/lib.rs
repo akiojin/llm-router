@@ -16,6 +16,9 @@ pub mod metrics;
 /// 登録フロー補助ロジック
 pub mod registration;
 
+/// HTTP APIエンドポイント（モデルプル要求受信）
+pub mod api;
+
 /// GUI連携（システムトレイなど）
 pub mod gui;
 

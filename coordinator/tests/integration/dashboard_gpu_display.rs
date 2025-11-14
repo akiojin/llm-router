@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use ollama_coordinator_coordinator::{
-    api, balancer::LoadManager, registry::AgentRegistry, AppState,
+    api, balancer::LoadManager, registry::AgentRegistry, tasks::DownloadTaskManager, AppState,
 };
 use serde_json::json;
 use tower::ServiceExt;
@@ -19,10 +19,12 @@ fn build_router() -> Router {
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
+    let task_manager = DownloadTaskManager::new();
     let state = AppState {
         registry,
         load_manager,
         request_history,
+        task_manager,
     };
     api::create_router(state)
 }

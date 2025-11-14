@@ -82,6 +82,7 @@ async fn test_fallback_to_round_robin_when_all_agents_high_load() {
 //         gpu_devices: vec![GpuDeviceInfo {
 //             model: "Test GPU".to_string(),
 //             count: 1,
+//             memory: None,
 //         }],
 //         gpu_count: Some(1),
 //         gpu_model: Some("Test GPU".to_string()),

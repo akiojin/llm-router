@@ -506,7 +506,7 @@ fn save_request_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{balancer::LoadManager, registry::AgentRegistry};
+    use crate::{balancer::LoadManager, registry::AgentRegistry, tasks::DownloadTaskManager};
     use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::IpAddr;
 
@@ -515,10 +515,12 @@ mod tests {
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
+        let task_manager = DownloadTaskManager::new();
         AppState {
             registry,
             load_manager,
             request_history,
+            task_manager,
         }
     }
 
@@ -543,6 +545,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -570,6 +573,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -593,6 +597,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),

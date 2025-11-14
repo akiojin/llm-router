@@ -39,6 +39,7 @@ const state = {
   agentMetricsCache: new Map(),
   agentMetricsAbortController: null,
   fallbackNotified: false,
+  currentTab: "dashboard",
 };
 
 let requestsChart = null;
@@ -1815,4 +1816,105 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 定期更新（30秒ごと）
   setInterval(fetchRequestHistory, 30000);
+});
+
+// ========== タブ管理 ==========
+
+/**
+ * タブ切り替え処理
+ */
+function switchTab(tabName) {
+  // タブボタンのアクティブ状態を更新
+  document.querySelectorAll('.tab-button').forEach((btn) => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add('tab-button--active');
+      btn.setAttribute('aria-selected', 'true');
+    } else {
+      btn.classList.remove('tab-button--active');
+      btn.setAttribute('aria-selected', 'false');
+    }
+  });
+
+  // タブパネルの表示/非表示を切り替え
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    if (panel.id === `tab-${tabName}`) {
+      panel.classList.add('tab-panel--active');
+      panel.setAttribute('aria-hidden', 'false');
+    } else {
+      panel.classList.remove('tab-panel--active');
+      panel.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  state.currentTab = tabName;
+
+  // モデル管理タブがアクティブになった時の処理
+  if (tabName === 'models' && typeof window.updateModelsUI === 'function') {
+    window.updateModelsUI(state.agents);
+  }
+}
+
+/**
+ * タブ切り替えイベントリスナーを登録
+ */
+function initTabs() {
+  document.querySelectorAll('.tab-button').forEach((button) => {
+    button.addEventListener('click', () => {
+      switchTab(button.dataset.tab);
+    });
+
+    // キーボードナビゲーション
+    button.addEventListener('keydown', (e) => {
+      const buttons = Array.from(document.querySelectorAll('.tab-button'));
+      const index = buttons.indexOf(button);
+
+      if (e.key === 'ArrowLeft' && index > 0) {
+        buttons[index - 1].focus();
+      } else if (e.key === 'ArrowRight' && index < buttons.length - 1) {
+        buttons[index + 1].focus();
+      } else if (e.key === 'Home') {
+        buttons[0].focus();
+      } else if (e.key === 'End') {
+        buttons[buttons.length - 1].focus();
+      }
+    });
+  });
+}
+
+// ========== models.js統合 ==========
+
+/**
+ * models.jsを動的にインポートしてモデル管理UIを初期化
+ */
+async function initModels() {
+  try {
+    const modelsModule = await import('/dashboard/models.js');
+
+    if (modelsModule && modelsModule.initModelsUI) {
+      await modelsModule.initModelsUI(state.agents);
+
+      // グローバルにエクスポートして他の場所から呼び出せるようにする
+      window.updateModelsUI = modelsModule.updateModelsUI;
+    }
+  } catch (error) {
+    console.error('Failed to initialize models UI:', error);
+  }
+}
+
+// ========== 拡張された初期化 ==========
+
+// タブ機能を初期化
+document.addEventListener('DOMContentLoaded', () => {
+  initTabs();
+
+  // エージェント情報取得後にモデルUIを初期化
+  const originalFetch = fetchAll;
+  window.fetchAll = async function() {
+    await originalFetch();
+
+    // 初回のみモデルUIを初期化
+    if (!window.updateModelsUI) {
+      await initModels();
+    }
+  };
 });

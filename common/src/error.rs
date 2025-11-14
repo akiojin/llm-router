@@ -59,6 +59,18 @@ pub enum CoordinatorError {
     /// 内部エラー
     #[error("内部エラー: {0}")]
     Internal(String),
+
+    /// エージェントがオフライン
+    #[error("エージェント {0} はオフラインです")]
+    AgentOffline(Uuid),
+
+    /// 無効なモデル名
+    #[error("無効なモデル名: {0}")]
+    InvalidModelName(String),
+
+    /// ストレージ容量不足
+    #[error("ストレージ容量不足: {0}")]
+    InsufficientStorage(String),
 }
 
 /// Agentエラー型

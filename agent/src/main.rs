@@ -5,16 +5,18 @@ use ollama_coordinator_agent::settings::{
     load_settings_from_disk, start_settings_panel, StoredSettings,
 };
 use ollama_coordinator_agent::{
-    client::CoordinatorClient, metrics::MetricsCollector, ollama::OllamaManager,
+    api, client::CoordinatorClient, metrics::MetricsCollector, ollama::OllamaManager,
     registration::gpu_devices_valid,
 };
 use ollama_coordinator_common::{
     error::{AgentError, AgentResult},
     protocol::{HealthCheckRequest, RegisterRequest, RegisterResponse},
 };
+use std::sync::Arc;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tokio::runtime::Builder;
 use tokio::{
+    sync::Mutex,
     task::yield_now,
     time::{interval, sleep, Duration},
 };
@@ -90,7 +92,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     println!("Ollama version: {}", ollama_version);
 
     // Coordinatorクライアントを初期化
-    let mut coordinator_client = CoordinatorClient::new(coordinator_url);
+    let mut coordinator_client = CoordinatorClient::new(coordinator_url.clone());
 
     // メトリクスコレクターを初期化（GPU情報取得のため）
     // ollamaバイナリのパスを渡してollama psコマンドでGPU検出を可能にする
@@ -145,6 +147,34 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         );
     }
 
+    // HTTPサーバーを起動（コーディネーターからのモデルプル要求を受信）
+    let ollama_manager_for_api = Arc::new(Mutex::new(ollama_manager));
+    let ollama_manager_clone = ollama_manager_for_api.clone();
+
+    let agent_api_port: u16 = std::env::var("AGENT_API_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(11435); // デフォルトはOllamaポート+1
+
+    let state = api::models::AppState {
+        ollama_manager: ollama_manager_for_api,
+        coordinator_url: coordinator_url.clone(),
+    };
+    let app = api::create_router(state);
+    let bind_addr = format!("0.0.0.0:{}", agent_api_port);
+
+    println!("Starting agent HTTP server on {}", bind_addr);
+
+    // HTTPサーバーをバックグラウンドで起動
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind(&bind_addr)
+            .await
+            .expect("Failed to bind agent HTTP server");
+        axum::serve(listener, app)
+            .await
+            .expect("Agent HTTP server error");
+    });
+
     // ハートビート送信タスク
     let mut heartbeat_timer = interval(Duration::from_secs(heartbeat_interval_secs));
 
@@ -162,11 +192,14 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         };
 
         // ハートビート送信
-        let models = match ollama_manager.list_models().await {
-            Ok(list) => list,
-            Err(err) => {
-                eprintln!("Failed to list Ollama models: {}", err);
-                Vec::new()
+        let models = {
+            let ollama = ollama_manager_clone.lock().await;
+            match ollama.list_models().await {
+                Ok(list) => list,
+                Err(err) => {
+                    eprintln!("Failed to list Ollama models: {}", err);
+                    Vec::new()
+                }
             }
         };
 
@@ -543,6 +576,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
@@ -581,6 +615,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
                 count: 1,
+                memory: None,
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),

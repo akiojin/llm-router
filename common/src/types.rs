@@ -14,6 +14,9 @@ pub struct GpuDeviceInfo {
     pub model: String,
     /// 当該モデルの枚数
     pub count: u32,
+    /// GPUメモリ容量（バイト単位、オプション）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<u64>,
 }
 
 impl GpuDeviceInfo {
@@ -204,6 +207,7 @@ mod tests {
             gpu_devices: vec![GpuDeviceInfo {
                 model: "NVIDIA RTX 4090".to_string(),
                 count: 2,
+                memory: None,
             }],
             gpu_available: true,
             gpu_count: Some(2),
@@ -264,18 +268,21 @@ mod tests {
         let valid = GpuDeviceInfo {
             model: "NVIDIA RTX 4090".to_string(),
             count: 2,
+            memory: None,
         };
         assert!(valid.is_valid());
 
         let zero_count = GpuDeviceInfo {
             model: "AMD".to_string(),
             count: 0,
+            memory: None,
         };
         assert!(!zero_count.is_valid());
 
         let empty_model = GpuDeviceInfo {
             model: " ".to_string(),
             count: 1,
+            memory: None,
         };
         assert!(!empty_model.is_valid());
     }
