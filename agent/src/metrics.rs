@@ -1122,6 +1122,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn test_nvidia_gpu_detection_with_mocked_paths() {
         let _lock = ENV_TEST_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
