@@ -15,7 +15,7 @@
       Platform="x64"
     />
 
-    <MediaTemplate />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <MajorUpgrade
       AllowDowngrades="no"
