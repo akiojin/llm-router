@@ -27,7 +27,10 @@ pub async fn register_agent(
 
     // GPU必須要件の検証（詳細なエラーメッセージ）
     if !req.gpu_available {
-        error!("Agent registration rejected: GPU not available (machine={})", req.machine_name);
+        error!(
+            "Agent registration rejected: GPU not available (machine={})",
+            req.machine_name
+        );
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
                 "GPU hardware is required for agent registration. gpu_available must be true."
@@ -37,7 +40,10 @@ pub async fn register_agent(
     }
 
     if req.gpu_devices.is_empty() {
-        error!("Agent registration rejected: No GPU devices (machine={})", req.machine_name);
+        error!(
+            "Agent registration rejected: No GPU devices (machine={})",
+            req.machine_name
+        );
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
                 "GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
@@ -47,7 +53,10 @@ pub async fn register_agent(
     }
 
     if !req.gpu_devices.iter().all(|device| device.is_valid()) {
-        error!("Agent registration rejected: Invalid GPU device info (machine={})", req.machine_name);
+        error!(
+            "Agent registration rejected: Invalid GPU device info (machine={})",
+            req.machine_name
+        );
         return Err(AppError(CoordinatorError::Common(
             ollama_coordinator_common::error::CommonError::Validation(
                 "GPU hardware is required for agent registration. Invalid GPU device information (empty model or zero count)."
@@ -233,14 +242,9 @@ impl IntoResponse for AppError {
             CoordinatorError::AgentOffline(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
             }
-            CoordinatorError::InvalidModelName(_) => {
-                (StatusCode::BAD_REQUEST, self.0.to_string())
-            }
+            CoordinatorError::InvalidModelName(_) => (StatusCode::BAD_REQUEST, self.0.to_string()),
             CoordinatorError::InsufficientStorage(_) => {
-                (
-                    StatusCode::INSUFFICIENT_STORAGE,
-                    self.0.to_string(),
-                )
+                (StatusCode::INSUFFICIENT_STORAGE, self.0.to_string())
             }
             CoordinatorError::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())

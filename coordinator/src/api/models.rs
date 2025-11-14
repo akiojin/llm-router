@@ -41,7 +41,11 @@ fn validate_model_name(model_name: &str) -> Result<(), CoordinatorError> {
 
     // 名前部分の検証
     let name = parts[0];
-    if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' || c == '.') {
+    if name.is_empty()
+        || !name.chars().all(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' || c == '.'
+        })
+    {
         return Err(CoordinatorError::InvalidModelName(format!(
             "無効なモデル名: {}",
             model_name
@@ -51,7 +55,11 @@ fn validate_model_name(model_name: &str) -> Result<(), CoordinatorError> {
     // タグ部分の検証（存在する場合）
     if parts.len() == 2 {
         let tag = parts[1];
-        if tag.is_empty() || !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == 'b') {
+        if tag.is_empty()
+            || !tag
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == 'b')
+        {
             return Err(CoordinatorError::InvalidModelName(format!(
                 "無効なモデルタグ: {}",
                 model_name
@@ -134,14 +142,9 @@ impl IntoResponse for AppError {
             CoordinatorError::AgentOffline(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
             }
-            CoordinatorError::InvalidModelName(_) => {
-                (StatusCode::BAD_REQUEST, self.0.to_string())
-            }
+            CoordinatorError::InvalidModelName(_) => (StatusCode::BAD_REQUEST, self.0.to_string()),
             CoordinatorError::InsufficientStorage(_) => {
-                (
-                    StatusCode::INSUFFICIENT_STORAGE,
-                    self.0.to_string(),
-                )
+                (StatusCode::INSUFFICIENT_STORAGE, self.0.to_string())
             }
             CoordinatorError::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
@@ -396,14 +399,10 @@ pub async fn get_task_progress(
     tracing::debug!("Task progress query: task_id={}", task_id);
 
     // タスクマネージャーからタスクを取得
-    let task = state
-        .task_manager
-        .get_task(task_id)
-        .await
-        .ok_or_else(|| {
-            tracing::error!("Task not found: task_id={}", task_id);
-            CoordinatorError::Internal(format!("Task {} not found", task_id))
-        })?;
+    let task = state.task_manager.get_task(task_id).await.ok_or_else(|| {
+        tracing::error!("Task not found: task_id={}", task_id);
+        CoordinatorError::Internal(format!("Task {} not found", task_id))
+    })?;
 
     Ok(Json(task))
 }
@@ -427,7 +426,10 @@ pub async fn update_progress(
         .update_progress(task_id, request.progress, request.speed)
         .await
         .ok_or_else(|| {
-            tracing::error!("Failed to update progress, task not found: task_id={}", task_id);
+            tracing::error!(
+                "Failed to update progress, task not found: task_id={}",
+                task_id
+            );
             CoordinatorError::Internal(format!("Task {} not found", task_id))
         })?;
 
