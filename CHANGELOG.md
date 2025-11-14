@@ -1,3 +1,19 @@
+# [1.4.0](https://github.com/akiojin/ollama-coordinator/compare/v1.3.1...v1.4.0) (2025-11-14)
+
+
+### Bug Fixes
+
+* **agent:** windows環境でのnvidia gpu検出を修正 ([ef9a8a8](https://github.com/akiojin/ollama-coordinator/commit/ef9a8a8091ad8c44e7b014e1b7147d23bfce968e))
+* **test:** windowsでnvidia gpu検出テストをスキップ ([9cd8a77](https://github.com/akiojin/ollama-coordinator/commit/9cd8a7774d47eb6418424496dd28f4898c36e75e))
+
+
+### Features
+
+* **coordinator:** add system tray support ([78a0ad2](https://github.com/akiojin/ollama-coordinator/commit/78a0ad24b02447dbfb6501ebeabccc758fb92c40))
+* **coordinator:** add system tray support ([15ae54a](https://github.com/akiojin/ollama-coordinator/commit/15ae54ade0f45310dab1c57e4e10b0e8c971f623))
+* **tray:** refresh agent/coordinator icons ([0cf6f7d](https://github.com/akiojin/ollama-coordinator/commit/0cf6f7df2cad819907f50087745615e38334afe6))
+* **tray:** システムトレイアイコンを刷新 ([a44569f](https://github.com/akiojin/ollama-coordinator/commit/a44569f48581b56ee065c805471f3ed6fe6da98d))
+
 ## [1.3.1](https://github.com/akiojin/ollama-coordinator/compare/v1.3.0...v1.3.1) (2025-11-14)
 
 

@@ -214,12 +214,12 @@ COORDINATOR_URL=http://coordinator-host:8080 ./target/release/ollama-coordinator
 
 **注意**: Agentは起動時にOllamaの存在を確認し、未インストールなら自動的にバイナリをダウンロード・検証・展開してから起動します。手動インストールが必要な場合は[ollama.ai](https://ollama.ai)から取得できます。
 
-#### システムトレイ & 設定パネル（Windows / macOS）
+#### システムトレイ（Windows / macOS）
 
-- Windows 10 以降 / macOS 12 以降では、起動と同時にトレイ常駐します。
-- ダブルクリック、もしくはトレイメニューの **設定パネルを開く** からローカル設定画面を表示し、コーディネーターURL / Ollamaポート / ハートビート間隔を編集できます。値は `~/.ollama-coordinator/agent-settings.json` に保存され、環境変数 (`COORDINATOR_URL` など) を指定しない限りこちらが優先されます。
-- **Dashboardを開く** は `COORDINATOR_URL/dashboard` を開き、**Agentを終了** で常駐プロセスを停止します。
-- Linux 版は従来通り CLI 常駐ですが、起動時にブラウザで開ける設定パネルURLを標準出力に表示します。
+- Windows 10 以降 / macOS 12 以降では、**エージェント** と **コーディネーター** の両方がトレイ（メニューバー）に常駐します。
+- エージェント側は従来どおり、ダブルクリックまたは **設定パネルを開く** からローカル設定画面を表示し、コーディネーターURL / Ollamaポート / ハートビート間隔を編集可能です。**Dashboardを開く** は `COORDINATOR_URL/dashboard` を開き、**Agentを終了** で常駐プロセスを停止します。Linux 版は CLI 常駐で、設定パネルURLを標準出力に表示します。
+- コーディネーター側はトレイアイコンからローカルダッシュボード（例: `http://127.0.0.1:8080/dashboard`）を開いたり、**Coordinatorを終了** を選んでサーバーを終了できます。ダブルクリックでもブラウザが起動します。
+- トレイアイコンは [Open Iconic](https://github.com/iconic/open-iconic)（MIT License）をベースにしており、`assets/icons/ICON-LICENSE.txt` にライセンスを同梱しています。
 
 ### リリースバイナリの作成と公開
 

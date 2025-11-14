@@ -3,10 +3,7 @@
 use std::process::Command;
 
 #[cfg(target_os = "macos")]
-use std::time::Duration;
-
-#[cfg(target_os = "macos")]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem},
@@ -28,21 +25,19 @@ const DOUBLE_CLICK_WINDOW: Duration = Duration::from_millis(450);
 
 use image;
 
-/// システムトレイ起動オプション。
+/// Options required to build the coordinator tray.
 #[derive(Debug, Clone)]
 pub struct TrayOptions {
     dashboard_url: String,
-    settings_url: String,
     tooltip: String,
 }
 
 impl TrayOptions {
-    /// トレイ表示に必要な情報をまとめる。
-    pub fn new(coordinator_url: &str, settings_url: &str) -> Self {
+    /// Construct options from the coordinator base URL.
+    pub fn new(base_url: &str, dashboard_url: &str) -> Self {
         Self {
-            dashboard_url: build_dashboard_url(coordinator_url),
-            settings_url: settings_url.to_string(),
-            tooltip: format!("Ollama Coordinator Agent\n{}", coordinator_url),
+            dashboard_url: dashboard_url.to_string(),
+            tooltip: format!("Ollama Coordinator\n{}", base_url),
         }
     }
 
@@ -50,25 +45,21 @@ impl TrayOptions {
         &self.dashboard_url
     }
 
-    fn settings_url(&self) -> &str {
-        &self.settings_url
-    }
-
     fn tooltip(&self) -> &str {
         &self.tooltip
     }
 }
 
-/// トレイイベントループへランタイム側から通知するためのプロキシ。
+/// Proxy used to signal between the runtime thread and tray loop.
 #[derive(Clone)]
 pub struct TrayEventProxy {
     proxy: EventLoopProxy<RuntimeEvent>,
 }
 
 impl TrayEventProxy {
-    /// エージェントランタイムが終了したことをトレイループへ通知する。
-    pub fn notify_agent_exit(&self) {
-        let _ = self.proxy.send_event(RuntimeEvent::AgentExited);
+    /// Notify the tray that the coordinator server stopped.
+    pub fn notify_server_exit(&self) {
+        let _ = self.proxy.send_event(RuntimeEvent::ServerExited);
     }
 }
 
@@ -76,10 +67,10 @@ impl TrayEventProxy {
 enum RuntimeEvent {
     Tray(TrayIconEvent),
     Menu(MenuEvent),
-    AgentExited,
+    ServerExited,
 }
 
-/// Windows / macOS でトレイアイコンを起動し、エージェントランタイムとの橋渡しを行う。
+/// Run the system tray loop and bootstrap the coordinator runtime.
 pub fn run_with_system_tray<F>(options: TrayOptions, bootstrap: F)
 where
     F: FnOnce(TrayEventProxy) + Send + 'static,
@@ -112,7 +103,7 @@ where
             Event::NewEvents(StartCause::Init) => controller.ensure_initialized(),
             Event::UserEvent(RuntimeEvent::Tray(event)) => controller.handle_tray_event(event),
             Event::UserEvent(RuntimeEvent::Menu(event)) => controller.handle_menu_event(event),
-            Event::UserEvent(RuntimeEvent::AgentExited) => {
+            Event::UserEvent(RuntimeEvent::ServerExited) => {
                 controller.teardown();
                 event_loop.exit();
             }
@@ -168,7 +159,7 @@ impl TrayController {
             #[cfg(target_os = "windows")]
             TrayIconEvent::DoubleClick { button, .. } => {
                 if matches!(button, MouseButton::Left) {
-                    self.open_settings();
+                    self.open_dashboard();
                 }
             }
             #[cfg(target_os = "macos")]
@@ -191,7 +182,7 @@ impl TrayController {
         if let Some(last) = self.last_click {
             if now.duration_since(last) <= DOUBLE_CLICK_WINDOW {
                 self.last_click = None;
-                self.open_settings();
+                self.open_dashboard();
                 return;
             }
         }
@@ -199,9 +190,7 @@ impl TrayController {
     }
 
     fn handle_menu_event(&mut self, event: MenuEvent) {
-        if event.id == *self.menu.open_settings.id() {
-            self.open_settings();
-        } else if event.id == *self.menu.open_dashboard.id() {
+        if event.id == *self.menu.open_dashboard.id() {
             self.open_dashboard();
         } else if event.id == *self.menu.quit.id() {
             self.teardown();
@@ -213,10 +202,6 @@ impl TrayController {
         open_url(self.options.dashboard_url(), "dashboard");
     }
 
-    fn open_settings(&self) {
-        open_url(self.options.settings_url(), "settings panel");
-    }
-
     fn teardown(&mut self) {
         self.tray_icon = None;
     }
@@ -224,7 +209,6 @@ impl TrayController {
 
 struct TrayMenu {
     menu: Menu,
-    open_settings: MenuItem,
     open_dashboard: MenuItem,
     quit: MenuItem,
 }
@@ -232,19 +216,15 @@ struct TrayMenu {
 impl TrayMenu {
     fn new() -> Self {
         let menu = Menu::new();
-        let open_settings = MenuItem::new("設定パネルを開く", true, None);
         let open_dashboard = MenuItem::new("Dashboardを開く", true, None);
-        let quit = MenuItem::new("エージェントを終了", true, None);
+        let quit = MenuItem::new("Coordinatorを終了", true, None);
 
-        menu.append(&open_settings)
-            .expect("failed to append settings menu");
         menu.append(&open_dashboard)
             .expect("failed to append dashboard menu");
         menu.append(&quit).expect("failed to append quit menu");
 
         Self {
             menu,
-            open_settings,
             open_dashboard,
             quit,
         }
@@ -271,18 +251,13 @@ fn launch_url(url: &str) -> std::io::Result<()> {
     }
 }
 
-fn build_dashboard_url(coordinator_url: &str) -> String {
-    let trimmed = coordinator_url.trim_end_matches('/');
-    format!("{}/dashboard", trimmed)
-}
-
 fn create_icon() -> Icon {
-    load_icon_from_png(include_bytes!("../../../assets/icons/agent.png"))
+    load_icon_from_png(include_bytes!("../../../assets/icons/coordinator.png"))
 }
 
 fn load_icon_from_png(bytes: &[u8]) -> Icon {
     let image = image::load_from_memory(bytes)
-        .expect("failed to decode agent tray icon")
+        .expect("failed to decode coordinator tray icon")
         .to_rgba8();
     let (width, height) = image.dimensions();
     Icon::from_rgba(image.into_raw(), width, height)
