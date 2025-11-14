@@ -37,7 +37,7 @@
 
   <Fragment>
     <ComponentGroup Id="RuntimeComponents">
-      <Component Id="CoordinatorBinary" Directory="INSTALLFOLDER" Guid="{0859444E-7EA4-45FC-8F0F-4B1E4C0C5B2C}">
+      <Component Id="CoordinatorBinary" Directory="INSTALLFOLDER" Guid="{0859444E-7EA4-45FC-8F0F-4B1E4C0C5B2C}" Win64="yes">
         <File
           Id="CoordinatorExe"
           KeyPath="yes"
@@ -45,7 +45,7 @@
         />
       </Component>
 
-      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="{A34E05F3-4200-4B88-B583-6D4509708D52}">
+      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="{A34E05F3-4200-4B88-B583-6D4509708D52}" Win64="yes">
         <File
           Id="AgentExe"
           KeyPath="yes"
