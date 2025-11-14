@@ -342,25 +342,47 @@ impl NvidiaGpuCollector {
 
     /// NVIDIA GPUの存在をデバイスファイルや/proc/driverで確認
     fn is_nvidia_gpu_present() -> bool {
-        // Method 1: /dev/nvidia0 デバイスファイル確認
-        let device_path = std::env::var("OLLAMA_TEST_NVIDIA_DEVICE_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("/dev/nvidia0"));
-        if device_path.exists() {
-            debug!("Found NVIDIA GPU via /dev/nvidia0");
-            return true;
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: nvml.dll の存在確認
+            let nvml_paths = vec![
+                PathBuf::from(r"C:\Windows\System32\nvml.dll"),
+                PathBuf::from(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvml.dll"),
+            ];
+
+            for path in nvml_paths {
+                if path.exists() {
+                    debug!("Found NVIDIA GPU via {}", path.display());
+                    return true;
+                }
+            }
+
+            false
         }
 
-        // Method 2: /proc/driver/nvidia/version 確認
-        let version_path = std::env::var("OLLAMA_TEST_NVIDIA_VERSION_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("/proc/driver/nvidia/version"));
-        if version_path.exists() {
-            debug!("Found NVIDIA GPU via /proc/driver/nvidia/version");
-            return true;
-        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            // Linux/macOS: デバイスファイル確認
+            // Method 1: /dev/nvidia0 デバイスファイル確認
+            let device_path = std::env::var("OLLAMA_TEST_NVIDIA_DEVICE_PATH")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/dev/nvidia0"));
+            if device_path.exists() {
+                debug!("Found NVIDIA GPU via /dev/nvidia0");
+                return true;
+            }
 
-        false
+            // Method 2: /proc/driver/nvidia/version 確認
+            let version_path = std::env::var("OLLAMA_TEST_NVIDIA_VERSION_PATH")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/proc/driver/nvidia/version"));
+            if version_path.exists() {
+                debug!("Found NVIDIA GPU via /proc/driver/nvidia/version");
+                return true;
+            }
+
+            false
+        }
     }
 
     fn device_count(&self) -> u32 {
@@ -1100,6 +1122,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn test_nvidia_gpu_detection_with_mocked_paths() {
         let _lock = ENV_TEST_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
