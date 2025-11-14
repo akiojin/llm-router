@@ -1,3 +1,11 @@
+## [1.2.3](https://github.com/akiojin/ollama-coordinator/compare/v1.2.2...v1.2.3) (2025-11-14)
+
+
+### Bug Fixes
+
+* **ci:** allow wix downgrade on windows ([698c7f6](https://github.com/akiojin/ollama-coordinator/commit/698c7f657517c21ba88fc8a0e145b93cbdd12aac))
+* **ci:** configure macos x86 linker ([fe3af80](https://github.com/akiojin/ollama-coordinator/commit/fe3af8042fd83a8a1ce2d19bc96928ec832a9ede))
+
 ## [1.2.2](https://github.com/akiojin/ollama-coordinator/compare/v1.2.1...v1.2.2) (2025-11-14)
 
 
