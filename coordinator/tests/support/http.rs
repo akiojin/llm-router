@@ -31,11 +31,14 @@ pub async fn spawn_router(router: Router) -> TestServer {
     let addr = listener.local_addr().unwrap();
     let (tx, rx) = oneshot::channel();
     let handle = tokio::spawn(async move {
-        axum::serve(listener, router.into_make_service())
-            .with_graceful_shutdown(async {
-                let _ = rx.await;
-            })
-            .await
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async {
+            let _ = rx.await;
+        })
+        .await
     });
 
     TestServer {

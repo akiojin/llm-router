@@ -6,6 +6,7 @@ use crate::registry::AgentRegistry;
 use chrono::Utc;
 use ollama_coordinator_common::types::AgentStatus;
 use tokio::time::{interval, Duration};
+use tracing::{error, info, warn};
 
 /// ヘルスモニター
 pub struct HealthMonitor {
@@ -35,7 +36,7 @@ impl HealthMonitor {
     async fn monitor_loop(&self) {
         let mut timer = interval(Duration::from_secs(self.check_interval_secs));
 
-        println!(
+        info!(
             "Health monitor started: check_interval={}s, timeout={}s",
             self.check_interval_secs, self.timeout_secs
         );
@@ -44,7 +45,7 @@ impl HealthMonitor {
             timer.tick().await;
 
             if let Err(e) = self.check_agent_health().await {
-                eprintln!("Health check error: {}", e);
+                error!("Health check error: {}", e);
             }
         }
     }
@@ -64,14 +65,14 @@ impl HealthMonitor {
             let elapsed_secs = elapsed.num_seconds() as u64;
 
             if elapsed_secs > self.timeout_secs {
-                println!(
+                warn!(
                     "Agent timeout detected: {} ({}) - last seen {} seconds ago",
                     agent.machine_name, agent.id, elapsed_secs
                 );
 
                 // オフライン判定
                 if let Err(e) = self.registry.mark_offline(agent.id).await {
-                    eprintln!("Failed to mark agent {} offline: {}", agent.id, e);
+                    error!("Failed to mark agent {} offline: {}", agent.id, e);
                 }
             }
         }

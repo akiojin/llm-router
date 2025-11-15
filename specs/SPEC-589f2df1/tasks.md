@@ -165,7 +165,8 @@
 | Phase 2.3: Core | 6 | 6 (100%) | 0 | 3時間（完了） |
 | Phase 2.4: Integration | 3 | 3 (100%) | 0 | 1時間（完了） |
 | Phase 2.5: Polish | 5 | 5 (100%) | 0 | 3.5時間（完了） |
-| **合計** | **24** | **24 (100%)** | **0** | **約11時間（完了）** |
+| **Phase 3: GPUスペック優先度** | 4 | 4 (100%) | 0 | 1.5時間（完了） |
+| **合計** | **28** | **28 (100%)** | **0** | **約12.5時間（完了）** |
 
 ---
 
@@ -176,6 +177,27 @@
 - [x] TDD遵守
 - [x] cargo clippy: エラー/警告ゼロ
 - [x] cargo fmt --check: フォーマット準拠
+
+**Phase 3（GPUスペック優先）**:
+- [x] TDDでRED→GREENを確認（スペック優先テスト→実装→GREEN）
+- [x] cargo clippy: エラー/警告ゼロ
+- [x] cargo fmt --check: フォーマット準拠
+
+---
+
+## Phase 3: GPUスペック優先度（新規）
+
+- [x] **T025** SPEC更新（FR-013追加）
+  - GPU能力スコア優先、ビジー時フォールバック、メトリクス欠如時の扱いを仕様に追記
+- [x] **T026** `coordinator/src/balancer/mod.rs` の優先度ロジック刷新
+  - `agent_spec_score`/`compare_spec_*` ヘルパー追加
+  - メトリクス有無に関わらず「スペック→ビジー判定→ラウンドロビン」の順序に統一
+- [x] **T027** 通常ロードバランサTDD（RED→GREEN）
+  - `select_agent_prefers_higher_spec_until_it_becomes_busy()` を追加し、高性能→次点フォールバックを検証
+  - RED確認後、実装でGREEN化
+- [x] **T028** メトリクスモードTDD（RED→GREEN）
+  - `select_agent_by_metrics_prefers_higher_spec_until_busy()` を追加し、`LOAD_BALANCER_MODE=metrics` 相当の挙動を固定
+  - RED確認後、実装でGREEN化
 
 **Phase 2（メトリクスベース）**:
 - [x] すべてのテストが合格

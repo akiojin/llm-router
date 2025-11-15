@@ -708,6 +708,191 @@ body {
   font-size: 0.8rem;
 }
 
+.logs-grid {
+  padding: 24px 3vw 40px;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+.log-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 320px;
+}
+
+.log-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.log-card__header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.log-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.log-card__path {
+  margin: 4px 0 0;
+  color: var(--text-subtle);
+  font-size: 0.8rem;
+}
+
+.log-card__status {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
+.log-agent-select {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  gap: 4px;
+}
+
+.log-agent-select select {
+  min-width: 220px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.9);
+  color: var(--text);
+}
+
+.log-viewer {
+  background: #020617;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Noto Sans JP", monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  min-height: 240px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.log-line {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.log-line:last-child {
+  border-bottom: none;
+}
+
+.log-line__time {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.log-line__level {
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.log-line--error .log-line__level {
+  color: var(--danger);
+}
+
+.log-line--warn .log-line__level {
+  color: var(--warning);
+}
+
+.log-line--info .log-line__level {
+  color: var(--accent);
+}
+
+.log-line__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-line__message {
+  word-break: break-word;
+}
+
+.log-line__meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.log-placeholder {
+  text-align: center;
+  padding: 24px 0;
+  color: var(--text-subtle);
+}
+
+.log-placeholder--error {
+  color: var(--danger);
+}
+
+.modal__logs {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal__logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal__logs-header h3 {
+  margin: 0;
+}
+
+.modal__logs-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.modal__logs-path {
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.modal__logs-status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-subtle);
+}
+
+.log-viewer--compact {
+  min-height: 160px;
+  max-height: 240px;
+}
+
 @media (max-width: 900px) {
   .page-header,
   .stats-grid,

@@ -367,6 +367,7 @@ pub async fn export_request_responses(State(state): State<AppState>) -> Result<R
         "agent_id",
         "agent_machine_name",
         "agent_ip",
+        "client_ip",
         "duration_ms",
         "status",
         "completed_at",
@@ -394,6 +395,10 @@ pub async fn export_request_responses(State(state): State<AppState>) -> Result<R
             record.agent_id.to_string(),
             record.agent_machine_name,
             record.agent_ip.to_string(),
+            record
+                .client_ip
+                .map(|ip| ip.to_string())
+                .unwrap_or_default(),
             record.duration_ms.to_string(),
             status_str,
             record.completed_at.to_rfc3339(),

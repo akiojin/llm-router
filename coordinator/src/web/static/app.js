@@ -5,6 +5,8 @@ const PERFORMANCE_THRESHOLDS = Object.freeze({
   backend: 100,
 });
 const AGENT_METRICS_LIMIT = 120;
+const LOG_ENTRY_LIMIT = 200;
+const MODAL_LOG_ENTRY_LIMIT = 100;
 
 const state = {
   agents: [],
@@ -40,10 +42,31 @@ const state = {
   agentMetricsAbortController: null,
   fallbackNotified: false,
   currentTab: "dashboard",
+  logs: {
+    coordinator: [],
+    coordinatorPath: null,
+    agent: [],
+    agentPath: null,
+    selectedAgentId: null,
+    coordinatorFetched: false,
+    agentFetched: false,
+    loadingCoordinator: false,
+    loadingAgent: false,
+    coordinatorError: null,
+    agentError: null,
+  },
+  modalLog: {
+    entries: [],
+    path: null,
+    loading: false,
+    error: null,
+    fetchedAgentId: null,
+  },
 };
 
 let requestsChart = null;
 let agentMetricsChart = null;
+let modelsInitPromise = null;
 const modalRefs = {
   modal: null,
   close: null,
@@ -69,8 +92,24 @@ const modalRefs = {
   gpuCompute: null,
   metricsStatus: null,
   metricsCanvas: null,
+  logSection: null,
+  logViewer: null,
+  logStatus: null,
+  logPath: null,
+  logRefresh: null,
 };
 const paginationRefs = { prev: null, next: null, info: null };
+const logRefs = {
+  coordinatorList: null,
+  coordinatorPath: null,
+  coordinatorStatus: null,
+  coordinatorRefresh: null,
+  agentList: null,
+  agentPath: null,
+  agentStatus: null,
+  agentSelect: null,
+  agentRefresh: null,
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   const refreshButton = document.getElementById("refresh-button");
@@ -88,12 +127,29 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalDisconnect = document.getElementById("agent-modal-disconnect");
   const tbody = document.getElementById("agents-body");
 
+  initTabs();
+
   paginationRefs.prev = document.getElementById("page-prev");
   paginationRefs.next = document.getElementById("page-next");
   paginationRefs.info = document.getElementById("page-info");
   state.selectAllCheckbox = selectAllCheckbox;
   state.performanceIndicator = document.getElementById("refresh-metrics");
   updatePerformanceIndicator();
+
+  logRefs.coordinatorList = document.getElementById("logs-coordinator-list");
+  logRefs.coordinatorPath = document.getElementById("logs-coordinator-path");
+  logRefs.coordinatorStatus = document.getElementById("logs-coordinator-status");
+  logRefs.coordinatorRefresh = document.getElementById("logs-coordinator-refresh");
+  logRefs.agentList = document.getElementById("logs-agent-list");
+  logRefs.agentPath = document.getElementById("logs-agent-path");
+  logRefs.agentStatus = document.getElementById("logs-agent-status");
+  logRefs.agentSelect = document.getElementById("logs-agent-select");
+  logRefs.agentRefresh = document.getElementById("logs-agent-refresh");
+  initLogControls();
+  renderCoordinatorLogs();
+  renderAgentLogs();
+  renderLogsAgentOptions();
+  initModalLogControls();
 
   Object.assign(modalRefs, {
     modal,
@@ -121,6 +177,11 @@ document.addEventListener("DOMContentLoaded", () => {
     disconnect: modalDisconnect,
     metricsStatus: document.getElementById("agent-metrics-status"),
     metricsCanvas: document.getElementById("agent-metrics-chart"),
+    logSection: document.getElementById("agent-log-section"),
+    logViewer: document.getElementById("agent-log-viewer"),
+    logStatus: document.getElementById("agent-log-status"),
+    logPath: document.getElementById("agent-log-path"),
+    logRefresh: document.getElementById("agent-log-refresh"),
   });
 
   refreshButton.addEventListener("click", () => refreshData({ manual: true }));
@@ -324,7 +385,7 @@ async function refreshData({ manual = false } = {}) {
     }
 
     const renderStart = performance.now();
-    applyOverviewData(overview);
+    await applyOverviewData(overview);
     const renderMs = performance.now() - renderStart;
     const serverMs =
       typeof overview?.generation_time_ms === "number"
@@ -337,7 +398,7 @@ async function refreshData({ manual = false } = {}) {
   }
 }
 
-function applyOverviewData(overview) {
+async function applyOverviewData(overview) {
   state.agents = Array.isArray(overview.agents) ? overview.agents : [];
   state.stats = overview.stats ?? null;
   state.history = Array.isArray(overview.history) ? overview.history : [];
@@ -348,9 +409,15 @@ function applyOverviewData(overview) {
   renderStats();
   renderAgents();
   renderHistory();
+  renderLogsAgentOptions();
+  if (state.currentTab === 'logs') {
+    maybeRefreshLogs();
+  }
   hideError();
   setConnectionStatus("online");
   updateLastRefreshed(new Date(), generatedAt);
+
+  await ensureModelsUiReady();
 }
 
 async function fetchLegacyOverview() {
@@ -999,6 +1066,7 @@ function openAgentModal(agent) {
   state.selection = new Set([agent.id]);
   state.currentAgentId = agent.id;
   prepareAgentMetrics(agent.id);
+  resetModalAgentLogs();
 
   modalRefs.machineName.textContent = agent.machine_name ?? "-";
   modalRefs.ipAddress.textContent = agent.ip_address ?? "-";
@@ -1055,6 +1123,7 @@ function openAgentModal(agent) {
 
   modalRefs.modal.classList.remove("hidden");
   modalRefs.modal.setAttribute("tabindex", "-1");
+  loadModalAgentLogs(agent.id, { force: true });
   window.requestAnimationFrame(() => modalRefs.close.focus());
 }
 
@@ -1070,6 +1139,7 @@ function closeAgentModal() {
   }
   state.currentAgentId = null;
   destroyAgentMetricsChart();
+  resetModalAgentLogs();
 }
 
 function prepareAgentMetrics(agentId) {
@@ -1620,7 +1690,7 @@ async function fetchRequestHistory() {
     console.error("Failed to fetch request history:", error);
     const tbody = document.getElementById("request-history-tbody");
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-message">履歴の読み込みに失敗しました</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-message">履歴の読み込みに失敗しました</td></tr>`;
     }
   }
 }
@@ -1642,7 +1712,7 @@ function renderRequestHistory() {
   filtered = filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-message">履歴がありません</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-message">履歴がありません</td></tr>`;
     updateHistoryPagination(0, 0);
     return;
   }
@@ -1660,6 +1730,7 @@ function renderRequestHistory() {
     const statusText = record.status.type === "success"
       ? "成功"
       : `エラー: ${escapeHtml(record.status.message || "不明")}`;
+    const clientIp = record.client_ip || "-";
 
     return `
       <tr data-record-id="${escapeHtml(record.id)}">
@@ -1667,6 +1738,7 @@ function renderRequestHistory() {
         <td>${escapeHtml(record.request_type)}</td>
         <td>${escapeHtml(record.model)}</td>
         <td title="${escapeHtml(record.agent_ip)}">${escapeHtml(record.agent_machine_name)}</td>
+        <td>${escapeHtml(clientIp)}</td>
         <td>${escapeHtml(record.duration_ms)}ms</td>
         <td><span class="${statusClass}">${statusText}</span></td>
         <td><button class="btn btn-sm view-request-detail" data-id="${escapeHtml(record.id)}">詳細</button></td>
@@ -1719,6 +1791,7 @@ async function showRequestDetail(id) {
     document.getElementById("request-detail-type").textContent = record.request_type;
     document.getElementById("request-detail-model").textContent = record.model;
     document.getElementById("request-detail-agent").textContent = `${record.agent_machine_name} (${record.agent_ip})`;
+    document.getElementById("request-detail-client-ip").textContent = record.client_ip || "未取得";
     document.getElementById("request-detail-duration").textContent = `${record.duration_ms}ms`;
 
     const statusText = record.status.type === "success"
@@ -1818,6 +1891,386 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(fetchRequestHistory, 30000);
 });
 
+// ========== ログビューア ==========
+
+function initLogControls() {
+  if (logRefs.coordinatorRefresh) {
+    logRefs.coordinatorRefresh.addEventListener("click", () => {
+      fetchCoordinatorLogs({ skipIfFetched: false });
+    });
+  }
+
+  if (logRefs.agentRefresh) {
+    logRefs.agentRefresh.addEventListener("click", () => {
+      state.logs.agentFetched = false;
+      fetchAgentLogs({ skipIfFetched: false });
+    });
+  }
+
+  if (logRefs.agentSelect) {
+    logRefs.agentSelect.addEventListener("change", (event) => {
+      const nextId = event.target.value || null;
+      state.logs.selectedAgentId = nextId;
+      state.logs.agentFetched = false;
+      if (nextId) {
+        fetchAgentLogs({ skipIfFetched: false });
+      } else {
+        state.logs.agent = [];
+        state.logs.agentPath = null;
+        state.logs.agentError = null;
+        renderAgentLogs();
+      }
+    });
+  }
+}
+
+function initModalLogControls() {
+  if (modalRefs.logRefresh) {
+    modalRefs.logRefresh.addEventListener("click", () => {
+      if (state.currentAgentId) {
+        loadModalAgentLogs(state.currentAgentId, { force: true });
+      }
+    });
+  }
+}
+
+function maybeRefreshLogs(force = false) {
+  fetchCoordinatorLogs({ skipIfFetched: !force });
+  if (state.logs.selectedAgentId) {
+    fetchAgentLogs({ skipIfFetched: !force });
+  } else {
+    renderAgentLogs();
+  }
+}
+
+async function fetchCoordinatorLogs({ skipIfFetched = false } = {}) {
+  if (skipIfFetched && state.logs.coordinatorFetched) {
+    return;
+  }
+
+  state.logs.loadingCoordinator = true;
+  state.logs.coordinatorError = null;
+  renderCoordinatorLogs();
+
+  try {
+    const data = await fetchJson(`/api/dashboard/logs/coordinator?limit=${LOG_ENTRY_LIMIT}`);
+    state.logs.coordinator = Array.isArray(data.entries) ? data.entries : [];
+    state.logs.coordinatorPath = typeof data.path === "string" ? data.path : null;
+    state.logs.coordinatorFetched = true;
+  } catch (error) {
+    state.logs.coordinatorError = `ログを取得できませんでした: ${error?.message ?? error}`;
+  } finally {
+    state.logs.loadingCoordinator = false;
+    renderCoordinatorLogs();
+  }
+}
+
+async function fetchAgentLogs({ skipIfFetched = false } = {}) {
+  if (!state.logs.selectedAgentId) {
+    state.logs.agent = [];
+    state.logs.agentFetched = false;
+    state.logs.agentError = null;
+    state.logs.agentPath = null;
+    renderAgentLogs();
+    return;
+  }
+
+  if (skipIfFetched && state.logs.agentFetched) {
+    return;
+  }
+
+  state.logs.loadingAgent = true;
+  state.logs.agentError = null;
+  renderAgentLogs();
+
+  try {
+    const agentId = encodeURIComponent(state.logs.selectedAgentId);
+    const data = await fetchJson(`/api/dashboard/logs/agents/${agentId}?limit=${LOG_ENTRY_LIMIT}`);
+    state.logs.agent = Array.isArray(data.entries) ? data.entries : [];
+    state.logs.agentPath = typeof data.path === "string" ? data.path : null;
+    state.logs.agentFetched = true;
+  } catch (error) {
+    state.logs.agentError = `ログを取得できませんでした: ${error?.message ?? error}`;
+    state.logs.agentFetched = false;
+  } finally {
+    state.logs.loadingAgent = false;
+    renderAgentLogs();
+  }
+}
+
+function renderCoordinatorLogs() {
+  renderLogViewer(logRefs.coordinatorList, {
+    entries: state.logs.coordinator,
+    loading: state.logs.loadingCoordinator,
+    error: state.logs.coordinatorError,
+    emptyMessage: "まだログがありません",
+  });
+
+  if (logRefs.coordinatorPath) {
+    logRefs.coordinatorPath.textContent = state.logs.coordinatorPath
+      ? `保存先: ${state.logs.coordinatorPath}`
+      : "";
+  }
+
+  if (logRefs.coordinatorStatus) {
+    if (state.logs.loadingCoordinator) {
+      logRefs.coordinatorStatus.textContent = "読み込み中…";
+    } else if (state.logs.coordinatorError) {
+      logRefs.coordinatorStatus.textContent = "エラーが発生しました";
+    } else {
+      logRefs.coordinatorStatus.textContent = `最新 ${state.logs.coordinator.length} 件を表示`;
+    }
+  }
+}
+
+function renderAgentLogs() {
+  const hasAgents = state.agents.length > 0;
+  const emptyMessage = state.logs.selectedAgentId
+    ? "まだログがありません"
+    : hasAgents
+      ? "エージェントを選択してください"
+      : "エージェントが登録されていません";
+  const errorMessage = state.logs.selectedAgentId ? state.logs.agentError : null;
+
+  renderLogViewer(logRefs.agentList, {
+    entries: state.logs.agent,
+    loading: state.logs.loadingAgent,
+    error: errorMessage,
+    emptyMessage,
+  });
+
+  if (logRefs.agentPath) {
+    logRefs.agentPath.textContent = state.logs.agentPath
+      ? `保存先: ${state.logs.agentPath}`
+      : "";
+  }
+
+  if (logRefs.agentStatus) {
+    if (state.logs.loadingAgent) {
+      logRefs.agentStatus.textContent = "読み込み中…";
+    } else if (errorMessage) {
+      logRefs.agentStatus.textContent = errorMessage;
+    } else if (state.logs.selectedAgentId) {
+      logRefs.agentStatus.textContent = `最新 ${state.logs.agent.length} 件を表示`;
+    } else {
+      logRefs.agentStatus.textContent = emptyMessage;
+    }
+  }
+}
+
+function renderLogViewer(target, { entries, loading, error, emptyMessage }) {
+  if (!target) return;
+
+  if (loading) {
+    target.innerHTML = '<div class="log-placeholder">読み込み中…</div>';
+    return;
+  }
+
+  if (error) {
+    target.innerHTML = `<div class="log-placeholder log-placeholder--error">${escapeHtml(
+      error,
+    )}</div>`;
+    return;
+  }
+
+  if (!entries || !entries.length) {
+    target.innerHTML = `<div class="log-placeholder">${escapeHtml(emptyMessage)}</div>`;
+    return;
+  }
+
+  const lines = entries
+    .slice()
+    .reverse()
+    .map(renderLogLine)
+    .join("");
+  target.innerHTML = lines;
+}
+
+function renderLogLine(entry) {
+  const rawLevel = typeof entry?.level === "string" ? entry.level : "info";
+  const level = rawLevel.toLowerCase();
+  const levelClass = level.replace(/[^a-z]/g, "") || "info";
+  const timestamp = formatLogTimestamp(entry?.timestamp);
+  const targetLabel = entry?.target ? String(entry.target) : "-";
+  const context = formatLogFields(entry?.fields);
+  const hasMessage = typeof entry?.message === "string" && entry.message.length > 0;
+  const message = hasMessage ? entry.message : context || "-";
+  const fileInfo = entry?.file
+    ? `${entry.file}${entry.line != null ? `:${entry.line}` : ""}`
+    : "";
+
+  return `
+    <div class="log-line log-line--${levelClass}">
+      <span class="log-line__time">${escapeHtml(timestamp)}</span>
+      <span class="log-line__level">${escapeHtml(level.toUpperCase())}</span>
+      <div class="log-line__body">
+        <div class="log-line__message">${escapeHtml(message)}</div>
+        <div class="log-line__meta">
+          <span>${escapeHtml(targetLabel)}</span>
+          ${fileInfo ? `<span>${escapeHtml(fileInfo)}</span>` : ""}
+          ${context && hasMessage ? `<span>${escapeHtml(context)}</span>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function formatLogTimestamp(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const time = date.toLocaleTimeString("ja-JP", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const millis = String(date.getMilliseconds()).padStart(3, "0");
+  return `${time}.${millis}`;
+}
+
+function formatLogFields(fields) {
+  if (!fields || typeof fields !== "object") return "";
+  const entries = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${summarizeFieldValue(value)}`);
+  return entries.length ? entries.join(" · ") : "";
+}
+
+function summarizeFieldValue(value) {
+  if (value == null) return "null";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderLogsAgentOptions() {
+  if (!logRefs.agentSelect) return;
+
+  const select = logRefs.agentSelect;
+  const agents = Array.isArray(state.agents) ? state.agents : [];
+  const previousSelection = state.logs.selectedAgentId;
+  const hasAgents = agents.length > 0;
+
+  const options = agents
+    .map((agent) => {
+      const label =
+        agent.machine_name && agent.machine_name.trim().length
+          ? agent.machine_name
+          : agent.id.slice(0, 8);
+      const statusLabel = agent.status === "online" ? "オンライン" : "オフライン";
+      return `<option value="${escapeHtml(agent.id)}">${escapeHtml(label)} (${statusLabel})</option>`;
+    })
+    .join("");
+
+  select.innerHTML = `<option value="">エージェントを選択</option>${options}`;
+
+  if (previousSelection && agents.some((agent) => agent.id === previousSelection)) {
+    select.value = previousSelection;
+  } else if (hasAgents) {
+    const fallback =
+      agents.find((agent) => agent.status === "online") ?? agents[0];
+    state.logs.selectedAgentId = fallback.id;
+    state.logs.agentFetched = false;
+    select.value = fallback.id;
+  } else {
+    state.logs.selectedAgentId = null;
+    state.logs.agentFetched = false;
+    select.value = "";
+  }
+
+  const disabled = !hasAgents;
+  select.disabled = disabled;
+  if (logRefs.agentRefresh) {
+    logRefs.agentRefresh.disabled = disabled;
+  }
+
+  if (!state.logs.selectedAgentId) {
+    state.logs.agent = [];
+    state.logs.agentPath = null;
+    state.logs.agentError = null;
+    renderAgentLogs();
+  }
+}
+
+function resetModalAgentLogs() {
+  state.modalLog.entries = [];
+  state.modalLog.path = null;
+  state.modalLog.error = null;
+  state.modalLog.loading = false;
+  state.modalLog.fetchedAgentId = null;
+  renderModalAgentLogs();
+}
+
+async function loadModalAgentLogs(agentId, { force = false } = {}) {
+  if (!agentId || !modalRefs.logViewer) return;
+  if (!force && state.modalLog.fetchedAgentId === agentId && !state.modalLog.error) {
+    return;
+  }
+
+  state.modalLog.loading = true;
+  state.modalLog.error = null;
+  state.modalLog.fetchedAgentId = agentId;
+  renderModalAgentLogs();
+
+  try {
+    const payload = await fetchJson(
+      `/api/dashboard/logs/agents/${agentId}?limit=${MODAL_LOG_ENTRY_LIMIT}`,
+    );
+    state.modalLog.entries = Array.isArray(payload.entries) ? payload.entries : [];
+    state.modalLog.path = typeof payload.path === "string" ? payload.path : null;
+    state.modalLog.error = null;
+  } catch (error) {
+    state.modalLog.entries = [];
+    state.modalLog.error = `ログを取得できませんでした: ${error?.message ?? error}`;
+  } finally {
+    state.modalLog.loading = false;
+    renderModalAgentLogs();
+  }
+}
+
+function renderModalAgentLogs() {
+  if (!modalRefs.logViewer) return;
+  const emptyMessage = state.currentAgentId
+    ? "まだログがありません"
+    : "エージェントが選択されていません";
+
+  renderLogViewer(modalRefs.logViewer, {
+    entries: state.modalLog.entries,
+    loading: state.modalLog.loading,
+    error: state.modalLog.error,
+    emptyMessage,
+  });
+
+  if (modalRefs.logStatus) {
+    if (state.modalLog.loading) {
+      modalRefs.logStatus.textContent = "ログを読み込み中…";
+    } else if (state.modalLog.error) {
+      modalRefs.logStatus.textContent = state.modalLog.error;
+    } else if (state.modalLog.entries.length) {
+      modalRefs.logStatus.textContent = `最新 ${state.modalLog.entries.length} 件を表示`;
+    } else {
+      modalRefs.logStatus.textContent = emptyMessage;
+    }
+  }
+
+  if (modalRefs.logPath) {
+    modalRefs.logPath.textContent = state.modalLog.path ? `保存先: ${state.modalLog.path}` : "";
+  }
+
+  if (modalRefs.logRefresh) {
+    modalRefs.logRefresh.disabled = !state.currentAgentId || state.modalLog.loading;
+  }
+}
+
 // ========== タブ管理 ==========
 
 /**
@@ -1851,6 +2304,10 @@ function switchTab(tabName) {
   // モデル管理タブがアクティブになった時の処理
   if (tabName === 'models' && typeof window.updateModelsUI === 'function') {
     window.updateModelsUI(state.agents);
+  }
+
+  if (tabName === 'logs') {
+    maybeRefreshLogs();
   }
 }
 
@@ -1887,34 +2344,38 @@ function initTabs() {
  * models.jsを動的にインポートしてモデル管理UIを初期化
  */
 async function initModels() {
+  const modelsModule = await import('/dashboard/models.js');
+
+  if (typeof modelsModule.initModelsUI !== 'function') {
+    throw new Error('models.js is missing initModelsUI export');
+  }
+
+  await modelsModule.initModelsUI(state.agents);
+
+  if (typeof modelsModule.updateModelsUI === 'function') {
+    window.updateModelsUI = modelsModule.updateModelsUI;
+  }
+}
+
+async function ensureModelsUiReady() {
+  if (typeof window.updateModelsUI === 'function') {
+    window.updateModelsUI(state.agents);
+    return;
+  }
+
+  if (!modelsInitPromise) {
+    modelsInitPromise = initModels().catch((error) => {
+      modelsInitPromise = null;
+      throw error;
+    });
+  }
+
   try {
-    const modelsModule = await import('/dashboard/models.js');
-
-    if (modelsModule && modelsModule.initModelsUI) {
-      await modelsModule.initModelsUI(state.agents);
-
-      // グローバルにエクスポートして他の場所から呼び出せるようにする
-      window.updateModelsUI = modelsModule.updateModelsUI;
+    await modelsInitPromise;
+    if (typeof window.updateModelsUI === 'function') {
+      window.updateModelsUI(state.agents);
     }
   } catch (error) {
     console.error('Failed to initialize models UI:', error);
   }
 }
-
-// ========== 拡張された初期化 ==========
-
-// タブ機能を初期化
-document.addEventListener('DOMContentLoaded', () => {
-  initTabs();
-
-  // エージェント情報取得後にモデルUIを初期化
-  const originalFetch = fetchAll;
-  window.fetchAll = async function() {
-    await originalFetch();
-
-    // 初回のみモデルUIを初期化
-    if (!window.updateModelsUI) {
-      await initModels();
-    }
-  };
-});

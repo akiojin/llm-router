@@ -5,8 +5,10 @@
 pub mod agent;
 pub mod dashboard;
 pub mod health;
+pub mod logs;
 pub mod metrics;
 pub mod models;
+pub mod openai;
 pub mod proxy;
 
 use crate::AppState;
@@ -69,9 +71,22 @@ pub fn create_router(state: AppState) -> Router {
             "/api/dashboard/request-responses/export",
             get(dashboard::export_request_responses),
         )
+        .route(
+            "/api/dashboard/logs/coordinator",
+            get(logs::get_coordinator_logs),
+        )
+        .route(
+            "/api/dashboard/logs/agents/:agent_id",
+            get(logs::get_agent_logs),
+        )
         .route("/api/health", post(health::health_check))
         .route("/api/chat", post(proxy::proxy_chat))
         .route("/api/generate", post(proxy::proxy_generate))
+        .route("/v1/chat/completions", post(openai::chat_completions))
+        .route("/v1/completions", post(openai::completions))
+        .route("/v1/embeddings", post(openai::embeddings))
+        .route("/v1/models", get(openai::list_models))
+        .route("/v1/models/:model_id", get(openai::get_model))
         // モデル管理API (SPEC-8ae67d67)
         .route("/api/models/available", get(models::get_available_models))
         .route("/api/models/distribute", post(models::distribute_models))

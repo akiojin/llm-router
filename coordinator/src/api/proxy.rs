@@ -4,7 +4,7 @@
 use crate::{api::agent::AppError, balancer::RequestOutcome, AppState};
 use axum::{
     body::Body,
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -18,26 +18,67 @@ use ollama_coordinator_common::{
         RequestType,
     },
 };
-use std::{io, sync::Arc, time::Instant};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Instant,
+};
 use uuid::Uuid;
 
 /// POST /api/chat - Ollama Chat APIプロキシ
 pub async fn proxy_chat(
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     Json(req): Json<ChatRequest>,
 ) -> Result<Response, AppError> {
-    // リクエスト履歴用の情報を記録
+    proxy_chat_with_handlers(
+        &state,
+        req,
+        client_addr.ip(),
+        |response, _| forward_streaming_response(response).map_err(AppError::from),
+        |payload, _| Ok((StatusCode::OK, Json(payload)).into_response()),
+    )
+    .await
+}
+
+/// POST /api/generate - Ollama Generate APIプロキシ
+pub async fn proxy_generate(
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    State(state): State<AppState>,
+    Json(req): Json<GenerateRequest>,
+) -> Result<Response, AppError> {
+    proxy_generate_with_handlers(
+        &state,
+        req,
+        client_addr.ip(),
+        |response, _| forward_streaming_response(response).map_err(AppError::from),
+        |payload, _| Ok((StatusCode::OK, Json(payload)).into_response()),
+    )
+    .await
+}
+
+/// 汎用チャットプロキシ（成功時のレスポンス生成をカスタム可能）
+pub(crate) async fn proxy_chat_with_handlers<S, C>(
+    state: &AppState,
+    req: ChatRequest,
+    client_ip: IpAddr,
+    stream_handler: S,
+    completion_handler: C,
+) -> Result<Response, AppError>
+where
+    S: FnOnce(reqwest::Response, &ChatRequest) -> Result<Response, AppError>,
+    C: FnOnce(ChatResponse, &ChatRequest) -> Result<Response, AppError>,
+{
     let record_id = Uuid::new_v4();
     let timestamp = Utc::now();
     let request_body = serde_json::to_value(&req).unwrap_or_default();
 
-    // 利用可能なエージェントを選択
-    let agent = select_available_agent(&state).await?;
+    let agent = select_available_agent(state).await?;
     let agent_id = agent.id;
     let agent_machine_name = agent.machine_name.clone();
     let agent_ip = agent.ip_address;
 
-    // リクエスト開始を記録
     state
         .load_manager
         .begin_request(agent_id)
@@ -58,7 +99,6 @@ pub async fn proxy_chat(
                 .await
                 .map_err(AppError::from)?;
 
-            // エラーを記録
             save_request_record(
                 state.request_history.clone(),
                 RequestResponseRecord {
@@ -69,6 +109,7 @@ pub async fn proxy_chat(
                     agent_id,
                     agent_machine_name: agent_machine_name.clone(),
                     agent_ip,
+                    client_ip: Some(client_ip),
                     request_body: request_body.clone(),
                     response_body: None,
                     duration_ms: duration.as_millis() as u64,
@@ -102,7 +143,6 @@ pub async fn proxy_chat(
             String::from_utf8_lossy(&body_bytes).trim().to_string()
         };
 
-        // エラーレスポンスを記録
         save_request_record(
             state.request_history.clone(),
             RequestResponseRecord {
@@ -113,6 +153,7 @@ pub async fn proxy_chat(
                 agent_id,
                 agent_machine_name: agent_machine_name.clone(),
                 agent_ip,
+                client_ip: Some(client_ip),
                 request_body: request_body.clone(),
                 response_body: None,
                 duration_ms: duration.as_millis() as u64,
@@ -134,9 +175,7 @@ pub async fn proxy_chat(
         return Ok((status_code, Json(payload)).into_response());
     }
 
-    let stream_enabled = req.stream;
-
-    if stream_enabled {
+    if req.stream {
         let duration = start.elapsed();
         state
             .load_manager
@@ -144,8 +183,6 @@ pub async fn proxy_chat(
             .await
             .map_err(AppError::from)?;
 
-        // ストリーミングレスポンスを記録（レスポンスボディはNone）
-        // TODO: T021 - 将来的にバッファリングして完全なレスポンスを保存
         save_request_record(
             state.request_history.clone(),
             RequestResponseRecord {
@@ -156,6 +193,7 @@ pub async fn proxy_chat(
                 agent_id,
                 agent_machine_name,
                 agent_ip,
+                client_ip: Some(client_ip),
                 request_body,
                 response_body: None,
                 duration_ms: duration.as_millis() as u64,
@@ -164,7 +202,7 @@ pub async fn proxy_chat(
             },
         );
 
-        return forward_streaming_response(response).map_err(AppError::from);
+        return stream_handler(response, &req);
     }
 
     let parsed = response.json::<ChatResponse>().await;
@@ -178,7 +216,6 @@ pub async fn proxy_chat(
                 .await
                 .map_err(AppError::from)?;
 
-            // 成功レスポンスを記録
             let response_body = serde_json::to_value(&payload).ok();
             save_request_record(
                 state.request_history.clone(),
@@ -190,6 +227,7 @@ pub async fn proxy_chat(
                     agent_id,
                     agent_machine_name,
                     agent_ip,
+                    client_ip: Some(client_ip),
                     request_body,
                     response_body,
                     duration_ms: duration.as_millis() as u64,
@@ -198,7 +236,7 @@ pub async fn proxy_chat(
                 },
             );
 
-            Ok((StatusCode::OK, Json(payload)).into_response())
+            completion_handler(payload, &req)
         }
         Err(e) => {
             state
@@ -207,17 +245,17 @@ pub async fn proxy_chat(
                 .await
                 .map_err(AppError::from)?;
 
-            // パースエラーを記録
             save_request_record(
                 state.request_history.clone(),
                 RequestResponseRecord {
                     id: record_id,
                     timestamp,
                     request_type: RequestType::Chat,
-                    model: req.model,
+                    model: req.model.clone(),
                     agent_id,
                     agent_machine_name,
                     agent_ip,
+                    client_ip: Some(client_ip),
                     request_body,
                     response_body: None,
                     duration_ms: duration.as_millis() as u64,
@@ -233,23 +271,27 @@ pub async fn proxy_chat(
     }
 }
 
-/// POST /api/generate - Ollama Generate APIプロキシ
-pub async fn proxy_generate(
-    State(state): State<AppState>,
-    Json(req): Json<GenerateRequest>,
-) -> Result<Response, AppError> {
-    // リクエスト履歴用の情報を記録
+/// 汎用Generateプロキシ（成功レスポンスをカスタム可能）
+pub(crate) async fn proxy_generate_with_handlers<S, C>(
+    state: &AppState,
+    req: GenerateRequest,
+    client_ip: IpAddr,
+    stream_handler: S,
+    completion_handler: C,
+) -> Result<Response, AppError>
+where
+    S: FnOnce(reqwest::Response, &GenerateRequest) -> Result<Response, AppError>,
+    C: FnOnce(serde_json::Value, &GenerateRequest) -> Result<Response, AppError>,
+{
     let record_id = Uuid::new_v4();
     let timestamp = Utc::now();
     let request_body = serde_json::to_value(&req).unwrap_or_default();
 
-    // 利用可能なエージェントを選択
-    let agent = select_available_agent(&state).await?;
+    let agent = select_available_agent(state).await?;
     let agent_id = agent.id;
     let agent_machine_name = agent.machine_name.clone();
     let agent_ip = agent.ip_address;
 
-    // リクエスト開始を記録
     state
         .load_manager
         .begin_request(agent_id)
@@ -273,7 +315,6 @@ pub async fn proxy_generate(
                 .await
                 .map_err(AppError::from)?;
 
-            // エラーを記録
             save_request_record(
                 state.request_history.clone(),
                 RequestResponseRecord {
@@ -284,6 +325,7 @@ pub async fn proxy_generate(
                     agent_id,
                     agent_machine_name: agent_machine_name.clone(),
                     agent_ip,
+                    client_ip: Some(client_ip),
                     request_body: request_body.clone(),
                     response_body: None,
                     duration_ms: duration.as_millis() as u64,
@@ -317,7 +359,6 @@ pub async fn proxy_generate(
             String::from_utf8_lossy(&body_bytes).trim().to_string()
         };
 
-        // エラーレスポンスを記録
         save_request_record(
             state.request_history.clone(),
             RequestResponseRecord {
@@ -328,6 +369,7 @@ pub async fn proxy_generate(
                 agent_id,
                 agent_machine_name: agent_machine_name.clone(),
                 agent_ip,
+                client_ip: Some(client_ip),
                 request_body: request_body.clone(),
                 response_body: None,
                 duration_ms: duration.as_millis() as u64,
@@ -349,9 +391,7 @@ pub async fn proxy_generate(
         return Ok((status_code, Json(payload)).into_response());
     }
 
-    let stream_enabled = req.stream;
-
-    if stream_enabled {
+    if req.stream {
         let duration = start.elapsed();
         state
             .load_manager
@@ -359,8 +399,6 @@ pub async fn proxy_generate(
             .await
             .map_err(AppError::from)?;
 
-        // ストリーミングレスポンスを記録（レスポンスボディはNone）
-        // TODO: T021 - 将来的にバッファリングして完全なレスポンスを保存
         save_request_record(
             state.request_history.clone(),
             RequestResponseRecord {
@@ -371,6 +409,7 @@ pub async fn proxy_generate(
                 agent_id,
                 agent_machine_name,
                 agent_ip,
+                client_ip: Some(client_ip),
                 request_body,
                 response_body: None,
                 duration_ms: duration.as_millis() as u64,
@@ -379,7 +418,7 @@ pub async fn proxy_generate(
             },
         );
 
-        return forward_streaming_response(response).map_err(AppError::from);
+        return stream_handler(response, &req);
     }
 
     let parsed = response.json::<serde_json::Value>().await;
@@ -393,7 +432,6 @@ pub async fn proxy_generate(
                 .await
                 .map_err(AppError::from)?;
 
-            // 成功レスポンスを記録
             let response_body = Some(payload.clone());
             save_request_record(
                 state.request_history.clone(),
@@ -405,6 +443,7 @@ pub async fn proxy_generate(
                     agent_id,
                     agent_machine_name,
                     agent_ip,
+                    client_ip: Some(client_ip),
                     request_body,
                     response_body,
                     duration_ms: duration.as_millis() as u64,
@@ -413,7 +452,7 @@ pub async fn proxy_generate(
                 },
             );
 
-            Ok((StatusCode::OK, Json(payload)).into_response())
+            completion_handler(payload, &req)
         }
         Err(e) => {
             state
@@ -422,17 +461,17 @@ pub async fn proxy_generate(
                 .await
                 .map_err(AppError::from)?;
 
-            // パースエラーを記録
             save_request_record(
                 state.request_history.clone(),
                 RequestResponseRecord {
                     id: record_id,
                     timestamp,
                     request_type: RequestType::Generate,
-                    model: req.model,
+                    model: req.model.clone(),
                     agent_id,
                     agent_machine_name,
                     agent_ip,
+                    client_ip: Some(client_ip),
                     request_body,
                     response_body: None,
                     duration_ms: duration.as_millis() as u64,
@@ -453,7 +492,7 @@ pub async fn proxy_generate(
 /// 環境変数LOAD_BALANCER_MODEで動作モードを切り替え:
 /// - "metrics": メトリクスベース選択（T014-T015）
 /// - その他（デフォルト）: 既存の高度なロードバランシング
-async fn select_available_agent(
+pub(crate) async fn select_available_agent(
     state: &AppState,
 ) -> Result<ollama_coordinator_common::types::Agent, CoordinatorError> {
     let mode = std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
@@ -470,7 +509,9 @@ async fn select_available_agent(
     }
 }
 
-fn forward_streaming_response(response: reqwest::Response) -> Result<Response, CoordinatorError> {
+pub(crate) fn forward_streaming_response(
+    response: reqwest::Response,
+) -> Result<Response, CoordinatorError> {
     let status = response.status();
     let headers = response.headers().clone();
     let stream = response.bytes_stream().map_err(io::Error::other);
@@ -492,7 +533,7 @@ fn forward_streaming_response(response: reqwest::Response) -> Result<Response, C
 }
 
 /// リクエスト/レスポンスレコードを保存（Fire-and-forget）
-fn save_request_record(
+pub(crate) fn save_request_record(
     storage: Arc<crate::db::request_history::RequestHistoryStorage>,
     record: RequestResponseRecord,
 ) {

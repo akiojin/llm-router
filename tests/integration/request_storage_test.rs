@@ -135,6 +135,7 @@ fn create_test_record(
         agent_id,
         agent_machine_name: "test-agent".to_string(),
         agent_ip: "192.168.1.100".parse::<IpAddr>().unwrap(),
+        client_ip: Some("10.0.0.10".parse::<IpAddr>().unwrap()),
         request_body: serde_json::json!({
             "model": model,
             "messages": [{"role": "user", "content": "test"}]

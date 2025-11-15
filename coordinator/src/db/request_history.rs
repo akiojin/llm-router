@@ -280,6 +280,7 @@ mod tests {
             agent_id: Uuid::new_v4(),
             agent_machine_name: "test-agent".to_string(),
             agent_ip: "192.168.1.100".parse::<IpAddr>().unwrap(),
+            client_ip: Some("10.0.0.10".parse::<IpAddr>().unwrap()),
             request_body: serde_json::json!({"test": "request"}),
             response_body: Some(serde_json::json!({"test": "response"})),
             duration_ms: 1000,

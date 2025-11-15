@@ -160,6 +160,9 @@ pub struct RequestResponseRecord {
     pub agent_machine_name: String,
     /// エージェントのIPアドレス
     pub agent_ip: IpAddr,
+    /// リクエスト元クライアントのIPアドレス
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_ip: Option<IpAddr>,
     /// リクエスト本文（JSON形式）
     pub request_body: serde_json::Value,
     /// レスポンス本文（JSON形式、エラー時はNone）
@@ -180,6 +183,8 @@ pub enum RequestType {
     Chat,
     /// /api/generate エンドポイント
     Generate,
+    /// /v1/embeddings エンドポイント
+    Embeddings,
 }
 
 /// レコードステータス

@@ -1,3 +1,21 @@
+# [1.5.0](https://github.com/akiojin/ollama-coordinator/compare/v1.4.1...v1.5.0) (2025-11-15)
+
+
+### Bug Fixes
+
+* **agent:** 設定フォームで空の数値入力を無視 ([c16a7fb](https://github.com/akiojin/ollama-coordinator/commit/c16a7fb7e61e528c13fd9ff3278409ccb50207d7))
+* **ui:** モデル管理タブの初期化を修正 ([3cac7b6](https://github.com/akiojin/ollama-coordinator/commit/3cac7b69edc1002375e61f63d326f155d6a0e229))
+
+
+### Features
+
+* **agent:** enforce gpu usage ([49fe342](https://github.com/akiojin/ollama-coordinator/commit/49fe342ae4a06330384b34099bd5c4ec24979b61))
+* **api:** add openai compatibility endpoints ([705cbe9](https://github.com/akiojin/ollama-coordinator/commit/705cbe9dd27d2dbfe79e24b7d59936c62faa6ca8))
+* **balancer:** prioritize gpu-capable agents ([0163d79](https://github.com/akiojin/ollama-coordinator/commit/0163d7999369bf254086ed9005cd1fa7ddd2066d))
+* **coordinator:** log client ip in request history ([d00e56b](https://github.com/akiojin/ollama-coordinator/commit/d00e56b1ac237b2c4967d891870e707285e8debc))
+* **installer:** windowsアイコンを統一しメニュー登録 ([aa828bd](https://github.com/akiojin/ollama-coordinator/commit/aa828bdf48fb200b46fe50dd6c4c3a570af82f0f))
+* **logging:** ダッシュボードでエージェントログを確認できるようにする ([09cad04](https://github.com/akiojin/ollama-coordinator/commit/09cad047b286286d402214439cfddf58f425074a))
+
 ## [1.4.1](https://github.com/akiojin/ollama-coordinator/compare/v1.4.0...v1.4.1) (2025-11-14)
 
 
