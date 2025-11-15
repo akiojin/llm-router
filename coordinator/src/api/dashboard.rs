@@ -201,7 +201,16 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
     agents
         .into_iter()
         .map(|agent| {
-            let uptime_seconds = (now - agent.registered_at).num_seconds().max(0);
+            let uptime_seconds = if let Some(online_since) = agent.online_since {
+                let end = if agent.status == AgentStatus::Online {
+                    now
+                } else {
+                    agent.last_seen
+                };
+                (end - online_since).num_seconds().max(0)
+            } else {
+                0
+            };
 
             let snapshot = snapshot_map.get(&agent.id);
             let (

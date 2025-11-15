@@ -218,7 +218,7 @@ components:
         uptime_seconds:
           type: integer
           format: int64
-          description: 稼働時間（秒）
+          description: 直近でオンラインになってからの経過時間（秒）。Offlineまたは不明な場合は0。
           example: 9000
           minimum: 0
 

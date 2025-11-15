@@ -177,6 +177,8 @@ impl AgentRegistry {
         let (agent_id, status, agent) = if let Some(id) = existing {
             // 既存エージェントを更新
             let agent = agents.get_mut(&id).unwrap();
+            let now = Utc::now();
+            let was_online = agent.status == AgentStatus::Online;
             agent.ip_address = req.ip_address;
             agent.ollama_version = req.ollama_version.clone();
             agent.ollama_port = req.ollama_port;
@@ -185,7 +187,10 @@ impl AgentRegistry {
             agent.gpu_count = req.gpu_count;
             agent.gpu_model = req.gpu_model.clone();
             agent.status = AgentStatus::Online;
-            agent.last_seen = Utc::now();
+            agent.last_seen = now;
+            if !was_online || agent.online_since.is_none() {
+                agent.online_since = Some(now);
+            }
             (id, RegisterStatus::Updated, agent.clone())
         } else {
             // 新規エージェントを登録
@@ -200,6 +205,7 @@ impl AgentRegistry {
                 status: AgentStatus::Online,
                 registered_at: now,
                 last_seen: now,
+                online_since: Some(now),
                 custom_name: None,
                 tags: Vec::new(),
                 notes: None,
@@ -259,7 +265,9 @@ impl AgentRegistry {
             let agent = agents
                 .get_mut(&agent_id)
                 .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
-            agent.last_seen = Utc::now();
+            let now = Utc::now();
+            let was_online = agent.status == AgentStatus::Online;
+            agent.last_seen = now;
             agent.status = AgentStatus::Online;
             if let Some(models) = loaded_models {
                 agent.loaded_models = normalize_models(models);
@@ -273,6 +281,9 @@ impl AgentRegistry {
             }
             if gpu_capability_score.is_some() {
                 agent.gpu_capability_score = gpu_capability_score;
+            }
+            if !was_online || agent.online_since.is_none() {
+                agent.online_since = Some(now);
             }
             agent.clone()
         };
@@ -290,6 +301,7 @@ impl AgentRegistry {
                 .get_mut(&agent_id)
                 .ok_or(CoordinatorError::AgentNotFound(agent_id))?;
             agent.status = AgentStatus::Offline;
+            agent.online_since = None;
             agent.clone()
         };
 

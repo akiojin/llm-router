@@ -227,6 +227,7 @@ mod tests {
 
         init_storage().await.unwrap();
 
+        let now = Utc::now();
         let agent = Agent {
             id: Uuid::new_v4(),
             machine_name: "test-machine".to_string(),
@@ -234,8 +235,9 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             status: AgentStatus::Online,
-            registered_at: Utc::now(),
-            last_seen: Utc::now(),
+            registered_at: now,
+            last_seen: now,
+            online_since: Some(now),
             custom_name: None,
             tags: Vec::new(),
             notes: None,
@@ -275,6 +277,7 @@ mod tests {
 
         init_storage().await.unwrap();
 
+        let now = Utc::now();
         let agent = Agent {
             id: Uuid::new_v4(),
             machine_name: "test-machine".to_string(),
@@ -282,8 +285,9 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             status: AgentStatus::Online,
-            registered_at: Utc::now(),
-            last_seen: Utc::now(),
+            registered_at: now,
+            last_seen: now,
+            online_since: Some(now),
             custom_name: None,
             tags: Vec::new(),
             notes: None,
@@ -321,6 +325,7 @@ mod tests {
         init_storage().await.unwrap();
 
         let agent_id = Uuid::new_v4();
+        let now = Utc::now();
         let agent1 = Agent {
             id: agent_id,
             machine_name: "test-machine-1".to_string(),
@@ -328,8 +333,9 @@ mod tests {
             ollama_version: "0.1.0".to_string(),
             ollama_port: 11434,
             status: AgentStatus::Online,
-            registered_at: Utc::now(),
-            last_seen: Utc::now(),
+            registered_at: now,
+            last_seen: now,
+            online_since: Some(now),
             custom_name: None,
             tags: Vec::new(),
             notes: None,
@@ -350,6 +356,7 @@ mod tests {
         save_agent(&agent1).await.unwrap();
 
         // 同じIDで異なる内容のエージェントを保存
+        let updated = Utc::now();
         let agent2 = Agent {
             id: agent_id,
             machine_name: "test-machine-2".to_string(),
@@ -357,8 +364,9 @@ mod tests {
             ollama_version: "0.2.0".to_string(),
             ollama_port: 11435,
             status: AgentStatus::Offline,
-            registered_at: Utc::now(),
-            last_seen: Utc::now(),
+            registered_at: updated,
+            last_seen: updated,
+            online_since: None,
             custom_name: Some("Updated".into()),
             tags: vec!["primary".into()],
             notes: None,

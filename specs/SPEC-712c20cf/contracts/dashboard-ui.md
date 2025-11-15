@@ -138,7 +138,7 @@ function updateStats(stats) {
  * @param {string} agents[].machine_name - マシン名
  * @param {string} agents[].ip_address - IPアドレス
  * @param {string} agents[].status - ステータス ("Online" | "Offline")
- * @param {number} agents[].uptime_seconds - 稼働時間（秒）
+ * @param {number} agents[].uptime_seconds - 直近オンライン開始からの稼働時間（秒）
  */
 function updateAgentTable(agents) {
   const tbody = document.getElementById('agent-table-body');

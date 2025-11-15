@@ -92,7 +92,7 @@
 - **説明**: `GET /api/dashboard/agents`実装
 - **詳細**:
   - レジストリから全エージェント取得
-  - uptimeを計算（registered_at - 現在時刻）
+  - uptimeを計算（online_sinceがあればそこから現在時刻まで、未設定なら0秒）
   - JSON配列で返却
 - **完了条件**: テスト合格
 - **推定時間**: 30分

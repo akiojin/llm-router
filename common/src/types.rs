@@ -45,6 +45,9 @@ pub struct Agent {
     pub registered_at: DateTime<Utc>,
     /// 最終ヘルスチェック時刻
     pub last_seen: DateTime<Utc>,
+    /// 直近でオンライン状態に遷移した時刻（オンライン時のみ Some）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub online_since: Option<DateTime<Utc>>,
     /// カスタム表示名
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_name: Option<String>,
@@ -200,6 +203,7 @@ mod tests {
             status: AgentStatus::Online,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
+            online_since: Some(Utc::now()),
             custom_name: Some("Custom".to_string()),
             tags: vec!["primary".to_string()],
             notes: Some("memo".to_string()),
@@ -249,6 +253,7 @@ mod tests {
         assert!(agent.gpu_model_name.is_none());
         assert!(agent.gpu_compute_capability.is_none());
         assert!(agent.gpu_capability_score.is_none());
+        assert!(agent.online_since.is_none());
     }
 
     #[test]

@@ -24,6 +24,7 @@ pub struct Agent {
     pub status: AgentStatus,
     pub registered_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
+    pub online_since: Option<DateTime<Utc>>,
     pub system_info: SystemInfo,
 }
 
@@ -48,7 +49,7 @@ pub struct SystemInfo {
 **ダッシュボードでの使用**:
 - エージェント一覧表示
 - オンライン/オフラインステータス表示
-- 稼働時間計算（`registered_at`から現在時刻までの差分）
+- 稼働時間計算（直近でオンラインになった時刻=`online_since` と現在時刻の差分、未設定時は0秒）
 
 ### 2. SystemStats (新規)
 
@@ -99,13 +100,23 @@ pub struct AgentWithUptime {
 ```
 
 **計算方法**:
-- `uptime_seconds`: `last_seen - registered_at`（秒単位）
+- `uptime_seconds`: `online_since` があれば `status` に応じて `now` または `last_seen` との差分（秒）。`online_since` が未設定なら 0。
 
 **API変換**:
 ```rust
 impl From<Agent> for AgentWithUptime {
     fn from(agent: Agent) -> Self {
-        let uptime_seconds = (agent.last_seen - agent.registered_at).num_seconds();
+        let now = Utc::now();
+        let uptime_seconds = if let Some(online_since) = agent.online_since {
+            let end = if matches!(agent.status, AgentStatus::Online) {
+                now
+            } else {
+                agent.last_seen
+            };
+            (end - online_since).num_seconds().max(0)
+        } else {
+            0
+        };
         Self {
             id: agent.id,
             machine_name: agent.machine_name,
