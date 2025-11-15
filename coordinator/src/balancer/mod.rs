@@ -28,6 +28,8 @@ const METRICS_STALE_THRESHOLD_SECS: i64 = 120;
 const REQUEST_HISTORY_WINDOW_MINUTES: i64 = 60;
 /// エージェントメトリクス履歴の最大保持件数
 const METRICS_HISTORY_CAPACITY: usize = 360;
+/// メトリクススコア比較時の許容誤差
+const LOAD_SCORE_EPSILON: f64 = 0.0001;
 
 /// リクエスト結果
 #[derive(Debug, Clone, Copy)]
@@ -38,13 +40,52 @@ pub enum RequestOutcome {
     Error,
 }
 
-fn compare_average_ms(a: Option<f32>, b: Option<f32>) -> Ordering {
+fn compare_option_f32(a: Option<f32>, b: Option<f32>) -> Ordering {
     match (a, b) {
         (Some(ax), Some(bx)) => ax.partial_cmp(&bx).unwrap_or(Ordering::Equal),
         (Some(_), None) => Ordering::Less,
         (None, Some(_)) => Ordering::Greater,
         (None, None) => Ordering::Equal,
     }
+}
+
+fn compare_average_ms(a: Option<f32>, b: Option<f32>) -> Ordering {
+    compare_option_f32(a, b)
+}
+
+fn agent_spec_score(agent: &Agent, load_state: Option<&AgentLoadState>) -> u32 {
+    agent
+        .gpu_capability_score
+        .or_else(|| {
+            load_state.and_then(|state| {
+                state
+                    .last_metrics
+                    .as_ref()
+                    .and_then(|metrics| metrics.gpu_capability_score)
+            })
+        })
+        .unwrap_or(0)
+}
+
+fn compare_spec_levels(
+    a_agent: &Agent,
+    a_load: &AgentLoadState,
+    b_agent: &Agent,
+    b_load: &AgentLoadState,
+) -> Ordering {
+    let a_score = agent_spec_score(a_agent, Some(a_load));
+    let b_score = agent_spec_score(b_agent, Some(b_load));
+    b_score.cmp(&a_score)
+}
+
+fn compare_spec_by_state(
+    a_agent: &Agent,
+    b_agent: &Agent,
+    state: &HashMap<Uuid, AgentLoadState>,
+) -> Ordering {
+    let a_score = agent_spec_score(a_agent, state.get(&a_agent.id));
+    let b_score = agent_spec_score(b_agent, state.get(&b_agent.id));
+    b_score.cmp(&a_score)
 }
 
 #[cfg(test)]
@@ -315,6 +356,306 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn select_agent_prefers_lower_usage_even_with_same_activity() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let low_cpu_agent = registry
+            .register(RegisterRequest {
+                machine_name: "low-cpu".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 1, 1)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let high_cpu_agent = registry
+            .register(RegisterRequest {
+                machine_name: "high-cpu".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 1, 2)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: low_cpu_agent,
+                cpu_usage: 35.0,
+                memory_usage: 40.0,
+                gpu_usage: Some(20.0),
+                gpu_memory_usage: Some(25.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 2,
+                average_response_time_ms: Some(120.0),
+            })
+            .await
+            .unwrap();
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_cpu_agent,
+                cpu_usage: 70.0,
+                memory_usage: 40.0,
+                gpu_usage: Some(60.0),
+                gpu_memory_usage: Some(70.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 2,
+                average_response_time_ms: Some(120.0),
+            })
+            .await
+            .unwrap();
+
+        let selected = manager.select_agent().await.unwrap();
+        assert_eq!(selected.id, low_cpu_agent);
+    }
+
+    #[tokio::test]
+    async fn select_agent_prefers_lower_usage_when_all_high_cpu() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let lower_cpu_agent = registry
+            .register(RegisterRequest {
+                machine_name: "high-load-lower".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 1, 10)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let higher_cpu_agent = registry
+            .register(RegisterRequest {
+                machine_name: "high-load-higher".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 1, 11)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: lower_cpu_agent,
+                cpu_usage: 92.0,
+                memory_usage: 60.0,
+                gpu_usage: Some(40.0),
+                gpu_memory_usage: Some(50.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 1,
+                average_response_time_ms: Some(180.0),
+            })
+            .await
+            .unwrap();
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: higher_cpu_agent,
+                cpu_usage: 97.0,
+                memory_usage: 65.0,
+                gpu_usage: Some(70.0),
+                gpu_memory_usage: Some(80.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 1,
+                average_response_time_ms: Some(200.0),
+            })
+            .await
+            .unwrap();
+
+        let selected = manager.select_agent().await.unwrap();
+        assert_eq!(selected.id, lower_cpu_agent);
+    }
+
+    #[tokio::test]
+    async fn select_agent_handles_partial_metrics_with_spec_priority() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let high_spec_agent = registry
+            .register(RegisterRequest {
+                machine_name: "metrics-only".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 2, 50)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let fallback_agent = registry
+            .register(RegisterRequest {
+                machine_name: "no-metrics".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 2, 51)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_spec_agent,
+                cpu_usage: 30.0,
+                memory_usage: 30.0,
+                gpu_usage: Some(10.0),
+                gpu_memory_usage: Some(15.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: Some(110.0),
+            })
+            .await
+            .unwrap();
+
+        // メトリクスあり＋ハイスペックが最優先
+        let first = manager.select_agent().await.unwrap();
+        assert_eq!(first.id, high_spec_agent);
+
+        // ハイスペックがビジーになったらフォールバック先のスペックへ切り替え
+        manager.begin_request(high_spec_agent).await.unwrap();
+        let second = manager.select_agent().await.unwrap();
+        assert_eq!(second.id, fallback_agent);
+    }
+
+    #[tokio::test]
+    async fn select_agent_prefers_higher_spec_until_it_becomes_busy() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let high_spec_agent = registry
+            .register(RegisterRequest {
+                machine_name: "gpu-strong".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 2, 0, 1)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("RTX4090".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let mid_spec_agent = registry
+            .register(RegisterRequest {
+                machine_name: "gpu-mid".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 2, 0, 2)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("RTX3080".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_spec_agent,
+                cpu_usage: 18.0,
+                memory_usage: 30.0,
+                gpu_usage: Some(15.0),
+                gpu_memory_usage: Some(20.0),
+                gpu_memory_total_mb: Some(24576),
+                gpu_memory_used_mb: Some(2048),
+                gpu_temperature: Some(55.0),
+                gpu_model_name: Some("RTX 4090".to_string()),
+                gpu_compute_capability: Some("8.9".to_string()),
+                gpu_capability_score: Some(9850),
+                active_requests: 0,
+                average_response_time_ms: Some(90.0),
+            })
+            .await
+            .unwrap();
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: mid_spec_agent,
+                cpu_usage: 18.0,
+                memory_usage: 30.0,
+                gpu_usage: Some(15.0),
+                gpu_memory_usage: Some(20.0),
+                gpu_memory_total_mb: Some(12288),
+                gpu_memory_used_mb: Some(1024),
+                gpu_temperature: Some(55.0),
+                gpu_model_name: Some("RTX 3080".to_string()),
+                gpu_compute_capability: Some("8.6".to_string()),
+                gpu_capability_score: Some(9170),
+                active_requests: 0,
+                average_response_time_ms: Some(90.0),
+            })
+            .await
+            .unwrap();
+
+        let first = manager.select_agent().await.unwrap();
+        assert_eq!(first.id, high_spec_agent);
+
+        manager.begin_request(high_spec_agent).await.unwrap();
+
+        let second = manager.select_agent().await.unwrap();
+        assert_eq!(second.id, mid_spec_agent);
+    }
+
+    #[tokio::test]
     async fn select_agent_by_metrics_deprioritizes_agents_without_metrics() {
         let registry = AgentRegistry::new();
         let manager = LoadManager::new(registry.clone());
@@ -376,6 +717,262 @@ mod tests {
         let selected = manager.select_agent_by_metrics().await.unwrap();
         // メトリクスがある方が優先されるはず
         assert_eq!(selected.id, with_metrics);
+    }
+
+    #[tokio::test]
+    async fn select_agent_by_metrics_considers_gpu_usage() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let low_gpu_agent = registry
+            .register(RegisterRequest {
+                machine_name: "low-gpu".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 2, 10)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let high_gpu_agent = registry
+            .register(RegisterRequest {
+                machine_name: "high-gpu".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 2, 11)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: low_gpu_agent,
+                cpu_usage: 50.0,
+                memory_usage: 50.0,
+                gpu_usage: Some(15.0),
+                gpu_memory_usage: Some(20.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 1,
+                average_response_time_ms: Some(140.0),
+            })
+            .await
+            .unwrap();
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_gpu_agent,
+                cpu_usage: 50.0,
+                memory_usage: 50.0,
+                gpu_usage: Some(80.0),
+                gpu_memory_usage: Some(85.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 1,
+                average_response_time_ms: Some(140.0),
+            })
+            .await
+            .unwrap();
+
+        let selected = manager.select_agent_by_metrics().await.unwrap();
+        assert_eq!(selected.id, low_gpu_agent);
+    }
+
+    #[tokio::test]
+    async fn select_agent_by_metrics_handles_partial_metrics_with_spec_priority() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let high_spec_agent = registry
+            .register(RegisterRequest {
+                machine_name: "metrics-mode".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 2, 60)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let fallback_agent = registry
+            .register(RegisterRequest {
+                machine_name: "metrics-missing".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 2, 61)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_spec_agent,
+                cpu_usage: 25.0,
+                memory_usage: 30.0,
+                gpu_usage: Some(20.0),
+                gpu_memory_usage: Some(25.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: Some(90.0),
+            })
+            .await
+            .unwrap();
+
+        let first = manager.select_agent_by_metrics().await.unwrap();
+        assert_eq!(first.id, high_spec_agent);
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_spec_agent,
+                cpu_usage: 88.0,
+                memory_usage: 70.0,
+                gpu_usage: Some(80.0),
+                gpu_memory_usage: Some(85.0),
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 4,
+                average_response_time_ms: Some(170.0),
+            })
+            .await
+            .unwrap();
+
+        let second = manager.select_agent_by_metrics().await.unwrap();
+        assert_eq!(second.id, fallback_agent);
+    }
+
+    #[tokio::test]
+    async fn select_agent_by_metrics_prefers_higher_spec_until_busy() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let high_spec_agent = registry
+            .register(RegisterRequest {
+                machine_name: "metrics-strong".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 3, 0, 1)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("RTX4090".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        let low_spec_agent = registry
+            .register(RegisterRequest {
+                machine_name: "metrics-basic".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 3, 0, 2)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("RTX2060".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_spec_agent,
+                cpu_usage: 25.0,
+                memory_usage: 35.0,
+                gpu_usage: Some(20.0),
+                gpu_memory_usage: Some(22.0),
+                gpu_memory_total_mb: Some(24576),
+                gpu_memory_used_mb: Some(2048),
+                gpu_temperature: Some(52.0),
+                gpu_model_name: Some("RTX 4090".to_string()),
+                gpu_compute_capability: Some("8.9".to_string()),
+                gpu_capability_score: Some(9850),
+                active_requests: 0,
+                average_response_time_ms: Some(80.0),
+            })
+            .await
+            .unwrap();
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: low_spec_agent,
+                cpu_usage: 25.0,
+                memory_usage: 35.0,
+                gpu_usage: Some(20.0),
+                gpu_memory_usage: Some(22.0),
+                gpu_memory_total_mb: Some(6144),
+                gpu_memory_used_mb: Some(512),
+                gpu_temperature: Some(52.0),
+                gpu_model_name: Some("RTX 2060".to_string()),
+                gpu_compute_capability: Some("7.5".to_string()),
+                gpu_capability_score: Some(6500),
+                active_requests: 0,
+                average_response_time_ms: Some(80.0),
+            })
+            .await
+            .unwrap();
+
+        let first = manager.select_agent_by_metrics().await.unwrap();
+        assert_eq!(first.id, high_spec_agent);
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id: high_spec_agent,
+                cpu_usage: 75.0,
+                memory_usage: 70.0,
+                gpu_usage: Some(80.0),
+                gpu_memory_usage: Some(85.0),
+                gpu_memory_total_mb: Some(24576),
+                gpu_memory_used_mb: Some(12288),
+                gpu_temperature: Some(70.0),
+                gpu_model_name: Some("RTX 4090".to_string()),
+                gpu_compute_capability: Some("8.9".to_string()),
+                gpu_capability_score: Some(9850),
+                active_requests: 3,
+                average_response_time_ms: Some(150.0),
+            })
+            .await
+            .unwrap();
+
+        let second = manager.select_agent_by_metrics().await.unwrap();
+        assert_eq!(second.id, low_spec_agent);
     }
 }
 
@@ -686,42 +1283,114 @@ impl LoadManager {
             return Err(CoordinatorError::NoAgentsAvailable);
         }
 
+        let round_robin_cursor = self.round_robin.fetch_add(1, AtomicOrdering::SeqCst);
+        let round_robin_start = round_robin_cursor % online_agents.len();
+        let round_robin_priority = compute_round_robin_priority(&online_agents, round_robin_start);
+
         let state = self.state.read().await;
         let now = Utc::now();
 
-        let mut load_based_candidates: Vec<(Agent, AgentLoadState)> = Vec::new();
+        let mut fresh_states: Vec<(Agent, AgentLoadState)> = Vec::new();
         for agent in &online_agents {
-            if let Some(load_state) = state.get(&agent.id) {
-                if let Some(metrics) = &load_state.last_metrics {
-                    if !load_state.is_stale(now) && metrics.cpu_usage <= 80.0 {
-                        load_based_candidates.push((agent.clone(), load_state.clone()));
-                    }
+            match state.get(&agent.id) {
+                Some(load_state) if !load_state.is_stale(now) => {
+                    fresh_states.push((agent.clone(), load_state.clone()));
                 }
+                _ => {}
             }
         }
 
-        if !load_based_candidates.is_empty() {
-            load_based_candidates.sort_by(|a, b| {
-                let a_active = a.1.combined_active();
-                let b_active = b.1.combined_active();
-                let a_avg = a.1.effective_average_ms();
-                let b_avg = b.1.effective_average_ms();
-                a_active
-                    .cmp(&b_active)
-                    .then_with(|| compare_average_ms(a_avg, b_avg))
-                    .then_with(|| a.1.total_assigned.cmp(&b.1.total_assigned))
-                    .then_with(|| a.0.machine_name.cmp(&b.0.machine_name))
+        let have_full_fresh_metrics = fresh_states.len() == online_agents.len();
+
+        if have_full_fresh_metrics && !fresh_states.is_empty() {
+            let mut load_based_candidates: Vec<(Agent, AgentLoadState)> = fresh_states
+                .iter()
+                .filter_map(|(agent, load_state)| {
+                    if let Some(metrics) = &load_state.last_metrics {
+                        if metrics.cpu_usage <= 80.0 {
+                            return Some((agent.clone(), load_state.clone()));
+                        }
+                    }
+                    None
+                })
+                .collect();
+
+            if !load_based_candidates.is_empty() {
+                load_based_candidates.sort_by(|a, b| {
+                    let a_active = a.1.combined_active();
+                    let b_active = b.1.combined_active();
+                    let a_avg = a.1.effective_average_ms();
+                    let b_avg = b.1.effective_average_ms();
+                    a_active
+                        .cmp(&b_active)
+                        .then_with(|| compare_usage_levels(&a.1, &b.1))
+                        .then_with(|| compare_spec_levels(&a.0, &a.1, &b.0, &b.1))
+                        .then_with(|| compare_average_ms(a_avg, b_avg))
+                        .then_with(|| a.1.total_assigned.cmp(&b.1.total_assigned))
+                        .then_with(|| {
+                            let a_rank = round_robin_priority
+                                .get(&a.0.id)
+                                .copied()
+                                .unwrap_or(usize::MAX);
+                            let b_rank = round_robin_priority
+                                .get(&b.0.id)
+                                .copied()
+                                .unwrap_or(usize::MAX);
+                            a_rank.cmp(&b_rank)
+                        })
+                });
+
+                return Ok(load_based_candidates[0].0.clone());
+            }
+
+            let mut usage_candidates = fresh_states.clone();
+            usage_candidates.sort_by(|a, b| {
+                compare_usage_levels(&a.1, &b.1)
+                    .then_with(|| compare_spec_levels(&a.0, &a.1, &b.0, &b.1))
+                    .then_with(|| {
+                        let a_rank = round_robin_priority
+                            .get(&a.0.id)
+                            .copied()
+                            .unwrap_or(usize::MAX);
+                        let b_rank = round_robin_priority
+                            .get(&b.0.id)
+                            .copied()
+                            .unwrap_or(usize::MAX);
+                        a_rank.cmp(&b_rank)
+                    })
             });
 
-            return Ok(load_based_candidates[0].0.clone());
+            return Ok(usage_candidates[0].0.clone());
         }
 
-        // すべてのエージェントが高負荷またはメトリクスなし → ラウンドロビン
-        let next_index = self
-            .round_robin
-            .fetch_add(1, AtomicOrdering::SeqCst)
-            .rem_euclid(online_agents.len());
-        Ok(online_agents[next_index].clone())
+        // メトリクスが不足している場合は「ビジー度 → GPUスペック → ラウンドロビン」で決定
+        let mut spec_sorted = online_agents.clone();
+        spec_sorted.sort_by(|a, b| {
+            let a_active = state
+                .get(&a.id)
+                .map(|load| load.combined_active())
+                .unwrap_or(0);
+            let b_active = state
+                .get(&b.id)
+                .map(|load| load.combined_active())
+                .unwrap_or(0);
+            a_active
+                .cmp(&b_active)
+                .then_with(|| compare_spec_by_state(a, b, &state))
+                .then_with(|| {
+                    let a_rank = round_robin_priority
+                        .get(&a.id)
+                        .copied()
+                        .unwrap_or(usize::MAX);
+                    let b_rank = round_robin_priority
+                        .get(&b.id)
+                        .copied()
+                        .unwrap_or(usize::MAX);
+                    a_rank.cmp(&b_rank)
+                })
+        });
+
+        Ok(spec_sorted[0].clone())
     }
 
     /// 指定されたエージェントのロードスナップショットを取得
@@ -967,11 +1636,14 @@ impl LoadManager {
     /// # 負荷スコア計算式
     ///
     /// ```text
-    /// score = cpu_usage + memory_usage + (active_requests × 10)
+    /// score = cpu_usage + memory_usage + gpu_usage + gpu_memory_usage + (active_requests × 10)
     /// ```
     ///
     /// - `cpu_usage`: CPU使用率（0.0～100.0）
     /// - `memory_usage`: メモリ使用率（0.0～100.0）
+    /// - `gpu_usage`: GPU使用率（0.0～100.0、未報告時は0.0として扱う）
+    /// - `gpu_memory_usage`: GPUメモリ使用率（0.0～100.0、未報告時は0.0として扱う）
+    /// - スコアが同じ場合はGPU能力スコアの高いエージェントを優先
     /// - `active_requests`: アクティブリクエスト数（重み付け：×10）
     ///
     /// # フォールバック戦略
@@ -980,6 +1652,7 @@ impl LoadManager {
     ///
     /// - すべてのエージェントのCPU使用率が80%を超えている
     /// - メトリクスを持つエージェントが存在しない
+    /// - いずれかのエージェントが鮮度のあるメトリクスを報告していない
     /// - すべてのメトリクスが古い（120秒以上前）
     ///
     /// # 戻り値
@@ -1006,6 +1679,10 @@ impl LoadManager {
             return Err(CoordinatorError::NoAgentsAvailable);
         }
 
+        let round_robin_cursor = self.round_robin.fetch_add(1, AtomicOrdering::SeqCst);
+        let round_robin_start = round_robin_cursor % online_agents.len();
+        let round_robin_priority = compute_round_robin_priority(&online_agents, round_robin_start);
+
         let state = self.state.read().await;
         let now = Utc::now();
 
@@ -1016,9 +1693,13 @@ impl LoadManager {
             if let Some(load_state) = state.get(&agent.id) {
                 if let Some(metrics) = &load_state.last_metrics {
                     if !load_state.is_stale(now) {
-                        // 負荷スコア = cpu_usage + memory_usage + (active_requests * 10)
+                        // 負荷スコア = cpu_usage + memory_usage + gpu_usage + gpu_memory_usage + (active_requests * 10)
+                        let gpu_usage = metrics.gpu_usage.unwrap_or(0.0) as f64;
+                        let gpu_memory_usage = metrics.gpu_memory_usage.unwrap_or(0.0) as f64;
                         let score = metrics.cpu_usage as f64
                             + metrics.memory_usage as f64
+                            + gpu_usage
+                            + gpu_memory_usage
                             + (load_state.combined_active() as f64 * 10.0);
                         candidates.push((agent.clone(), score));
                     }
@@ -1039,16 +1720,44 @@ impl LoadManager {
 
         if all_high_load || candidates.is_empty() {
             // フォールバック: ラウンドロビン
-            let next_index = self
-                .round_robin
-                .fetch_add(1, AtomicOrdering::SeqCst)
-                .rem_euclid(online_agents.len());
-            return Ok(online_agents[next_index].clone());
+            return Ok(online_agents[round_robin_start].clone());
         }
 
-        // 最小スコアのエージェントを選択
-        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        Ok(candidates[0].0.clone())
+        // 最小スコアに属するエージェントを抽出し、ラウンドロビン順序で決定する
+        let min_score = candidates
+            .iter()
+            .fold(f64::INFINITY, |acc, (_, score)| acc.min(*score));
+
+        let mut best_agents: Vec<Agent> = candidates
+            .iter()
+            .filter(|(_, score)| (*score - min_score).abs() <= LOAD_SCORE_EPSILON)
+            .map(|(agent, _)| agent.clone())
+            .collect();
+
+        if best_agents.is_empty() {
+            // 理論上起こらないが、安全のためフォールバック
+            return Ok(online_agents[round_robin_start].clone());
+        }
+
+        if best_agents.len() == 1 {
+            return Ok(best_agents.pop().unwrap());
+        }
+
+        best_agents.sort_by(|a, b| {
+            compare_spec_by_state(a, b, &state).then_with(|| {
+                let a_rank = round_robin_priority
+                    .get(&a.id)
+                    .copied()
+                    .unwrap_or(usize::MAX);
+                let b_rank = round_robin_priority
+                    .get(&b.id)
+                    .copied()
+                    .unwrap_or(usize::MAX);
+                a_rank.cmp(&b_rank)
+            })
+        });
+
+        Ok(best_agents[0].clone())
     }
 }
 
@@ -1082,6 +1791,48 @@ fn increment_history(point: &mut RequestHistoryPoint, outcome: RequestOutcome) {
         RequestOutcome::Success => point.success = point.success.saturating_add(1),
         RequestOutcome::Error => point.error = point.error.saturating_add(1),
     }
+}
+
+fn compute_round_robin_priority(agents: &[Agent], start_index: usize) -> HashMap<Uuid, usize> {
+    let len = agents.len();
+    let mut priority = HashMap::with_capacity(len);
+    if len == 0 {
+        return priority;
+    }
+
+    for offset in 0..len {
+        let idx = (start_index + offset) % len;
+        priority.insert(agents[idx].id, offset);
+    }
+
+    priority
+}
+
+fn usage_snapshot(
+    load_state: &AgentLoadState,
+) -> (Option<f32>, Option<f32>, Option<f32>, Option<f32>) {
+    load_state
+        .last_metrics
+        .as_ref()
+        .map(|metrics| {
+            (
+                Some(metrics.cpu_usage),
+                Some(metrics.memory_usage),
+                metrics.gpu_usage,
+                metrics.gpu_memory_usage,
+            )
+        })
+        .unwrap_or((None, None, None, None))
+}
+
+fn compare_usage_levels(a: &AgentLoadState, b: &AgentLoadState) -> Ordering {
+    let (a_cpu, a_mem, a_gpu, a_gpu_mem) = usage_snapshot(a);
+    let (b_cpu, b_mem, b_gpu, b_gpu_mem) = usage_snapshot(b);
+
+    compare_option_f32(a_cpu, b_cpu)
+        .then_with(|| compare_option_f32(a_mem, b_mem))
+        .then_with(|| compare_option_f32(a_gpu, b_gpu))
+        .then_with(|| compare_option_f32(a_gpu_mem, b_gpu_mem))
 }
 
 fn build_history_window(history: &VecDeque<RequestHistoryPoint>) -> Vec<RequestHistoryPoint> {
