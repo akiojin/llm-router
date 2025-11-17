@@ -12,6 +12,8 @@ pub mod metrics;
 pub mod models;
 pub mod openai;
 pub mod proxy;
+/// ユーザー管理API
+pub mod users;
 
 use crate::AppState;
 use axum::{
@@ -35,6 +37,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/auth/me", get(auth::me))
+        // ユーザー管理API
+        .route("/api/users", get(users::list_users).post(users::create_user))
+        .route(
+            "/api/users/:user_id",
+            put(users::update_user).delete(users::delete_user),
+        )
         .route(
             "/api/agents",
             post(agent::register_agent).get(agent::list_agents),
