@@ -3,6 +3,8 @@
 //! エージェント登録、ヘルスチェック、プロキシAPI
 
 pub mod agent;
+/// APIキー管理API
+pub mod api_keys;
 /// 認証API
 pub mod auth;
 pub mod dashboard;
@@ -43,6 +45,12 @@ pub fn create_router(state: AppState) -> Router {
             "/api/users/:user_id",
             put(users::update_user).delete(users::delete_user),
         )
+        // APIキー管理API
+        .route(
+            "/api/api-keys",
+            get(api_keys::list_api_keys).post(api_keys::create_api_key),
+        )
+        .route("/api/api-keys/:key_id", delete(api_keys::delete_api_key))
         .route(
             "/api/agents",
             post(agent::register_agent).get(agent::list_agents),
