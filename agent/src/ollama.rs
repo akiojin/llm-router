@@ -52,14 +52,14 @@ const DEFAULT_MODEL_CANDIDATES: &[&str] = &[
     "qwen3-coder:30b",
     "gpt-oss:20b",
     "gpt-oss-safeguard:20b",
-    "glm4:9b-chat",
+    "glm4:9b-chat-q4_K_M",
 ];
 const MODEL_MEMORY_REQUIREMENTS: &[(&str, f64)] = &[
     ("gpt-oss:120b", 80.0),
     ("qwen3-coder:30b", 24.0),
     ("gpt-oss:20b", 16.0),
     ("gpt-oss-safeguard:20b", 16.0),
-    ("glm4:9b-chat", 10.0),
+    ("glm4:9b-chat-q4_K_M", 8.0),
 ];
 
 impl OllamaManager {
@@ -1088,7 +1088,7 @@ mod tests {
         assert_eq!(pick_model_for_memory(32.0), "qwen3-coder:30b");
         assert_eq!(pick_model_for_memory(18.0), "gpt-oss:20b");
         assert_eq!(pick_model_for_memory(16.0), "gpt-oss:20b");
-        assert_eq!(pick_model_for_memory(12.0), "glm4:9b-chat");
+        assert_eq!(pick_model_for_memory(12.0), "glm4:9b-chat-q4_K_M");
     }
 
     #[test]

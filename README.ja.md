@@ -58,7 +58,7 @@ Machine 1          Machine 2          Machine 3
 
 **要点（2025-11 更新）**
 - コーディネーターはエージェントの OpenAI互換API（標準 `ollama_port+1`）のみを叩き、エージェント内部の Ollama を直接呼ばない。
-- エージェントは対応モデル5件（gpt-oss:20b/120b、gpt-oss-safeguard:20b、glm4:9b-chat、qwen3-coder:30b）を起動し、モデルごとに独立した `ollama serve` をポート割り当てして常駐。
+- エージェントは対応モデル5件（gpt-oss:20b/120b、gpt-oss-safeguard:20b、glm4:9b-chat-q4_K_M、qwen3-coder:30b）を起動し、モデルごとに独立した `ollama serve` をポート割り当てして常駐。
 - 全エージェントが `initializing=true` の間、リクエストは待機キュー（上限1024、超過で503）。`ready_models=(n/5)` が進み、全完了で `initializing=false`。
 - 手動配布UI/APIは廃止。 `/v1/models` と UI は常に上記5モデルのみを表示。
 

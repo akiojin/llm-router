@@ -39,6 +39,7 @@
 - [x] 2025-11-17 エージェント側マルチモデル自動起動（OllamaPool）と /v1/models 同期を実装。
 - [x] 2025-11-17 コーディネーター登録時にエージェント /v1/models を取り込み、初期状態を同期。
 - [x] 2025-11-18 API統合テスト追加（待機キュー溢れ→HTTP503、env override付き）を完了。UI再チェックとREADME.ja.md ポート表整理は未。
+- [x] 2025-11-18 対応モデルを実在リストに修正（gpt-oss-safeguard:20b / glm4:9b-chat-q4_K_M / qwen3-coder:30b）し、UI・spec・テストを更新。
 - [ ] UI非表示問題の再確認とREADME.ja.md ポート表追記。
 - [ ] specs 未完了タスク (自動継承)
   - SPEC-ee2aa3ef: **T025 ホットフィックスフロー確認／統合テスト(T023–T025)実行**

@@ -24,11 +24,11 @@ const MODEL_PRESETS = {
     usage: '最高精度だが超大規模GPU向け',
     sizeGb: 65,
   },
-  'glm4:9b-chat': {
-    gpuHint: '推奨GPU: 10GB以上',
-    badge: 'GLM4 9B',
+  'glm4:9b-chat-q4_K_M': {
+    gpuHint: '推奨GPU: 8GB以上',
+    badge: 'GLM4 9B Q4_K_M',
     usage: '多言語・コードに強い軽量モデル',
-    sizeGb: 10,
+    sizeGb: 6.3,
   },
   'qwen3-coder:30b': {
     gpuHint: '推奨GPU: 24GB以上',

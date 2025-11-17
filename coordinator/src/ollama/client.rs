@@ -150,10 +150,10 @@ impl OllamaClient {
                 ],
             ),
             ModelInfo::new(
-                "glm4:9b-chat".to_string(),
-                10_000_000_000, // Q4_K_M換算
-                "GLM-4 9B Chat (quantized)".to_string(),
-                12_000_000_000,
+                "glm4:9b-chat-q4_K_M".to_string(),
+                6_300_000_000, // ≈6.3GB for Q4_K_M
+                "GLM-4 9B Chat (Q4_K_M)".to_string(),
+                10_000_000_000,
                 vec![
                     "llm".to_string(),
                     "text".to_string(),
@@ -253,7 +253,7 @@ mod tests {
         assert!(models.iter().any(|m| m.name == "gpt-oss:120b"));
         assert!(models.iter().any(|m| m.name == "gpt-oss-safeguard:20b"));
         assert!(models.iter().any(|m| m.name == "qwen3-coder:30b"));
-        assert!(models.iter().any(|m| m.name == "glm4:9b-chat"));
+        assert!(models.iter().any(|m| m.name == "glm4:9b-chat-q4_K_M"));
         assert_eq!(models.len(), 5);
     }
 
