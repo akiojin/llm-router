@@ -22,12 +22,12 @@
    - ready_models / initializing を報告。
 3. **コーディネーター: 登録・待機制御の強化** ⏳ 部分完了
    - 登録時にエージェント `/v1/models` を取得し初期状態を同期済み。
-   - 待機キュー(1024上限)は LoadManager で実装済み。503 文言/溢れケースが未テスト。
+   - 待機キュー(1024上限)は LoadManager で実装済み。503 文言/溢れケースのAPIレベル検証を追加する（SPEC-8ae67d67 FR-009 整合）。
 4. **テスト (TDD)** ⏳ 部分完了
    - unit: ready待機・ポート衝突なし → 済。  
    - integration: 全エージェント initializing→ready で復帰 → 済。  
    - integration: `/v1/completions` ハッピー経路 → 済。  
-   - integration: 全エージェント initializing 中で待機上限超過→503（未実装）  
+   - integration: 待機キュー溢れ→HTTP 503 を追加（本プランで実装）。  
    - UIスナップショット: タブ撤去＆5モデルのみ表示を確認するメモ追加済み (`coordinator/tests/ui/model_tabs_hidden.md`)
 5. **ドキュメント/運用** ⏳ 進行中
    - README.ja.md に最新アーキ要点を追記済み。ポート表・起動手順は未更新。
@@ -38,10 +38,14 @@
 - [x] 2025-11-17 モデルセット統一（5モデル固定）、UIプリセット更新。
 - [x] 2025-11-17 エージェント側マルチモデル自動起動（OllamaPool）と /v1/models 同期を実装。
 - [x] 2025-11-17 コーディネーター登録時にエージェント /v1/models を取り込み、初期状態を同期。
-- [ ] API統合テスト追加（/api/proxy 503/待機、/v1/completions ハッピー経路）、UIスナップショット、README.ja.md 更新。
+- [x] 2025-11-18 API統合テスト追加（待機キュー溢れ→HTTP503、env override付き）を完了。UI再チェックとREADME.ja.md ポート表整理は未。
+- [ ] UI非表示問題の再確認とREADME.ja.md ポート表追記。
 - [ ] specs 未完了タスク (自動継承)
   - SPEC-ee2aa3ef: **T025 ホットフィックスフロー確認／統合テスト(T023–T025)実行**
   - SPEC-5cd7b614: **PRマージ後の動作確認（メンテナ作業）**
+  - SPEC-8ae67d67: plan.md Phase0–5 のチェックボックス未完了（モデル自動配布フェーズの反映）
+  - SPEC-712c20cf: quickstart/plan の UI/NFR チェック未完了（ダッシュボードUX）
+  - SPEC-47c6f44c: plan Phase4–5 未完了（tasks-checkワークフロー完了条件）
 
 ## Surprises & Discoveries
 - まだ無し。進行中に記載する。

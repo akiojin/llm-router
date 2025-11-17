@@ -410,9 +410,8 @@ async function applyOverviewData(overview) {
   renderAgents();
   renderHistory();
   renderLogsAgentOptions();
-  if (state.currentTab === 'logs') {
-    maybeRefreshLogs();
-  }
+  // タブレス表示のため常にログ更新を試みる
+  maybeRefreshLogs();
   hideError();
   setConnectionStatus("online");
   updateLastRefreshed(new Date(), generatedAt);
@@ -2265,38 +2264,21 @@ function renderModalAgentLogs() {
  * タブ切り替え処理
  */
 function switchTab(tabName) {
-  // タブボタンのアクティブ状態を更新
-  document.querySelectorAll('.tab-button').forEach((btn) => {
-    if (btn.dataset.tab === tabName) {
-      btn.classList.add('tab-button--active');
-      btn.setAttribute('aria-selected', 'true');
-    } else {
-      btn.classList.remove('tab-button--active');
-      btn.setAttribute('aria-selected', 'false');
-    }
-  });
-
-  // タブパネルの表示/非表示を切り替え
+  // タブUIは廃止。全パネルを常時表示し、currentTab はログ自動更新の判定にだけ使う。
   document.querySelectorAll('.tab-panel').forEach((panel) => {
-    if (panel.id === `tab-${tabName}`) {
-      panel.classList.add('tab-panel--active');
-      panel.setAttribute('aria-hidden', 'false');
-    } else {
-      panel.classList.remove('tab-panel--active');
-      panel.setAttribute('aria-hidden', 'true');
-    }
+    panel.classList.add('tab-panel--active');
+    panel.removeAttribute('aria-hidden');
   });
 
   state.currentTab = tabName;
-
-  // タブUI廃止に伴い、タブ固有の初期化は行わない
 }
 
 /**
  * タブ切り替えイベントリスナーを登録
  */
 function initTabs() {
-  // no-op (タブUI廃止)
+  // 旧タブパネルは全て表示状態にしておく
+  switchTab('all');
 }
 
 // ========== models.js統合 ==========

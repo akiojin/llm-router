@@ -27,7 +27,19 @@ use std::{
 };
 use uuid::Uuid;
 
-const MAX_WAITERS: usize = 1024;
+const DEFAULT_MAX_WAITERS: usize = 1024;
+
+#[inline]
+fn max_waiters() -> usize {
+    #[cfg(test)]
+    if let Ok(val) = std::env::var("COORDINATOR_MAX_WAITERS") {
+        if let Ok(parsed) = val.parse::<usize>() {
+            return parsed;
+        }
+    }
+
+    DEFAULT_MAX_WAITERS
+}
 
 /// POST /api/chat - Ollama Chat APIプロキシ
 pub async fn proxy_chat(
@@ -79,7 +91,7 @@ where
             .load_manager
             .record_request_history(RequestOutcome::Queued, Utc::now())
             .await;
-        if !state.load_manager.wait_for_ready(MAX_WAITERS).await {
+        if !state.load_manager.wait_for_ready(max_waiters()).await {
             return Err(CoordinatorError::ServiceUnavailable(
                 "All agents are warming up models".into(),
             )
@@ -314,7 +326,7 @@ where
             .load_manager
             .record_request_history(RequestOutcome::Queued, Utc::now())
             .await;
-        if !state.load_manager.wait_for_ready(MAX_WAITERS).await {
+        if !state.load_manager.wait_for_ready(max_waiters()).await {
             return Err(CoordinatorError::ServiceUnavailable(
                 "All agents are warming up models".into(),
             )
