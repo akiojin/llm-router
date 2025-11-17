@@ -212,7 +212,7 @@ mod tests {
         let agent_ip: IpAddr = mock.address().ip();
 
         Mock::given(method("GET"))
-            .and(path("/logs"))
+            .and(path("/api/logs"))
             .respond_with(ResponseTemplate::new(200).set_body_raw(
                 r#"{"entries":[{"timestamp":"2025-11-14T00:00:00Z","level":"INFO","target":"agent","message":"remote","fields":{}}],"path":"/var/log/agent.log"}"#,
                 "application/json",

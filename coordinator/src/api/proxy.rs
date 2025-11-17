@@ -665,6 +665,30 @@ mod tests {
         }
     }
 
+    async fn mark_ready(state: &AppState, agent_id: Uuid) {
+        state
+            .load_manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: Some(1.0),
+                initializing: false,
+                ready_models: Some((4, 4)),
+            })
+            .await
+            .ok();
+    }
+
     #[tokio::test]
     async fn test_select_available_agent_no_agents() {
         let state = create_test_state();
@@ -692,6 +716,10 @@ mod tests {
             gpu_model: Some("Test GPU".to_string()),
         };
         state.registry.register(register_req).await.unwrap();
+
+        // mark as ready so load balancer can pick
+        let agents = state.registry.list().await;
+        mark_ready(&state, agents[0].id).await;
 
         let result = select_available_agent(&state).await;
         assert!(result.is_ok());
@@ -743,7 +771,10 @@ mod tests {
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
-        state.registry.register(register_req2).await.unwrap();
+        let response2 = state.registry.register(register_req2).await.unwrap();
+
+        // mark second agent ready
+        mark_ready(&state, response2.agent_id).await;
 
         let result = select_available_agent(&state).await;
         assert!(result.is_ok());
