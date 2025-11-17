@@ -73,9 +73,15 @@ where
 {
     // 全エージェントが初期化中なら待機キュー/再試行を返す
     if state.load_manager.all_initializing().await {
-        return Err(
-            CoordinatorError::ServiceUnavailable("All agents are warming up models".into()).into()
-        );
+        // 簡易キュー: すぐに503で返し、リトライを促す
+        let _ = state
+            .load_manager
+            .record_request_history(RequestOutcome::Queued, Utc::now())
+            .await;
+        return Err(CoordinatorError::ServiceUnavailable(
+            "All agents are warming up models".into(),
+        )
+        .into());
     }
     let record_id = Uuid::new_v4();
     let timestamp = Utc::now();

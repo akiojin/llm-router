@@ -38,6 +38,8 @@ pub enum RequestOutcome {
     Success,
     /// エラー終了
     Error,
+    /// キュー待ち
+    Queued,
 }
 
 fn compare_option_f32(a: Option<f32>, b: Option<f32>) -> Ordering {
@@ -1120,6 +1122,8 @@ pub struct LoadManager {
     state: Arc<RwLock<HashMap<Uuid, AgentLoadState>>>,
     round_robin: Arc<AtomicUsize>,
     history: Arc<RwLock<VecDeque<RequestHistoryPoint>>>,
+    /// 待機中リクエスト数（簡易カウンタ）
+    pending: Arc<AtomicUsize>,
 }
 
 /// ハートビートから記録するメトリクス値
@@ -1165,6 +1169,7 @@ impl LoadManager {
             state: Arc::new(RwLock::new(HashMap::new())),
             round_robin: Arc::new(AtomicUsize::new(0)),
             history: Arc::new(RwLock::new(VecDeque::new())),
+            pending: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -1258,16 +1263,23 @@ impl LoadManager {
         let mut state = self.state.write().await;
         let entry = state.entry(agent_id).or_default();
 
-        if entry.assigned_active > 0 {
-            entry.assigned_active -= 1;
-        }
+        if let RequestOutcome::Queued = outcome {
+            // キューに積んだだけのものは active を増減させない
+        } else {
+            if entry.assigned_active > 0 {
+                entry.assigned_active -= 1;
+            }
 
-        match outcome {
-            RequestOutcome::Success => entry.success_count = entry.success_count.saturating_add(1),
-            RequestOutcome::Error => entry.error_count = entry.error_count.saturating_add(1),
-        }
+            match outcome {
+                RequestOutcome::Success => {
+                    entry.success_count = entry.success_count.saturating_add(1)
+                }
+                RequestOutcome::Error => entry.error_count = entry.error_count.saturating_add(1),
+                RequestOutcome::Queued => {}
+            }
 
-        entry.total_latency_ms = entry.total_latency_ms.saturating_add(duration.as_millis());
+            entry.total_latency_ms = entry.total_latency_ms.saturating_add(duration.as_millis());
+        }
 
         let updated_average = entry.average_latency_ms();
 
@@ -1561,7 +1573,7 @@ impl LoadManager {
         build_history_window(&history)
     }
 
-    async fn record_request_history(&self, outcome: RequestOutcome, timestamp: DateTime<Utc>) {
+    pub async fn record_request_history(&self, outcome: RequestOutcome, timestamp: DateTime<Utc>) {
         let minute = align_to_minute(timestamp);
         let mut history = self.history.write().await;
 
@@ -1812,6 +1824,7 @@ fn increment_history(point: &mut RequestHistoryPoint, outcome: RequestOutcome) {
     match outcome {
         RequestOutcome::Success => point.success = point.success.saturating_add(1),
         RequestOutcome::Error => point.error = point.error.saturating_add(1),
+        RequestOutcome::Queued => {} // キューは履歴ではカウントしない
     }
 }
 
