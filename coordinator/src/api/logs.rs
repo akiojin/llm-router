@@ -79,7 +79,7 @@ pub async fn get_agent_logs(
     let limit = clamp_limit(query.limit);
     let agent_api_port = agent.ollama_port.saturating_add(1); // APIポートはOllamaポート+1
     let url = format!(
-        "http://{}:{}/logs?limit={}",
+        "http://{}:{}/api/logs?tail={}",
         agent.ip_address, agent_api_port, limit
     );
 

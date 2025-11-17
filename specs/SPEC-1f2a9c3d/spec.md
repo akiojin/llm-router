@@ -7,8 +7,8 @@
 ## 機能要件
 - **FR-001 (Agent Logs API)**: エージェントは `GET /api/logs?tail=N` で自身のログを返す。  
   - デフォルト `tail=200`。`1 <= tail <= 2000` を許容、超過は 400。  
-  - ボディ形式は「JSON Lines (テキスト)」をそのまま返す（Content-Type: `text/plain; charset=utf-8`）。  
-  - ログファイル未存在時は 200 で空ボディを返す。内部エラー時は 500。
+  - レスポンスは `{"entries": LogEntry[], "path": "…"}` のJSON。LogEntryは既存JSONLと同じフィールドを持つ。  
+  - ログファイル未存在時は 200 で `entries: []` を返す。内部エラー時は 500。
 
 - **FR-002 (Coordinator Proxy)**: コーディネーターは `GET /api/agents/:id/logs?tail=N` で対象エージェントのログ API をプロキシする。  
   - エージェントが 200 を返した場合は本文をそのまま返す。  
