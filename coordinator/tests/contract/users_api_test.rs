@@ -188,7 +188,7 @@ async fn test_update_user_contract() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri(&format!("/api/users/{}", user_id))
+                .uri(format!("/api/users/{}", user_id))
                 .header("authorization", "Bearer admin_token")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
