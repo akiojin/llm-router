@@ -296,7 +296,8 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
             Ok(metrics) => metrics,
             Err(e) => {
                 warn!("Failed to collect metrics: {}", e);
-                continue;
+                // 収集に失敗してもハートビートは送る（offline化を防ぐ）
+                ollama_coordinator_agent::metrics::SystemMetrics::placeholder()
             }
         };
 
@@ -500,7 +501,10 @@ async fn send_heartbeat_once(
     gpu_capability: &Option<ollama_coordinator_agent::metrics::GpuCapability>,
     init_state: &Arc<Mutex<api::models::InitState>>,
 ) -> AgentResult<()> {
-    let metrics = metrics_collector.collect_metrics()?;
+    let metrics = metrics_collector.collect_metrics().unwrap_or_else(|e| {
+        warn!("Failed to collect metrics for heartbeat: {}", e);
+        ollama_coordinator_agent::metrics::SystemMetrics::placeholder()
+    });
     let ready_models = {
         let st = init_state.lock().await;
         st.ready_models
