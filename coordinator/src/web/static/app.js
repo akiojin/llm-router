@@ -1605,14 +1605,19 @@ function formatDate(date) {
     return "-";
   }
 
-  return date.toLocaleString("ja-JP", {
+  // ブラウザのローカルタイムゾーンで表示し、タイムゾーン略称を明示する
+  const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
+    hour12: false,
+    timeZone,
+    timeZoneName: "short",
+  }).format(date);
 }
 
 function formatMetricLabel(date) {
