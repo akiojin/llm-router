@@ -12,7 +12,7 @@ const MODEL_PRESETS = {
     usage: '高精度・長文向けの汎用/コード両対応',
     sizeGb: 14.5,
   },
-  'gpt-safeguard:20b': {
+  'gpt-oss-safeguard:20b': {
     gpuHint: '推奨GPU: 16GB以上',
     badge: 'Safety 20B',
     usage: 'モデレーション・セーフティ判定用',
@@ -24,17 +24,17 @@ const MODEL_PRESETS = {
     usage: '最高精度だが超大規模GPU向け',
     sizeGb: 65,
   },
-  'glm4:6b-chat': {
+  'glm4:9b-chat': {
     gpuHint: '推奨GPU: 10GB以上',
-    badge: 'GLM4 6B',
+    badge: 'GLM4 9B',
     usage: '多言語・コードに強い軽量モデル',
-    sizeGb: 6.8,
+    sizeGb: 10,
   },
-  'qwen3-coder:32b': {
+  'qwen3-coder:30b': {
     gpuHint: '推奨GPU: 24GB以上',
-    badge: 'Qwen3 Coder 32B',
+    badge: 'Qwen3 Coder 30B',
     usage: '最新世代のコード生成',
-    sizeGb: 19,
+    sizeGb: 17,
   },
 };
 

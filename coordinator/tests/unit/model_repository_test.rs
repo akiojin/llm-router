@@ -116,7 +116,7 @@ mod tests {
 
         // agent2に1つのタスク
         manager
-            .create_task(agent2, "gpt-safeguard:20b".to_string())
+            .create_task(agent2, "gpt-oss-safeguard:20b".to_string())
             .await;
 
         // agent1のタスク一覧

@@ -132,7 +132,7 @@ impl OllamaClient {
                 ],
             ),
             ModelInfo::new(
-                "gpt-safeguard:20b".to_string(),
+                "gpt-oss-safeguard:20b".to_string(),
                 14_000_000_000,
                 "GPT-OSS Safeguard 20B safety classifier".to_string(),
                 16_000_000_000,
@@ -150,10 +150,10 @@ impl OllamaClient {
                 ],
             ),
             ModelInfo::new(
-                "glm4:6b-chat".to_string(),
-                6_800_000_000, // Q4_K_M換算
-                "GLM-4 6B Chat (quantized)".to_string(),
-                10_000_000_000,
+                "glm4:9b-chat".to_string(),
+                10_000_000_000, // Q4_K_M換算
+                "GLM-4 9B Chat (quantized)".to_string(),
+                12_000_000_000,
                 vec![
                     "llm".to_string(),
                     "text".to_string(),
@@ -162,10 +162,10 @@ impl OllamaClient {
                 ],
             ),
             ModelInfo::new(
-                "qwen3-coder:32b".to_string(),
-                19_000_000_000, // ≈19GB (Q4_K_M)
-                "Qwen3-Coder 32B Instruct".to_string(),
-                24_000_000_000,
+                "qwen3-coder:30b".to_string(),
+                17_000_000_000, // ≈17GB (Q4_K_M)
+                "Qwen3-Coder 30B Instruct".to_string(),
+                22_000_000_000,
                 vec!["code".to_string(), "llm".to_string(), "text".to_string()],
             ),
         ]
@@ -251,9 +251,9 @@ mod tests {
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.name == "gpt-oss:20b"));
         assert!(models.iter().any(|m| m.name == "gpt-oss:120b"));
-        assert!(models.iter().any(|m| m.name == "gpt-safeguard:20b"));
-        assert!(models.iter().any(|m| m.name == "qwen3-coder:32b"));
-        assert!(models.iter().any(|m| m.name == "glm4:6b-chat"));
+        assert!(models.iter().any(|m| m.name == "gpt-oss-safeguard:20b"));
+        assert!(models.iter().any(|m| m.name == "qwen3-coder:30b"));
+        assert!(models.iter().any(|m| m.name == "glm4:9b-chat"));
         assert_eq!(models.len(), 5);
     }
 

@@ -70,9 +70,9 @@ async fn agent_models_handler(State(state): State<Arc<AgentStubState>>) -> impl 
         vec![
             serde_json::json!({"id": "gpt-oss:20b"}),
             serde_json::json!({"id": "gpt-oss:120b"}),
-            serde_json::json!({"id": "gpt-safeguard:20b"}),
-            serde_json::json!({"id": "glm4:6b-chat"}),
-            serde_json::json!({"id": "qwen3-coder:32b"}),
+            serde_json::json!({"id": "gpt-oss-safeguard:20b"}),
+            serde_json::json!({"id": "glm4:9b-chat"}),
+            serde_json::json!({"id": "qwen3-coder:30b"}),
         ]
     };
 

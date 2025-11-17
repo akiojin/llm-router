@@ -47,13 +47,19 @@ impl DownloadProgress {
 }
 
 const DEFAULT_MODEL: &str = "gpt-oss:20b";
-const DEFAULT_MODEL_CANDIDATES: &[&str] =
-    &["gpt-oss:20b", "gpt-oss:7b", "gpt-oss:3b", "gpt-oss:1b"];
+const DEFAULT_MODEL_CANDIDATES: &[&str] = &[
+    "gpt-oss:120b",
+    "qwen3-coder:30b",
+    "gpt-oss:20b",
+    "gpt-oss-safeguard:20b",
+    "glm4:9b-chat",
+];
 const MODEL_MEMORY_REQUIREMENTS: &[(&str, f64)] = &[
-    ("gpt-oss:20b", 12.0),
-    ("gpt-oss:7b", 6.0),
-    ("gpt-oss:3b", 3.0),
-    ("gpt-oss:1b", 1.0),
+    ("gpt-oss:120b", 80.0),
+    ("qwen3-coder:30b", 24.0),
+    ("gpt-oss:20b", 16.0),
+    ("gpt-oss-safeguard:20b", 16.0),
+    ("glm4:9b-chat", 10.0),
 ];
 
 impl OllamaManager {
@@ -1078,10 +1084,11 @@ mod tests {
 
     #[test]
     fn test_pick_model_for_memory_thresholds() {
+        assert_eq!(pick_model_for_memory(90.0), "gpt-oss:120b");
+        assert_eq!(pick_model_for_memory(32.0), "qwen3-coder:30b");
+        assert_eq!(pick_model_for_memory(18.0), "gpt-oss:20b");
         assert_eq!(pick_model_for_memory(16.0), "gpt-oss:20b");
-        assert_eq!(pick_model_for_memory(8.0), "gpt-oss:7b");
-        assert_eq!(pick_model_for_memory(4.5), "gpt-oss:3b");
-        assert_eq!(pick_model_for_memory(0.5), "gpt-oss:1b");
+        assert_eq!(pick_model_for_memory(12.0), "glm4:9b-chat");
     }
 
     #[test]
