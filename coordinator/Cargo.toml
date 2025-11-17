@@ -45,6 +45,7 @@ bcrypt = { workspace = true }
 jsonwebtoken = { workspace = true }
 sqlx = { workspace = true }
 sha2 = { workspace = true }
+rand = { workspace = true }
 
 [build-dependencies]
 winresource = "0.1.27"

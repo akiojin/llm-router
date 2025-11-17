@@ -6,5 +6,7 @@ pub mod password;
 /// JWT生成・検証（jsonwebtoken）
 pub mod jwt;
 
-// pub mod middleware;  // 後で実装
+/// 認証ミドルウェア（JWT, APIキー, エージェントトークン）
+pub mod middleware;
+
 // pub mod bootstrap;   // 後で実装

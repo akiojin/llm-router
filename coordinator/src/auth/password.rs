@@ -1,6 +1,6 @@
 // T042-T043: パスワードハッシュ化と検証（bcrypt実装）
 
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{hash, verify};
 use ollama_coordinator_common::error::CoordinatorError;
 
 /// パスワードハッシュ化のコスト（12推奨、200-300ms）
