@@ -302,12 +302,9 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
             let st = init_state.lock().await;
             st.ready_models
         };
-        let initializing_flag = match ready_models {
-            Some((ready, total)) if total > 0 => ready < total,
-            _ => {
-                let st = init_state.lock().await;
-                st.initializing
-            }
+        let initializing_flag = {
+            let st = init_state.lock().await;
+            st.initializing
         };
 
         let heartbeat_req = HealthCheckRequest {
@@ -470,12 +467,9 @@ async fn send_heartbeat_once(
         let st = init_state.lock().await;
         st.ready_models
     };
-    let initializing_flag = match ready_models {
-        Some((ready, total)) if total > 0 => ready < total,
-        _ => {
-            let st = init_state.lock().await;
-            st.initializing
-        }
+    let initializing_flag = {
+        let st = init_state.lock().await;
+        st.initializing
     };
 
     let heartbeat_req = HealthCheckRequest {
