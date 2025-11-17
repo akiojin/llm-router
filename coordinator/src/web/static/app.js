@@ -1053,6 +1053,7 @@ function openAgentModal(agent) {
   modalRefs.ipAddress.textContent = agent.ip_address ?? "-";
   modalRefs.ollamaVersion.textContent = agent.ollama_version ?? "-";
   if (modalRefs.loadedModels) {
+    const models = Array.isArray(agent.loaded_models) ? agent.loaded_models : [];
 
     modalRefs.loadedModels.textContent = models.length ? models.join(", ") : "-";
   }
