@@ -15,32 +15,31 @@
 - SPEC-5cd7b614: `specs/SPEC-5cd7b614/tasks.md` (PRマージ後の動作確認)
 
 ## 作業計画 (Plan of Work)
-1. **対応モデルセット確定と仕様反映**
-   - common/coordinator で定数化し、/api/models/available と /v1/models を同一ソースで返す。
-   - モデルごとの必要VRAMと推奨を表示。サイズは実測／公式情報を取得して反映。
-2. **エージェント: マルチ Ollama オーケストレーター**
-   - モデルごとにポートを割り当てて `ollama serve` を子プロセス起動（同時複数、既存進行を検出して再利用）。
-   - OpenAI互換 `/v1/*` を受け、モデル名→内部 Ollama インスタンスへルーティング。未起動なら起動完了まで 503(準備中)を返す。
-   - ハートビートに per-model ready/total を載せ、`initializing`/`ready_models` を正しく計上。
-3. **コーディネーター: 登録・待機制御の強化**
-   - 登録時にエージェントの `/v1/models` を叩き、起動中なら登録を拒否し「initializing中」表示で再試行させる。
-   - 既存 wait_for_ready キューを流用し、ready_models=(total) になるまで待機。上限1024超は503。
-   - エージェント選択は loaded_models ではなく「reported ready_models=full」とオンライン状態を必須にする。
-4. **テスト (TDD)**
-   - unit: オーケストレーターのポート割当（衝突しない）、起動済み再利用、失敗時リトライ。
-   - integration: 登録→全モデル起動完了→/v1/completions が成功するハッピー経路（Wiremock でオラマ代替可）。
-   - integration: 全エージェント初期化中で wait→ready 通知で再開、キュー満杯で503。
-   - UIスナップショット: モデル管理タブが定義された5モデルのみを表示し、手動配布要素が無いこと。
-5. **ドキュメント/運用**
-   - README.ja.md / specs/SPEC-8ae67d67/spec.md にアーキ図と起動フロー（エージェントが Ollama を多重起動、コーディネーターはエージェントAPIのみ叩く）を追記。
-   - 起動手順（macOS M4 Max 向け）とデフォルトポート表を更新。
+1. **対応モデルセット確定と仕様反映** ✅ 実装済み（5モデル固定で /api/models /v1/models / UI に反映）
+   - common/coordinator で定数化済み。サイズ/推奨VRAMを更新。
+2. **エージェント: マルチ Ollama オーケストレーター** ✅ 実装済み
+   - モデルごとに `OllamaPool` で serve 起動・再利用。/v1/models はコーディネーター対応モデルを返す。
+   - ready_models / initializing を報告。
+3. **コーディネーター: 登録・待機制御の強化** ⏳ 部分完了
+   - 登録時にエージェント `/v1/models` を取得し初期状態を同期済み。
+   - 待機キュー(1024上限)は LoadManager で実装済み。APIレベル統合テストと 503 文言確認が未実施。
+4. **テスト (TDD)** ⏳ 部分完了
+   - unit: ready待機・ポート衝突なし → 追加済み。  
+   - integration: 登録→全モデル起動→/v1/completions ハッピー経路（未実装）  
+   - integration: 全エージェント initializing 中の待機と 503（未実装）  
+   - UIスナップショット（未実装）
+5. **ドキュメント/運用** ⏳ 進行中
+   - SPEC-8ae67d67 はモデル一覧・手動配布廃止を更新済み。README.ja.md/ポート表は未更新。
 
 ## 進捗 (Progress)
 - [x] 2025-11-17T15:10Z  ready待機キューの挙動テストを追加し、clippy/test/markdownlint/タスクチェックを通過。
+- [x] 2025-11-17 モデルセット統一（5モデル固定）、UIプリセット更新。
+- [x] 2025-11-17 エージェント側マルチモデル自動起動（OllamaPool）と /v1/models 同期を実装。
+- [x] 2025-11-17 コーディネーター登録時にエージェント /v1/models を取り込み、初期状態を同期。
+- [ ] API統合テスト追加（/api/proxy 503/待機、/v1/completions ハッピー経路）、UIスナップショット、README.ja.md 更新。
 - [ ] specs 未完了タスク (自動継承)
   - SPEC-ee2aa3ef: **T025 ホットフィックスフロー確認／統合テスト(T023–T025)実行**
   - SPEC-5cd7b614: **PRマージ後の動作確認（メンテナ作業）**
-- [ ] 4/5 以降: 上記手順に沿って実装・検証を進める。
 
 ## Surprises & Discoveries
 - まだ無し。進行中に記載する。
