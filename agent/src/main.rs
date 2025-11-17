@@ -208,6 +208,20 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         st.ready_models = Some((0, total_models));
     }
 
+    // コーディネーターがサポートしないモデルは事前に削除して整合性を保つ
+    {
+        let supported = model_list.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>();
+        let mut manager = ollama_manager_clone.lock().await;
+        if let Ok(existing) = manager.list_models().await {
+            for m in existing {
+                if !supported.iter().any(|s| s == &m.to_lowercase()) {
+                    info!("Removing unsupported model {}", m);
+                    let _ = manager.remove_model(&m).await;
+                }
+            }
+        }
+    }
+
     let mut ready: u8 = 0;
     for m in &model_list {
         match state.ollama_pool.ensure(m).await {
