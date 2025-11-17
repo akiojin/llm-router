@@ -16,7 +16,6 @@ use tower::ServiceExt;
 
 use crate::support;
 
-
 async fn build_app() -> (Router, sqlx::SqlitePool) {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
