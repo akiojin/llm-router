@@ -543,10 +543,7 @@ async fn send_heartbeat_once(
         ready_models,
     };
 
-    coordinator_client
-        .send_heartbeat(heartbeat_req)
-        .await
-        .map_err(AgentError::from)
+    coordinator_client.send_heartbeat(heartbeat_req).await
 }
 
 /// ローカルIPアドレスを取得
