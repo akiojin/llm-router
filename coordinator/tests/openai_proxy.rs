@@ -35,7 +35,8 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             machine_name: "mock-agent".into(),
             ip_address: mock.address().ip(),
             ollama_version: "0.0.0".into(),
-            ollama_port: mock.address().port(),
+            // APIポート=ollama_port+1 となる仕様のため、実際のモックポートに合わせて -1 する
+            ollama_port: mock.address().port().saturating_sub(1),
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -44,6 +45,29 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
+        })
+        .await
+        .unwrap();
+
+    // エージェントをready状態にしておく（初期化待ちで503にならないように）
+    let agent_id = registry.list().await[0].id;
+    load_manager
+        .record_metrics(ollama_coordinator_coordinator::balancer::MetricsUpdate {
+            agent_id,
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
+            active_requests: 0,
+            average_response_time_ms: Some(1.0),
+            initializing: false,
+            ready_models: Some((4, 4)),
         })
         .await
         .unwrap();
