@@ -9,6 +9,11 @@
 - 登録時ヘルスチェック: エージェントAPI /v1/models が応答し、少なくとも1モデルが起動済みでないと登録を拒否し「起動中」を示す。
 - UI: 手動配布UIを残さず、ロード済みモデルは「全エージェント合算」表示のみ。エージェント表からモデル列を除去。
 
+## 参照 (References)
+- SPEC-8ae67d67: `specs/SPEC-8ae67d67/spec.md` (モデル自動配布・対応モデルセット)
+- SPEC-ee2aa3ef: `specs/SPEC-ee2aa3ef/tasks.md` (T025 ホットフィックスフロー/統合テスト)
+- SPEC-5cd7b614: `specs/SPEC-5cd7b614/tasks.md` (PRマージ後の動作確認)
+
 ## 作業計画 (Plan of Work)
 1. **対応モデルセット確定と仕様反映**
    - common/coordinator で定数化し、/api/models/available と /v1/models を同一ソースで返す。
