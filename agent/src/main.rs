@@ -214,7 +214,7 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
             .iter()
             .map(|s| s.to_lowercase())
             .collect::<Vec<_>>();
-        let mut manager = ollama_manager_clone.lock().await;
+        let manager = ollama_manager_clone.lock().await;
         if let Ok(existing) = manager.list_models().await {
             for m in existing {
                 if !supported.iter().any(|s| s == &m.to_lowercase()) {

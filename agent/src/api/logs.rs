@@ -9,9 +9,11 @@ use tokio::task;
 const DEFAULT_TAIL: usize = 200;
 const MAX_TAIL: usize = 2000;
 
+/// ログ取得のクエリパラメータ
 #[derive(Debug, Deserialize)]
 pub struct LogQuery {
     #[serde(default = "default_tail")]
+    /// 末尾から取得する行数
     pub tail: usize,
 }
 
@@ -23,10 +25,13 @@ fn clamp_tail(tail: usize) -> usize {
     tail.clamp(1, MAX_TAIL)
 }
 
+/// ログ取得レスポンス
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LogResponse {
+    /// 取得したログエントリ
     pub entries: Vec<ollama_coordinator_common::log::LogEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// 対象ログファイルパス（存在しない場合は None）
     pub path: Option<String>,
 }
 
