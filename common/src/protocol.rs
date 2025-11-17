@@ -40,6 +40,9 @@ pub struct RegisterResponse {
     pub agent_id: Uuid,
     /// ステータス ("registered" または "updated")
     pub status: RegisterStatus,
+    /// エージェントAPIポート（OpenAI互換API）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_api_port: Option<u16>,
     /// 自動配布されたモデル名（オプション）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_distributed_model: Option<String>,
