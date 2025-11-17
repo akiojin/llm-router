@@ -22,14 +22,16 @@
    - ready_models / initializing を報告。
 3. **コーディネーター: 登録・待機制御の強化** ⏳ 部分完了
    - 登録時にエージェント `/v1/models` を取得し初期状態を同期済み。
-   - 待機キュー(1024上限)は LoadManager で実装済み。APIレベル統合テストと 503 文言確認が未実施。
+   - 待機キュー(1024上限)は LoadManager で実装済み。503 文言/溢れケースが未テスト。
 4. **テスト (TDD)** ⏳ 部分完了
-   - unit: ready待機・ポート衝突なし → 追加済み。  
-   - integration: 登録→全モデル起動→/v1/completions ハッピー経路（未実装）  
-   - integration: 全エージェント initializing 中の待機と 503（未実装）  
-   - UIスナップショット（未実装）
+   - unit: ready待機・ポート衝突なし → 済。  
+   - integration: 全エージェント initializing→ready で復帰 → 済。  
+   - integration: `/v1/completions` ハッピー経路 → 済。  
+   - integration: 全エージェント initializing 中で待機上限超過→503（未実装）  
+   - UIスナップショット: タブ撤去＆5モデルのみ表示を確認するメモ追加済み (`coordinator/tests/ui/model_tabs_hidden.md`)
 5. **ドキュメント/運用** ⏳ 進行中
-   - SPEC-8ae67d67 はモデル一覧・手動配布廃止を更新済み。README.ja.md/ポート表は未更新。
+   - README.ja.md に最新アーキ要点を追記済み。ポート表・起動手順は未更新。
+   - SPEC-8ae67d67 はモデル一覧・手動配布廃止を更新済み。
 
 ## 進捗 (Progress)
 - [x] 2025-11-17T15:10Z  ready待機キューの挙動テストを追加し、clippy/test/markdownlint/タスクチェックを通過。
