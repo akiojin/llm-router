@@ -66,7 +66,7 @@ async fn test_complete_agent_flow() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/agents")
+                .uri("/api/nodes")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&register_request).unwrap()))
                 .unwrap(),
@@ -88,14 +88,14 @@ async fn test_complete_agent_flow() {
 
     let register_data: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
 
-    let agent_id = Uuid::parse_str(register_data["agent_id"].as_str().unwrap()).unwrap();
+    let agent_id = Uuid::parse_str(register_data["node_id"].as_str().unwrap()).unwrap();
     let agent_token = register_data["agent_token"].as_str().unwrap();
 
     assert!(!agent_token.is_empty(), "Agent token should be returned");
 
     // Step 2: トークンを使ってヘルスチェックを送信
     let heartbeat_request = json!({
-        "agent_id": agent_id.to_string(),
+        "node_id": agent_id.to_string(),
         "cpu_usage": 50.0,
         "memory_usage": 60.0,
         "gpu_usage": 40.0,
@@ -195,7 +195,7 @@ async fn test_agent_token_persistence() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/agents")
+                .uri("/api/nodes")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&register_request).unwrap()))
                 .unwrap(),
@@ -210,7 +210,7 @@ async fn test_agent_token_persistence() {
         .unwrap();
     let first_data: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
 
-    let agent_id = first_data["agent_id"].as_str().unwrap();
+    let agent_id = first_data["node_id"].as_str().unwrap();
     let first_token = first_data["agent_token"].as_str().unwrap();
 
     assert!(
@@ -224,7 +224,7 @@ async fn test_agent_token_persistence() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/agents")
+                .uri("/api/nodes")
                 .header("content-type", "application/json")
                 .header("x-agent-token", first_token)
                 .body(Body::from(serde_json::to_vec(&register_request).unwrap()))
@@ -244,7 +244,7 @@ async fn test_agent_token_persistence() {
         .unwrap();
     let second_data: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
 
-    let second_agent_id = second_data["agent_id"].as_str().unwrap();
+    let second_agent_id = second_data["node_id"].as_str().unwrap();
 
     // 同じエージェントIDが返される
     assert_eq!(

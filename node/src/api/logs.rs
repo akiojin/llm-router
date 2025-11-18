@@ -88,10 +88,12 @@ async fn read_logs(
 mod tests {
     use super::*;
     use axum::body::to_bytes;
+    use serial_test::serial;
     use std::fs;
     use tempfile::tempdir;
 
     #[tokio::test]
+    #[serial]
     async fn returns_empty_when_missing() {
         // override data dir so log file is absent
         let tmp = tempdir().unwrap();
@@ -109,6 +111,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn tails_logs() {
         let tmp = tempdir().unwrap();
         std::env::set_var("OLLAMA_NODE_DATA_DIR", tmp.path());

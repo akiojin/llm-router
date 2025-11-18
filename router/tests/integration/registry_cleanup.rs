@@ -17,7 +17,7 @@ fn load_fixture(name: &str) -> Vec<Value> {
         .join("tests")
         .join("support")
         .join("fixtures")
-        .join("nodes")
+        .join("agents")
         .join(name);
     let content = fs::read_to_string(path).expect("fixture must exist");
     serde_json::from_str(&content).expect("fixture must be valid JSON array")

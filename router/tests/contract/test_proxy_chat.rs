@@ -28,6 +28,7 @@ enum AgentChatStubResponse {
 async fn spawn_agent_stub(state: AgentStubState) -> TestServer {
     let router = Router::new()
         .route("/api/chat", post(agent_chat_handler))
+        .route("/v1/chat/completions", post(agent_chat_handler))
         .route("/v1/models", axum::routing::get(|| async {
             axum::Json(serde_json::json!({"data": [{"id": "gpt-oss:20b"}], "object": "list"}))
         }))
@@ -60,6 +61,7 @@ async fn agent_chat_handler(
 
 #[tokio::test]
 async fn proxy_chat_end_to_end_success() {
+    std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     // Arrange: スタブノードとルーターを実ポートで起動
     let node_stub = spawn_agent_stub(AgentStubState {
         expected_model: Some("gpt-oss:20b".to_string()),
@@ -109,6 +111,7 @@ async fn proxy_chat_end_to_end_success() {
 
 #[tokio::test]
 async fn proxy_chat_propagates_upstream_error() {
+    std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     // Arrange: ノードが404を返すケース
     let node_stub = spawn_agent_stub(AgentStubState {
         expected_model: Some("missing-model".to_string()),

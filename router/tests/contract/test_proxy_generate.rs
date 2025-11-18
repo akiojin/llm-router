@@ -29,6 +29,7 @@ enum AgentGenerateStubResponse {
 async fn spawn_agent_stub(state: AgentStubState) -> TestServer {
     let router = Router::new()
         .route("/api/generate", post(agent_generate_handler))
+        .route("/v1/completions", post(agent_generate_handler))
         .route("/v1/models", axum::routing::get(|| async {
             axum::Json(serde_json::json!({"data": [{"id": "gpt-oss:20b"}], "object": "list"}))
         }))
@@ -61,6 +62,7 @@ async fn agent_generate_handler(
 
 #[tokio::test]
 async fn proxy_generate_end_to_end_success() {
+    std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let node_stub = spawn_agent_stub(AgentStubState {
         expected_model: Some("gpt-oss:20b".to_string()),
         response: AgentGenerateStubResponse::Success(serde_json::json!({
@@ -99,6 +101,7 @@ async fn proxy_generate_end_to_end_success() {
 
 #[tokio::test]
 async fn proxy_generate_propagates_upstream_error() {
+    std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let node_stub = spawn_agent_stub(AgentStubState {
         expected_model: Some("missing-model".to_string()),
         response: AgentGenerateStubResponse::Error(
