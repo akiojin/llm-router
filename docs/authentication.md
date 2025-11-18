@@ -224,7 +224,7 @@ CREATE TABLE agent_tokens (
 On first startup, the coordinator prompts for admin account creation:
 
 ```bash
-$ ./target/release/ollama-coordinator-coordinator
+$ ./target/release/or-router
 
 No admin users found. Please create the first admin account.
 Username: admin
@@ -649,7 +649,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 
    ```bash
    rm ~/.ollama-agent/token
-   ./ollama-coordinator-agent
+   ./or-node
    ```
 
 2. **Verify coordinator URL:**
@@ -708,7 +708,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 Set environment variable:
 
 ```bash
-RUST_LOG=debug ./ollama-coordinator-coordinator
+RUST_LOG=debug ./or-router
 ```
 
 Look for authentication-related logs:
@@ -723,7 +723,7 @@ Look for authentication-related logs:
 
 ```bash
 # Connect to SQLite database
-sqlite3 ~/.ollama-coordinator/coordinator.db
+sqlite3 ~/.or/router.db
 
 -- List users
 SELECT id, username, role, created_at FROM users;
@@ -766,7 +766,7 @@ echo -n "new-password" | cargo run -p ollama-coordinator-common --bin hash-passw
 # Output: $2b$12$...
 
 # 2. Update database
-sqlite3 ~/.ollama-coordinator/coordinator.db
+sqlite3 ~/.or/router.db
 UPDATE users SET password_hash = '$2b$12$...' WHERE username = 'admin';
 ```
 
@@ -774,10 +774,10 @@ UPDATE users SET password_hash = '$2b$12$...' WHERE username = 'admin';
 
 ```bash
 # Delete existing JWT secret
-rm ~/.ollama-coordinator/jwt_secret
+rm ~/.or/jwt_secret
 
 # Restart coordinator (generates new secret)
-./ollama-coordinator-coordinator
+./or-router
 
 # All existing JWT tokens are now invalid
 # Users must re-login
@@ -788,7 +788,7 @@ rm ~/.ollama-coordinator/jwt_secret
 #### Clear All API Keys
 
 ```bash
-sqlite3 ~/.ollama-coordinator/coordinator.db
+sqlite3 ~/.or/router.db
 DELETE FROM api_keys;
 ```
 
