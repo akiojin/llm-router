@@ -68,7 +68,7 @@ async fn dashboard_agents_include_gpu_devices() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::OK);
+    assert_eq!(register_response.status(), StatusCode::CREATED);
 
     let response = router
         .oneshot(
