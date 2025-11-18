@@ -130,7 +130,7 @@ async fn run_server(config: ServerConfig) {
         .expect("Failed to connect to database");
 
     // マイグレーションを実行
-    sqlx::migrate!("./coordinator/migrations")
+    sqlx::migrate!("./migrations")
         .run(&db_pool)
         .await
         .expect("Failed to run database migrations");

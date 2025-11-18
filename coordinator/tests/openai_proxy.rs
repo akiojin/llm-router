@@ -21,11 +21,21 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     };
 
     // 登録済みエージェントを追加
@@ -263,11 +273,21 @@ async fn test_proxy_chat_no_agents() {
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     });
 
     let payload = ChatRequest {
@@ -391,11 +411,21 @@ async fn test_proxy_generate_no_agents() {
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     });
 
     let payload = GenerateRequest {

@@ -651,17 +651,27 @@ mod tests {
     use std::net::IpAddr;
     use std::time::Duration;
 
-    fn create_test_state() -> AppState {
+    async fn create_test_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
+        let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+        sqlx::migrate!("./migrations")
+            .run(&db_pool)
+            .await
+            .expect("Failed to run migrations");
+        let jwt_secret = "test-secret".to_string();
         AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
+            db_pool,
+            jwt_secret,
         }
     }
 
@@ -698,14 +708,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_available_agent_no_agents() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let result = select_available_agent(&state).await;
         assert!(matches!(result, Err(CoordinatorError::NoAgentsAvailable)));
     }
 
     #[tokio::test]
     async fn test_select_available_agent_success() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         // エージェントを登録
         let register_req = RegisterRequest {
@@ -737,7 +747,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_available_agent_skips_offline() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         // エージェント1を登録
         let register_req1 = RegisterRequest {
@@ -830,11 +840,21 @@ mod tests {
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = crate::tasks::DownloadTaskManager::new();
+        let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+        sqlx::migrate!("./migrations")
+            .run(&db_pool)
+            .await
+            .expect("Failed to run migrations");
+        let jwt_secret = "test-secret".to_string();
         let state = AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
+            db_pool,
+            jwt_secret,
         };
 
         // register agent (ollama_port = APIポート-1と報告)

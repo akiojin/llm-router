@@ -408,17 +408,27 @@ mod tests {
     use std::net::IpAddr;
     use std::time::Duration;
 
-    fn create_test_state() -> AppState {
+    async fn create_test_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
+        let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+        sqlx::migrate!("./migrations")
+            .run(&db_pool)
+            .await
+            .expect("Failed to run migrations");
+        let jwt_secret = "test-secret".to_string();
         AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
+            db_pool,
+            jwt_secret,
         }
     }
 
@@ -432,7 +442,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_agent_success() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let req = RegisterRequest {
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
@@ -453,14 +463,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_agents_empty() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let result = list_agents(State(state)).await;
         assert_eq!(result.0.len(), 0);
     }
 
     #[tokio::test]
     async fn test_list_agents_with_agents() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         // エージェントを2つ登録
         let req1 = RegisterRequest {
@@ -497,7 +507,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_agent_gpu_required_error_is_json() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let req = RegisterRequest {
             machine_name: "gpu-required-test".to_string(),
             ip_address: "192.168.1.101".parse().unwrap(),
@@ -523,7 +533,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_agent_missing_gpu_devices_rejected() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let req = RegisterRequest {
             machine_name: "missing-gpu-devices".to_string(),
             ip_address: "192.168.1.102".parse().unwrap(),
@@ -551,7 +561,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_same_machine_different_port_creates_multiple_agents() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         let req1 = RegisterRequest {
             machine_name: "shared-machine".to_string(),
@@ -591,7 +601,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_agent_metrics_returns_snapshot() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         // エージェントを登録
         let req = RegisterRequest {
@@ -648,7 +658,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_summary_empty() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let summary = metrics_summary(State(state)).await;
         assert_eq!(summary.total_agents, 0);
         assert_eq!(summary.online_agents, 0);
@@ -660,7 +670,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_summary_counts_requests() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         // エージェントを登録
         let register_req = RegisterRequest {
@@ -746,7 +756,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_agent_settings_endpoint() {
-        let state = create_test_state();
+        let state = create_test_state().await;
 
         let agent_id = register_agent(
             State(state.clone()),
@@ -788,7 +798,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_agent_endpoint() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let response = register_agent(
             State(state.clone()),
             Json(RegisterRequest {
@@ -817,7 +827,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_disconnect_agent_endpoint_marks_offline() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let agent_id = register_agent(
             State(state.clone()),
             Json(RegisterRequest {
@@ -847,7 +857,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_agent_without_gpu_rejected() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let req = RegisterRequest {
             machine_name: "no-gpu-machine".to_string(),
             ip_address: "192.168.1.200".parse::<IpAddr>().unwrap(),

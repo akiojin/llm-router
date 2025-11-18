@@ -4,18 +4,28 @@ use ollama_coordinator_coordinator::{
 };
 use tower::ServiceExt;
 
-fn build_app() -> Router {
+async fn build_app() -> Router {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = ollama_coordinator_coordinator::tasks::DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     };
 
     api::create_router(state)
@@ -24,7 +34,7 @@ fn build_app() -> Router {
 #[tokio::test]
 async fn dashboard_html_has_no_model_panel() {
     // minimal router serving static files
-    let app = build_app();
+    let app = build_app().await;
     let body = app
         .oneshot(
             axum::http::Request::builder()
