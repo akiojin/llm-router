@@ -49,7 +49,7 @@
         <File
           Id="CoordinatorExe"
           KeyPath="yes"
-          Source="$(var.BinariesDir)\ollama-router-coordinator.exe"
+          Source="$(var.BinariesDir)\or-router.exe"
         />
       </Component>
 
@@ -57,7 +57,7 @@
         <File
           Id="AgentExe"
           KeyPath="yes"
-          Source="$(var.BinariesDir)\ollama-router-agent.exe"
+          Source="$(var.BinariesDir)\or-node.exe"
         />
       </Component>
 
@@ -66,7 +66,7 @@
           Id="CoordinatorShortcut"
           Name="Ollama Router"
           Description="Ollama Router を起動"
-          Target="[INSTALLFOLDER]ollama-router-coordinator.exe"
+          Target="[INSTALLFOLDER]or-router.exe"
           WorkingDirectory="INSTALLFOLDER"
           Icon="CoordinatorShortcutIcon"
           IconIndex="0"
@@ -80,7 +80,7 @@
           Id="AgentShortcut"
           Name="Ollama Router Agent"
           Description="Ollama Router Agent を起動"
-          Target="[INSTALLFOLDER]ollama-router-agent.exe"
+          Target="[INSTALLFOLDER]or-node.exe"
           WorkingDirectory="INSTALLFOLDER"
           Icon="AgentShortcutIcon"
           IconIndex="0"
