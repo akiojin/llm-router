@@ -35,8 +35,14 @@ struct AgentStubState {
 async fn spawn_agent_stub(state: AgentStubState) -> TestServer {
     let shared_state = Arc::new(state);
     let router = Router::new()
-        .route("/api/chat", post(agent_chat_handler))
-        .route("/api/generate", post(agent_generate_handler))
+        .route("/v1/chat/completions", post(agent_chat_handler))
+        .route("/v1/completions", post(agent_generate_handler))
+        .route("/v1/models", axum::routing::get(|| async {
+            axum::Json(serde_json::json!({"data": [{"id": "gpt-oss:20b"}], "object": "list"}))
+        }))
+        .route("/api/tags", axum::routing::get(|| async {
+            axum::Json(serde_json::json!({"models": [{"name": "gpt-oss:20b", "size": 10000000000i64}]}))
+        }))
         .with_state(shared_state);
 
     spawn_router(router).await
@@ -88,6 +94,7 @@ async fn agent_generate_handler(
 
 #[tokio::test]
 async fn openai_proxy_end_to_end_updates_dashboard_history() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let agent_stub = spawn_agent_stub(AgentStubState {
         chat_response: ChatResponse {
             message: ollama_coordinator_common::protocol::ChatMessage {

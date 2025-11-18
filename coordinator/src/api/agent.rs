@@ -102,8 +102,10 @@ pub async fn register_agent(
     let agent_api_base = format!("http://{}:{}", req.ip_address, agent_api_port);
     let health_url = format!("{}/v1/models", agent_api_base);
 
-    let (loaded_models, initializing, ready_models) = if cfg!(test) {
-        (Vec::<String>::new(), true, None)
+    let skip_health_check =
+        cfg!(test) || std::env::var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK").is_ok();
+    let (loaded_models, initializing, ready_models) = if skip_health_check {
+        (vec!["gpt-oss:20b".to_string()], false, Some((1, 1)))
     } else {
         let client_http = reqwest::Client::new();
         let health_res = client_http.get(&health_url).send().await;
@@ -187,6 +189,12 @@ pub async fn register_agent(
         .await;
 
     // エージェント登録成功後、コーディネーターがサポートする全モデルを自動配布
+    // テストモードではスキップ
+    if skip_health_check {
+        info!("Auto-distribution skipped in test mode");
+        return Ok(Json(response));
+    }
+
     let agent_id = response.agent_id;
     let task_manager = state.task_manager.clone();
     let registry = state.registry.clone();

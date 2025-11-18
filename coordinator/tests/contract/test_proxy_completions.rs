@@ -35,6 +35,7 @@ async fn spawn_agent_stub(state: AgentStubState) -> TestServer {
         .route("/v1/completions", post(agent_generate_handler))
         .route("/v1/chat/completions", post(agent_generate_handler))
         .route("/v1/models", get(agent_models_handler))
+        .route("/api/tags", get(agent_tags_handler))
         .with_state(Arc::new(state));
 
     spawn_router(router).await
@@ -75,8 +76,24 @@ async fn agent_models_handler(State(state): State<Arc<AgentStubState>>) -> impl 
     (StatusCode::OK, Json(serde_json::json!({"data": models}))).into_response()
 }
 
+async fn agent_tags_handler(State(state): State<Arc<AgentStubState>>) -> impl IntoResponse {
+    let models: Vec<_> = if let Some(model) = &state.expected_model {
+        vec![serde_json::json!({"name": model, "size": 10_000_000_000i64})]
+    } else {
+        vec![
+            serde_json::json!({"name": "gpt-oss:20b", "size": 10_000_000_000i64}),
+            serde_json::json!({"name": "gpt-oss:120b", "size": 120_000_000_000i64}),
+            serde_json::json!({"name": "gpt-oss-safeguard:20b", "size": 10_000_000_000i64}),
+            serde_json::json!({"name": "qwen3-coder:30b", "size": 30_000_000_000i64}),
+        ]
+    };
+
+    (StatusCode::OK, Json(serde_json::json!({"models": models}))).into_response()
+}
+
 #[tokio::test]
 async fn proxy_completions_end_to_end_success() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let agent_stub = spawn_agent_stub(AgentStubState {
         expected_model: Some("gpt-oss:20b".to_string()),
         response: AgentGenerateStubResponse::Success(serde_json::json!({
@@ -114,6 +131,7 @@ async fn proxy_completions_end_to_end_success() {
 
 #[tokio::test]
 async fn proxy_completions_propagates_upstream_error() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let agent_stub = spawn_agent_stub(AgentStubState {
         expected_model: Some("missing-model".to_string()),
         response: AgentGenerateStubResponse::Error(

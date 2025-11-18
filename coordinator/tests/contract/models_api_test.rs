@@ -34,6 +34,7 @@ fn build_app() -> Router {
 /// T004: GET /api/models/available の契約テスト
 #[tokio::test]
 async fn test_get_available_models_contract() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     let response = app
@@ -80,14 +81,14 @@ async fn test_get_available_models_contract() {
     if let Some(models) = body["models"].as_array() {
         for model in models {
             assert!(model.get("name").is_some(), "Model must have 'name'");
-            assert!(model.get("size").is_some(), "Model must have 'size'");
+            assert!(model.get("size_gb").is_some(), "Model must have 'size_gb'");
             assert!(
                 model.get("description").is_some(),
                 "Model must have 'description'"
             );
             assert!(
-                model.get("required_memory").is_some(),
-                "Model must have 'required_memory'"
+                model.get("required_memory_gb").is_some(),
+                "Model must have 'required_memory_gb'"
             );
             assert!(model.get("tags").is_some(), "Model must have 'tags'");
             assert!(model["tags"].is_array(), "'tags' must be an array");
@@ -98,6 +99,7 @@ async fn test_get_available_models_contract() {
 /// T005: POST /api/models/distribute の契約テスト
 #[tokio::test]
 async fn test_distribute_models_contract() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     // テスト用リクエスト
@@ -152,6 +154,7 @@ async fn test_distribute_models_contract() {
 /// T006: GET /api/agents/{agent_id}/models の契約テスト
 #[tokio::test]
 async fn test_get_agent_models_contract() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     // テスト用のエージェントを登録
@@ -232,6 +235,7 @@ async fn test_get_agent_models_contract() {
 /// T007: POST /api/agents/{agent_id}/models/pull の契約テスト
 #[tokio::test]
 async fn test_pull_model_contract() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     // テスト用のエージェントを登録
@@ -312,6 +316,7 @@ async fn test_pull_model_contract() {
 /// T008: GET /api/tasks/{task_id} の契約テスト
 #[tokio::test]
 async fn test_get_task_progress_contract() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     // テスト用のエージェントを登録

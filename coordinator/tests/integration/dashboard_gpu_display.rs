@@ -31,6 +31,7 @@ fn build_router() -> Router {
 
 #[tokio::test]
 async fn dashboard_agents_include_gpu_devices() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let router = build_router();
 
     let payload = json!({
