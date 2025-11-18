@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use crate::support::{
-    router::{register_node, spawn_test_router},
     http::{spawn_router, TestServer},
+    router::{register_node, spawn_test_router},
 };
 use axum::{
     extract::State,
