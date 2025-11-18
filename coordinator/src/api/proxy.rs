@@ -799,7 +799,7 @@ mod tests {
         // ---- stub agent (OpenAI互換API) ----
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let agent_router = Router::new().route(
-            "/api/chat",
+            "/v1/chat/completions",
             post(|Json(_req): Json<ChatRequest>| async {
                 let resp = ChatResponse {
                     message: ChatMessage {

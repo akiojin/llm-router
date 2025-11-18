@@ -28,7 +28,10 @@ enum AgentGenerateStubResponse {
 
 async fn spawn_agent_stub(state: AgentStubState) -> TestServer {
     let router = Router::new()
-        .route("/api/generate", post(agent_generate_handler))
+        .route("/v1/completions", post(agent_generate_handler))
+        .route("/api/tags", axum::routing::get(|| async {
+            axum::Json(serde_json::json!({"models": [{"name": "gpt-oss:20b", "size": 10000000000i64}]}))
+        }))
         .with_state(Arc::new(state));
 
     spawn_router(router).await
