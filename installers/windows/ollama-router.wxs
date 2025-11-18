@@ -39,8 +39,9 @@
   </Fragment>
 
   <Fragment>
-    <Icon Id="CoordinatorShortcutIcon" SourceFile="..\\..\\assets\\icons\\router.ico" />
-    <Icon Id="AgentShortcutIcon" SourceFile="..\\..\\assets\\icons\\node.ico" />
+    <!-- Paths are resolved relative to repository root (workflow runs from repo root) -->
+    <Icon Id="CoordinatorShortcutIcon" SourceFile="assets\\icons\\router.ico" />
+    <Icon Id="AgentShortcutIcon" SourceFile="assets\\icons\\node.ico" />
   </Fragment>
 
   <Fragment>

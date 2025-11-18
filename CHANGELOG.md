@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/akiojin/ollama-router/compare/v2.0.1...v2.0.2) (2025-11-18)
+
+
+### Bug Fixes
+
+* **ci:** update mac runners and wix asset paths ([63f8107](https://github.com/akiojin/ollama-router/commit/63f8107d0d58bc771db48a120f54850597c3828e))
+
 ## [2.0.1](https://github.com/akiojin/ollama-router/compare/v2.0.0...v2.0.1) (2025-11-18)
 
 
