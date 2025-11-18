@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/akiojin/ollama-router/compare/v2.0.0...v2.0.1) (2025-11-18)
+
+
+### Bug Fixes
+
+* **installer:** sync windows msi binary names ([785494c](https://github.com/akiojin/ollama-router/commit/785494ce6f2f30586a651cc222fb2e568ae5e907))
+
 # [2.0.0](https://github.com/akiojin/ollama-router/compare/v1.5.0...v2.0.0) (2025-11-18)
 
 
