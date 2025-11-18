@@ -78,14 +78,14 @@ async fn test_list_available_models_from_ollama_library() {
     // 各モデルに必要な情報が含まれることを検証
     for model in models {
         assert!(model.get("name").is_some(), "Model must have 'name'");
-        assert!(model.get("size").is_some(), "Model must have 'size'");
+        assert!(model.get("size_gb").is_some(), "Model must have 'size_gb'");
         assert!(
             model.get("description").is_some(),
             "Model must have 'description'"
         );
         assert!(
-            model.get("required_memory").is_some(),
-            "Model must have 'required_memory'"
+            model.get("required_memory_gb").is_some(),
+            "Model must have 'required_memory_gb'"
         );
         assert!(model.get("tags").is_some(), "Model must have 'tags'");
     }
@@ -94,6 +94,7 @@ async fn test_list_available_models_from_ollama_library() {
 /// T019: 特定エージェントのインストール済みモデル一覧を取得
 #[tokio::test]
 async fn test_list_installed_models_on_agent() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     // テスト用エージェントを登録
@@ -174,6 +175,7 @@ async fn test_list_installed_models_on_agent() {
 /// T020: 全エージェントのモデルマトリックス表示
 #[tokio::test]
 async fn test_model_matrix_view_multiple_agents() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     // 複数のエージェントを登録

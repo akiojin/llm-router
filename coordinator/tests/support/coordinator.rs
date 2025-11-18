@@ -42,7 +42,7 @@ pub async fn register_agent(
             "ollama_port": agent_addr.port().saturating_sub(1),
             "gpu_available": true,
             "gpu_devices": [
-                {"model": "Test GPU", "count": 1}
+                {"model": "Test GPU", "count": 1, "memory": 16_000_000_000u64}
             ]
         }))
         .send()

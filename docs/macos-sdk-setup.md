@@ -203,8 +203,94 @@ make build-macos-aarch64
 make build-macos-all
 ```
 
+## macOSでのネイティブビルド
+
+macOS環境で直接ビルドする場合、上記のSDKセットアップは不要です。
+以下の手順でネイティブビルドが可能です。
+
+### 前提条件
+
+- macOS（Intel または Apple Silicon）
+- Rust ツールチェーン（`rustup`でインストール推奨）
+- Xcode Command Line Tools
+
+### ビルド手順
+
+#### 1. Command Line Toolsのインストール
+
+```bash
+xcode-select --install
+```
+
+#### 2. Rustのインストール（未インストールの場合）
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+#### 3. ビルド実行
+
+```bash
+# プロジェクトルートディレクトリで実行
+cargo build --release
+
+# または、特定のターゲットを指定
+# Intel Mac向け
+cargo build --release --target x86_64-apple-darwin
+
+# Apple Silicon Mac向け
+cargo build --release --target aarch64-apple-darwin
+```
+
+#### 4. ビルド成果物の確認
+
+```bash
+# デフォルトターゲット
+ls -lh target/release/ollama-coordinator
+
+# 特定ターゲット
+ls -lh target/x86_64-apple-darwin/release/ollama-coordinator
+ls -lh target/aarch64-apple-darwin/release/ollama-coordinator
+```
+
+### トラブルシューティング
+
+#### リンカーエラーが発生する場合
+
+**症状**: `error: linker 'aarch64-apple-darwin23-clang' not found`
+
+**原因**: 古いバージョンの設定ファイルがクロスコンパイル用のリンカーを
+指定している可能性があります。
+
+**解決方法**:
+
+最新のリポジトリをpullして、`.cargo/config.toml`が更新されていることを確認してください。
+`.cargo/config.toml`にはmacOS向けのリンカー設定が含まれていないはずです。
+
+#### ターゲット追加が必要な場合
+
+```bash
+# Intel Mac向けターゲット追加（Apple Silicon Macで必要な場合）
+rustup target add x86_64-apple-darwin
+
+# Apple Silicon向けターゲット追加（Intel Macで必要な場合）
+rustup target add aarch64-apple-darwin
+```
+
+### クロスコンパイルとネイティブビルドの違い
+
+| 項目 | ネイティブビルド | クロスコンパイル |
+|------|------------------|------------------|
+| 実行環境 | macOS | Linux (Docker) |
+| SDK取得 | 不要（システムのXcodeを使用） | 必要（`.sdk/`に配置） |
+| リンカー | システムのclang | osxcrossのclang |
+| ビルド時間 | 速い | やや遅い |
+| 用途 | ローカル開発・テスト | CI/CD、複数プラットフォーム対応 |
+
 ## 参考リンク
 
 - [osxcross - macOS クロスコンパイルツールチェーン](https://github.com/tpoechtrager/osxcross)
 - [Apple Developer Documentation](https://developer.apple.com/documentation/)
 - [Xcode Downloads](https://developer.apple.com/download/)
+- [Rustup - Rust インストーラー](https://rustup.rs/)

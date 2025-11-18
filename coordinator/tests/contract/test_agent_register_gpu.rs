@@ -32,6 +32,7 @@ fn build_app() -> Router {
 
 #[tokio::test]
 async fn register_gpu_agent_success() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     let payload = json!({
@@ -95,6 +96,7 @@ async fn register_gpu_agent_success() {
 
 #[tokio::test]
 async fn register_gpu_agent_missing_devices_is_rejected() {
+    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
     let app = build_app();
 
     let payload = json!({

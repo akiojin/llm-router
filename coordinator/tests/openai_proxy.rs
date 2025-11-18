@@ -57,7 +57,11 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
         .registry
         .update_last_seen(
             agent_id,
-            Some(vec!["gpt-oss:20b".to_string(), "gpt-oss:120b".to_string()]),
+            Some(vec![
+                "gpt-oss:20b".to_string(),
+                "gpt-oss:120b".to_string(),
+                "test-model".to_string(),
+            ]),
             None,
             None,
             None,
@@ -111,7 +115,7 @@ async fn test_proxy_chat_success() {
     };
 
     Mock::given(method("POST"))
-        .and(path("/api/chat"))
+        .and(path("/v1/chat/completions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(&chat_response))
         .mount(&mock_server)
         .await;
@@ -156,7 +160,7 @@ async fn test_proxy_chat_streaming_passthrough() {
     let sse_payload = "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n";
 
     Mock::given(method("POST"))
-        .and(path("/api/chat"))
+        .and(path("/v1/chat/completions"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "text/event-stream")
@@ -207,7 +211,7 @@ async fn test_proxy_chat_missing_model_returns_openai_error() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/api/chat"))
+        .and(path("/v1/chat/completions"))
         .respond_with(ResponseTemplate::new(404).set_body_string("model not found"))
         .mount(&mock_server)
         .await;
@@ -297,7 +301,7 @@ async fn test_proxy_generate_success() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/api/generate"))
+        .and(path("/v1/completions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "response": "ok"
         })))
@@ -336,7 +340,7 @@ async fn test_proxy_generate_streaming_passthrough() {
     let ndjson_payload = "{\"response\":\"chunk-1\"}\n{\"response\":\"chunk-2\"}\n";
 
     Mock::given(method("POST"))
-        .and(path("/api/generate"))
+        .and(path("/v1/completions"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/x-ndjson")
@@ -371,7 +375,7 @@ async fn test_proxy_generate_streaming_passthrough() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response.headers().get(CONTENT_TYPE).unwrap(),
-        "application/x-ndjson"
+        "application/json"
     );
     let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
@@ -601,7 +605,7 @@ async fn test_openai_completions_streaming_passthrough() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response.headers().get(CONTENT_TYPE).unwrap(),
-        "application/x-ndjson"
+        "application/json"
     );
     let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
