@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/akiojin/ollama-router/compare/v2.0.2...v2.0.3) (2025-11-18)
+
+
+### Bug Fixes
+
+* **build:** set wix codepage to utf8 and shorten icon ids ([0e7a3af](https://github.com/akiojin/ollama-router/commit/0e7a3af0d459dad03b708a78328df2499180a9b5))
+
 ## [2.0.2](https://github.com/akiojin/ollama-router/compare/v2.0.1...v2.0.2) (2025-11-18)
 
 

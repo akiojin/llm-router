@@ -6,6 +6,7 @@
     Language="1041"
     Version="$(var.ProductVersion)"
     Manufacturer="Ollama Router"
+    Codepage="65001"
     UpgradeCode="{B5064C44-1AB8-4AEA-86A1-0B36FEC7B6B7}"
   >
     <Package
@@ -40,8 +41,8 @@
 
   <Fragment>
     <!-- Paths are resolved relative to repository root (workflow runs from repo root) -->
-    <Icon Id="CoordinatorShortcutIcon" SourceFile="assets\\icons\\router.ico" />
-    <Icon Id="AgentShortcutIcon" SourceFile="assets\\icons\\node.ico" />
+    <Icon Id="CoordIcon" SourceFile="assets\\icons\\router.ico" />
+    <Icon Id="AgentIcon" SourceFile="assets\\icons\\node.ico" />
   </Fragment>
 
   <Fragment>
@@ -69,7 +70,7 @@
           Description="Ollama Router を起動"
           Target="[INSTALLFOLDER]or-router.exe"
           WorkingDirectory="INSTALLFOLDER"
-          Icon="CoordinatorShortcutIcon"
+          Icon="CoordIcon"
           IconIndex="0"
         />
         <RemoveFolder Id="RemoveCoordinatorProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
@@ -83,7 +84,7 @@
           Description="Ollama Router Agent を起動"
           Target="[INSTALLFOLDER]or-node.exe"
           WorkingDirectory="INSTALLFOLDER"
-          Icon="AgentShortcutIcon"
+          Icon="AgentIcon"
           IconIndex="0"
         />
         <RegistryValue Root="HKLM" Key="Software\\OllamaRouter" Name="AgentShortcut" Type="integer" Value="1" KeyPath="yes" />
