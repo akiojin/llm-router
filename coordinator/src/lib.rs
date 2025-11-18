@@ -45,6 +45,9 @@ pub mod config {
     // 未実装: 設定ファイル読み込み
 }
 
+/// 認証・認可機能
+pub mod auth;
+
 /// アプリケーション状態
 #[derive(Clone)]
 pub struct AppState {
@@ -56,4 +59,8 @@ pub struct AppState {
     pub request_history: std::sync::Arc<db::request_history::RequestHistoryStorage>,
     /// ダウンロードタスクマネージャー
     pub task_manager: tasks::DownloadTaskManager,
+    /// データベース接続プール
+    pub db_pool: sqlx::SqlitePool,
+    /// JWT秘密鍵
+    pub jwt_secret: String,
 }

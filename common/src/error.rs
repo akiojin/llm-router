@@ -75,6 +75,22 @@ pub enum CoordinatorError {
     /// ストレージ容量不足
     #[error("ストレージ容量不足: {0}")]
     InsufficientStorage(String),
+
+    /// パスワードハッシュエラー
+    #[error("パスワードハッシュエラー: {0}")]
+    PasswordHash(String),
+
+    /// JWT エラー
+    #[error("JWT エラー: {0}")]
+    Jwt(String),
+
+    /// 認証エラー
+    #[error("認証エラー: {0}")]
+    Authentication(String),
+
+    /// 認可エラー
+    #[error("認可エラー: {0}")]
+    Authorization(String),
 }
 
 /// Agentエラー型
