@@ -17,6 +17,7 @@ use ollama_coordinator_common::{
         ChatRequest, ChatResponse, GenerateRequest, RecordStatus, RequestResponseRecord,
         RequestType,
     },
+    types::AgentStatus,
 };
 use std::{
     io,
@@ -25,6 +26,20 @@ use std::{
     time::Instant,
 };
 use uuid::Uuid;
+
+const DEFAULT_MAX_WAITERS: usize = 1024;
+
+#[inline]
+fn max_waiters() -> usize {
+    #[cfg(test)]
+    if let Ok(val) = std::env::var("COORDINATOR_MAX_WAITERS") {
+        if let Ok(parsed) = val.parse::<usize>() {
+            return parsed;
+        }
+    }
+
+    DEFAULT_MAX_WAITERS
+}
 
 /// POST /api/chat - Ollama Chat APIプロキシ
 pub async fn proxy_chat(
@@ -70,14 +85,34 @@ where
     S: FnOnce(reqwest::Response, &ChatRequest) -> Result<Response, AppError>,
     C: FnOnce(ChatResponse, &ChatRequest) -> Result<Response, AppError>,
 {
+    // 全エージェントが初期化中なら ready 出現を待つ（待機者上限で 503）
+    if state.load_manager.all_initializing().await {
+        let _ = state
+            .load_manager
+            .record_request_history(RequestOutcome::Queued, Utc::now())
+            .await;
+        if !state.load_manager.wait_for_ready(max_waiters()).await {
+            return Err(CoordinatorError::ServiceUnavailable(
+                "All agents are warming up models".into(),
+            )
+            .into());
+        }
+    }
     let record_id = Uuid::new_v4();
     let timestamp = Utc::now();
     let request_body = serde_json::to_value(&req).unwrap_or_default();
 
-    let agent = select_available_agent(state).await?;
+    let agent = select_available_agent_for_model(state, &req.model).await?;
+    if agent.initializing {
+        return Err(CoordinatorError::ServiceUnavailable(
+            "All agents are warming up models".into(),
+        )
+        .into());
+    }
     let agent_id = agent.id;
     let agent_machine_name = agent.machine_name.clone();
     let agent_ip = agent.ip_address;
+    let agent_api_port = agent.ollama_port + 1;
 
     state
         .load_manager
@@ -86,7 +121,10 @@ where
         .map_err(AppError::from)?;
 
     let client = reqwest::Client::new();
-    let ollama_url = format!("http://{}:{}/api/chat", agent.ip_address, agent.ollama_port);
+    let ollama_url = format!(
+        "http://{}:{}/v1/chat/completions",
+        agent.ip_address, agent_api_port
+    );
     let start = Instant::now();
 
     let response = match client.post(&ollama_url).json(&req).send().await {
@@ -283,11 +321,23 @@ where
     S: FnOnce(reqwest::Response, &GenerateRequest) -> Result<Response, AppError>,
     C: FnOnce(serde_json::Value, &GenerateRequest) -> Result<Response, AppError>,
 {
+    if state.load_manager.all_initializing().await {
+        let _ = state
+            .load_manager
+            .record_request_history(RequestOutcome::Queued, Utc::now())
+            .await;
+        if !state.load_manager.wait_for_ready(max_waiters()).await {
+            return Err(CoordinatorError::ServiceUnavailable(
+                "All agents are warming up models".into(),
+            )
+            .into());
+        }
+    }
     let record_id = Uuid::new_v4();
     let timestamp = Utc::now();
     let request_body = serde_json::to_value(&req).unwrap_or_default();
 
-    let agent = select_available_agent(state).await?;
+    let agent = select_available_agent_for_model(state, &req.model).await?;
     let agent_id = agent.id;
     let agent_machine_name = agent.machine_name.clone();
     let agent_ip = agent.ip_address;
@@ -299,9 +349,10 @@ where
         .map_err(AppError::from)?;
 
     let client = reqwest::Client::new();
+    let agent_api_port = agent.ollama_port + 1;
     let ollama_url = format!(
-        "http://{}:{}/api/generate",
-        agent.ip_address, agent.ollama_port
+        "http://{}:{}/v1/completions",
+        agent.ip_address, agent_api_port
     );
     let start = Instant::now();
 
@@ -492,6 +543,32 @@ where
 /// 環境変数LOAD_BALANCER_MODEで動作モードを切り替え:
 /// - "metrics": メトリクスベース選択（T014-T015）
 /// - その他（デフォルト）: 既存の高度なロードバランシング
+pub(crate) async fn select_available_agent_for_model(
+    state: &AppState,
+    model: &str,
+) -> Result<ollama_coordinator_common::types::Agent, CoordinatorError> {
+    let _mode = std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
+
+    // まずモデルを保持しているオンラインエージェントを優先
+    let required = model.trim().to_lowercase();
+    let agents = state.registry.list().await;
+    let mut candidates: Vec<_> = agents
+        .into_iter()
+        .filter(|a| {
+            a.status == AgentStatus::Online && a.loaded_models.iter().any(|m| m == &required)
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        // 既存の挙動にフォールバック
+        return select_available_agent(state).await;
+    }
+
+    // 簡易: 最終確認が新しい順で選択
+    candidates.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+    Ok(candidates.remove(0))
+}
+
 pub(crate) async fn select_available_agent(
     state: &AppState,
 ) -> Result<ollama_coordinator_common::types::Agent, CoordinatorError> {
@@ -504,7 +581,13 @@ pub(crate) async fn select_available_agent(
         }
         _ => {
             // デフォルト: 既存の高度なロードバランシング
-            state.load_manager.select_agent().await
+            let agent = state.load_manager.select_agent().await?;
+            if agent.initializing {
+                return Err(CoordinatorError::ServiceUnavailable(
+                    "All agents are warming up models".into(),
+                ));
+            }
+            Ok(agent)
         }
     }
 }
@@ -529,6 +612,18 @@ pub(crate) fn forward_streaming_response(
             }
         }
     }
+    use axum::http::header;
+    if !axum_response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .map(|v| v.to_str().unwrap_or("").starts_with("text/event-stream"))
+        .unwrap_or(false)
+    {
+        axum_response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+    }
     Ok(axum_response)
 }
 
@@ -547,40 +642,70 @@ pub(crate) fn save_request_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{balancer::LoadManager, registry::AgentRegistry, tasks::DownloadTaskManager};
+    use crate::{
+        balancer::{LoadManager, MetricsUpdate},
+        registry::AgentRegistry,
+        tasks::DownloadTaskManager,
+    };
     use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use std::net::IpAddr;
+    use std::time::Duration;
 
-    async fn create_test_state() -> AppState {
+    fn create_test_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
-        let db_pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .expect("Failed to create test database");
-        let jwt_secret = "test_jwt_secret_key_for_testing_only".to_string();
         AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
-            db_pool,
-            jwt_secret,
         }
+    }
+
+    async fn mark_ready(state: &AppState, agent_id: Uuid) {
+        // レジストリ側のフラグも更新し、ロードバランサが初期化完了と判断できるようにする
+        state
+            .registry
+            .update_last_seen(agent_id, None, None, None, None, Some(false), Some((4, 4)))
+            .await
+            .ok();
+
+        state
+            .load_manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: Some(1.0),
+                initializing: false,
+                ready_models: Some((4, 4)),
+            })
+            .await
+            .ok();
     }
 
     #[tokio::test]
     async fn test_select_available_agent_no_agents() {
-        let state = create_test_state().await;
+        let state = create_test_state();
         let result = select_available_agent(&state).await;
         assert!(matches!(result, Err(CoordinatorError::NoAgentsAvailable)));
     }
 
     #[tokio::test]
     async fn test_select_available_agent_success() {
-        let state = create_test_state().await;
+        let state = create_test_state();
 
         // エージェントを登録
         let register_req = RegisterRequest {
@@ -599,6 +724,10 @@ mod tests {
         };
         state.registry.register(register_req).await.unwrap();
 
+        // mark as ready so load balancer can pick
+        let agents = state.registry.list().await;
+        mark_ready(&state, agents[0].id).await;
+
         let result = select_available_agent(&state).await;
         assert!(result.is_ok());
 
@@ -608,7 +737,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_available_agent_skips_offline() {
-        let state = create_test_state().await;
+        let state = create_test_state();
 
         // エージェント1を登録
         let register_req1 = RegisterRequest {
@@ -649,12 +778,158 @@ mod tests {
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
         };
-        state.registry.register(register_req2).await.unwrap();
+        let response2 = state.registry.register(register_req2).await.unwrap();
+
+        // mark second agent ready
+        mark_ready(&state, response2.agent_id).await;
 
         let result = select_available_agent(&state).await;
         assert!(result.is_ok());
 
         let agent = result.unwrap();
         assert_eq!(agent.machine_name, "machine2");
+    }
+
+    #[tokio::test]
+    async fn proxy_chat_waits_until_agent_ready_then_succeeds() {
+        use axum::{routing::post, Json, Router};
+        use ollama_coordinator_common::protocol::{ChatMessage, ChatRequest, ChatResponse};
+        use tokio::{net::TcpListener, sync::oneshot, time::timeout};
+
+        // ---- stub agent (OpenAI互換API) ----
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let agent_router = Router::new().route(
+            "/api/chat",
+            post(|Json(_req): Json<ChatRequest>| async {
+                let resp = ChatResponse {
+                    message: ChatMessage {
+                        role: "assistant".into(),
+                        content: "ready".into(),
+                    },
+                    done: true,
+                };
+                (StatusCode::OK, Json(resp))
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let agent_addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(
+                listener,
+                agent_router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await;
+        });
+
+        // ---- coordinator state ----
+        let registry = AgentRegistry::new();
+        let load_manager = LoadManager::new(registry.clone());
+        let request_history =
+            std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
+        let task_manager = crate::tasks::DownloadTaskManager::new();
+        let state = AppState {
+            registry,
+            load_manager,
+            request_history,
+            task_manager,
+        };
+
+        // register agent (ollama_port = APIポート-1と報告)
+        let register_req = RegisterRequest {
+            machine_name: "ready-agent".into(),
+            ip_address: agent_addr.ip(),
+            ollama_version: "0.0.0-test".into(),
+            ollama_port: agent_addr.port().saturating_sub(1),
+            gpu_available: true,
+            gpu_devices: vec![GpuDeviceInfo {
+                model: "Test GPU".to_string(),
+                count: 1,
+                memory: Some(16_000_000_000),
+            }],
+            gpu_count: Some(1),
+            gpu_model: Some("Test GPU".to_string()),
+        };
+        let reg = state.registry.register(register_req).await.unwrap();
+        let agent_id = reg.agent_id;
+
+        // all initializing
+        state
+            .load_manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: None,
+                initializing: true,
+                ready_models: Some((0, 5)),
+            })
+            .await
+            .unwrap();
+
+        // after a short delay, mark as ready to unblock wait_for_ready
+        let lm = state.load_manager.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            let _ = lm
+                .record_metrics(MetricsUpdate {
+                    agent_id,
+                    cpu_usage: 0.0,
+                    memory_usage: 0.0,
+                    gpu_usage: None,
+                    gpu_memory_usage: None,
+                    gpu_memory_total_mb: None,
+                    gpu_memory_used_mb: None,
+                    gpu_temperature: None,
+                    gpu_model_name: None,
+                    gpu_compute_capability: None,
+                    gpu_capability_score: None,
+                    active_requests: 0,
+                    average_response_time_ms: Some(10.0),
+                    initializing: false,
+                    ready_models: Some((5, 5)),
+                })
+                .await;
+        });
+
+        // exercise proxy (non-streaming)
+        let req = ChatRequest {
+            model: "gpt-oss:20b".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "hello".into(),
+            }],
+            stream: false,
+        };
+
+        let response = timeout(
+            Duration::from_secs(2),
+            proxy_chat_with_handlers(
+                &state,
+                req,
+                "127.0.0.1".parse().unwrap(),
+                |resp, _| forward_streaming_response(resp).map_err(AppError::from),
+                |payload, _| Ok((StatusCode::OK, Json(payload)).into_response()),
+            ),
+        )
+        .await
+        .expect("proxy should not time out")
+        .expect("proxy should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // shutdown stub
+        let _ = shutdown_tx.send(());
     }
 }

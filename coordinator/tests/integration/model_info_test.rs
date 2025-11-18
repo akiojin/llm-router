@@ -13,28 +13,18 @@ use ollama_coordinator_coordinator::{
 use serde_json::json;
 use tower::ServiceExt;
 
-use crate::support;
-
-async fn build_app() -> Router {
-    // AUTH_DISABLED=trueで認証を無効化
-    std::env::set_var("AUTH_DISABLED", "true");
-
+fn build_app() -> Router {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = ollama_coordinator_coordinator::tasks::DownloadTaskManager::new();
-    let db_pool = support::coordinator::create_test_db_pool().await;
-    let jwt_secret = support::coordinator::test_jwt_secret();
-
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
-        db_pool,
-        jwt_secret,
     };
 
     api::create_router(state)
@@ -43,7 +33,7 @@ async fn build_app() -> Router {
 /// T018: Ollamaライブラリから利用可能なモデル一覧を取得
 #[tokio::test]
 async fn test_list_available_models_from_ollama_library() {
-    let app = build_app().await;
+    let app = build_app();
 
     let response = app
         .oneshot(
@@ -80,22 +70,10 @@ async fn test_list_available_models_from_ollama_library() {
         .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
         .collect();
 
-    assert!(
-        model_names.contains(&"gpt-oss:20b".to_string()),
-        "Should include gpt-oss:20b"
-    );
-    assert!(
-        model_names.contains(&"gpt-oss:7b".to_string()),
-        "Should include gpt-oss:7b"
-    );
-    assert!(
-        model_names.contains(&"gpt-oss:3b".to_string()),
-        "Should include gpt-oss:3b"
-    );
-    assert!(
-        model_names.contains(&"gpt-oss:1b".to_string()),
-        "Should include gpt-oss:1b"
-    );
+    assert!(model_names.contains(&"gpt-oss:20b".to_string()));
+    assert!(model_names.contains(&"gpt-oss:120b".to_string()));
+    assert!(model_names.contains(&"gpt-oss-safeguard:20b".to_string()));
+    assert!(model_names.contains(&"qwen3-coder:30b".to_string()));
 
     // 各モデルに必要な情報が含まれることを検証
     for model in models {
@@ -116,7 +94,7 @@ async fn test_list_available_models_from_ollama_library() {
 /// T019: 特定エージェントのインストール済みモデル一覧を取得
 #[tokio::test]
 async fn test_list_installed_models_on_agent() {
-    let app = build_app().await;
+    let app = build_app();
 
     // テスト用エージェントを登録
     let register_payload = json!({
@@ -143,7 +121,7 @@ async fn test_list_installed_models_on_agent() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::CREATED);
+    assert_eq!(register_response.status(), StatusCode::OK);
 
     let body = to_bytes(register_response.into_body(), usize::MAX)
         .await
@@ -196,7 +174,7 @@ async fn test_list_installed_models_on_agent() {
 /// T020: 全エージェントのモデルマトリックス表示
 #[tokio::test]
 async fn test_model_matrix_view_multiple_agents() {
-    let app = build_app().await;
+    let app = build_app();
 
     // 複数のエージェントを登録
     let mut agent_ids = Vec::new();
@@ -295,4 +273,45 @@ async fn test_model_matrix_view_multiple_agents() {
         available["models"].is_array(),
         "Available models must be an array"
     );
+}
+
+/// T021: /v1/models は対応モデル5件のみを返す
+#[tokio::test]
+async fn test_v1_models_returns_fixed_list() {
+    let app = build_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    let data = json["data"]
+        .as_array()
+        .expect("data must be an array of models");
+    let ids: Vec<String> = data
+        .iter()
+        .filter_map(|m| m.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect();
+
+    let expected = vec![
+        "gpt-oss:20b",
+        "gpt-oss:120b",
+        "gpt-oss-safeguard:20b",
+        "qwen3-coder:30b",
+    ];
+
+    assert_eq!(ids.len(), expected.len(), "should return exactly 4 models");
+    for id in expected {
+        assert!(ids.contains(&id.to_string()), "missing {id}");
+    }
 }

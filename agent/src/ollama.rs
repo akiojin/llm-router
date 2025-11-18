@@ -47,13 +47,17 @@ impl DownloadProgress {
 }
 
 const DEFAULT_MODEL: &str = "gpt-oss:20b";
-const DEFAULT_MODEL_CANDIDATES: &[&str] =
-    &["gpt-oss:20b", "gpt-oss:7b", "gpt-oss:3b", "gpt-oss:1b"];
+const DEFAULT_MODEL_CANDIDATES: &[&str] = &[
+    "gpt-oss:120b",
+    "qwen3-coder:30b",
+    "gpt-oss:20b",
+    "gpt-oss-safeguard:20b",
+];
 const MODEL_MEMORY_REQUIREMENTS: &[(&str, f64)] = &[
-    ("gpt-oss:20b", 12.0),
-    ("gpt-oss:7b", 6.0),
-    ("gpt-oss:3b", 3.0),
-    ("gpt-oss:1b", 1.0),
+    ("gpt-oss:120b", 80.0),
+    ("qwen3-coder:30b", 24.0),
+    ("gpt-oss:20b", 16.0),
+    ("gpt-oss-safeguard:20b", 16.0),
 ];
 
 impl OllamaManager {
@@ -133,6 +137,9 @@ impl OllamaManager {
             return Ok(());
         }
 
+        // 部分的な残骸があると pull が失敗することがあるため、事前にクリーンアップを試す（ベストエフォート）
+        let _ = self.remove_model(name).await;
+
         info!("Model {} not found. Pulling...", name);
         self.pull_model(name).await?;
 
@@ -156,6 +163,24 @@ impl OllamaManager {
 
         let models = self.fetch_models(false).await?;
         Ok(models.iter().any(|entry| tag_matches_model(entry, name)))
+    }
+
+    /// モデルキャッシュを削除（ベストエフォート）
+    pub async fn remove_model(&self, model: &str) -> AgentResult<()> {
+        let mut command = Command::new(&self.ollama_path);
+        command
+            .arg("rm")
+            .arg(model)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        if let Ok(mut child) = command.spawn() {
+            let _ = tokio::time::timeout(Duration::from_secs(30), async move {
+                let _ = child.wait();
+            })
+            .await;
+        }
+        Ok(())
     }
 
     /// モデル一覧を取得
@@ -339,7 +364,8 @@ impl OllamaManager {
         Ok(())
     }
 
-    fn api_base(&self) -> String {
+    /// OpenAI互換APIのベースURLを返す（環境変数が未設定ならローカルポート）
+    pub fn api_base(&self) -> String {
         if let Ok(raw) = std::env::var("OLLAMA_API_BASE") {
             let trimmed = raw.trim().trim_end_matches('/').to_string();
             if trimmed.is_empty() {
@@ -1077,10 +1103,11 @@ mod tests {
 
     #[test]
     fn test_pick_model_for_memory_thresholds() {
+        assert_eq!(pick_model_for_memory(90.0), "gpt-oss:120b");
+        assert_eq!(pick_model_for_memory(32.0), "qwen3-coder:30b");
+        assert_eq!(pick_model_for_memory(18.0), "gpt-oss:20b");
         assert_eq!(pick_model_for_memory(16.0), "gpt-oss:20b");
-        assert_eq!(pick_model_for_memory(8.0), "gpt-oss:7b");
-        assert_eq!(pick_model_for_memory(4.5), "gpt-oss:3b");
-        assert_eq!(pick_model_for_memory(0.5), "gpt-oss:1b");
+        assert_eq!(pick_model_for_memory(12.0), "gpt-oss-safeguard:20b");
     }
 
     #[test]

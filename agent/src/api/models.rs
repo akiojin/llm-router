@@ -17,6 +17,38 @@ pub struct AppState {
     pub ollama_manager: Arc<Mutex<OllamaManager>>,
     /// コーディネーターURL（進捗報告用）
     pub coordinator_url: String,
+    /// モデル→Ollamaのプール
+    pub ollama_pool: crate::ollama_pool::OllamaPool,
+    /// 初期化状態
+    pub init_state: Arc<Mutex<InitState>>,
+    /// コーディネーターが要求するモデル一覧（キャッシュ）
+    pub supported_models: Arc<Mutex<Vec<String>>>,
+}
+
+impl AppState {
+    /// エージェントが初期化中かどうか
+    pub async fn initializing(&self) -> bool {
+        self.init_state.lock().await.initializing
+    }
+
+    /// 起動済みモデル数/総数を返す
+    pub async fn ready_models(&self) -> Option<(u8, u8)> {
+        self.init_state.lock().await.ready_models
+    }
+
+    /// 対応モデル一覧を返す
+    pub async fn models(&self) -> Vec<String> {
+        self.supported_models.lock().await.clone()
+    }
+}
+
+/// 初期化進捗を共有するための状態
+#[derive(Debug, Clone, Copy)]
+pub struct InitState {
+    /// 初期化中フラグ
+    pub initializing: bool,
+    /// 起動済みモデル数/総数
+    pub ready_models: Option<(u8, u8)>,
 }
 
 /// モデルプルリクエスト
@@ -74,6 +106,19 @@ pub async fn pull_model(
         .ensure_model(&model)
         .await
         .map_err(|e| AppError(format!("Failed to pull model {}: {}", model, e)))?;
+
+    // init_state を前進させる（best-effort）。callerは全モデル分のpullを直列で呼ぶため、最終的に total に到達する見込み。
+    {
+        let mut st = state.init_state.lock().await;
+        let current = st
+            .ready_models
+            .unwrap_or((0, state.supported_models.lock().await.len() as u8));
+        let next_ready = current.0.saturating_add(1).min(current.1);
+        st.ready_models = Some((next_ready, current.1));
+        if next_ready >= current.1 {
+            st.initializing = false;
+        }
+    }
 
     // 進捗100%を報告
     if let Err(e) = report_progress(&state.coordinator_url, task_id, 1.0, None).await {

@@ -1,0 +1,6 @@
+- [ ] Phase 0: Research 完了  
+- [ ] Phase 1: Design 完了  
+- [ ] Phase 2: Task planning 完了  
+- [ ] Phase 3: Tasks 生成済み  
+- [ ] Phase 4: 実装完了  
+- [ ] Phase 5: 検証合格  

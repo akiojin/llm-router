@@ -116,6 +116,8 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             gpu_capability_score: None,
             active_requests: 2,
             average_response_time_ms: None,
+            initializing: false,
+            ready_models: None,
         })
         .await
         .unwrap();
@@ -134,6 +136,8 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
             gpu_capability_score: None,
             active_requests: 0,
             average_response_time_ms: None,
+            initializing: false,
+            ready_models: None,
         })
         .await
         .unwrap();
@@ -215,6 +219,8 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             gpu_capability_score: None,
             active_requests: 1,
             average_response_time_ms: Some(250.0),
+            initializing: false,
+            ready_models: None,
         })
         .await
         .unwrap();
@@ -233,6 +239,8 @@ async fn test_load_based_balancing_prefers_lower_latency() {
             gpu_capability_score: None,
             active_requests: 1,
             average_response_time_ms: Some(120.0),
+            initializing: false,
+            ready_models: None,
         })
         .await
         .unwrap();

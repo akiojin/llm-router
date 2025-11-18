@@ -9,6 +9,8 @@ pub mod client;
 
 /// Ollama管理（自動ダウンロード・起動）
 pub mod ollama;
+/// 複数Ollamaプロセス管理
+pub mod ollama_pool;
 
 /// メトリクス収集（CPU/メモリ監視）
 pub mod metrics;

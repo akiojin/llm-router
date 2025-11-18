@@ -18,6 +18,3 @@ pub mod error;
 
 /// ログユーティリティ
 pub mod log;
-
-/// 認証関連型定義
-pub mod auth;

@@ -8,6 +8,9 @@ use ollama_coordinator_agent::{
     api, client::CoordinatorClient, logging, metrics::MetricsCollector, ollama::OllamaManager,
     registration::gpu_devices_valid,
 };
+mod model_sync;
+use model_sync::fetch_models;
+use ollama_coordinator_agent::ollama_pool::OllamaPool;
 use ollama_coordinator_common::{
     error::{AgentError, AgentResult},
     protocol::{HealthCheckRequest, RegisterRequest, RegisterResponse},
@@ -105,6 +108,49 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     let mut metrics_collector =
         MetricsCollector::with_ollama_path(Some(ollama_manager.ollama_path().to_path_buf()));
 
+    // 先にエージェントAPIサーバーを起動（コーディネーター登録前のヘルスチェックに応答するため）
+    let agent_api_port: u16 = std::env::var("AGENT_API_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(ollama_port + 1); // デフォルトはOllamaポート+1
+
+    let ollama_manager_for_api = Arc::new(Mutex::new(ollama_manager));
+    let ollama_manager_clone = ollama_manager_for_api.clone();
+    let ollama_pool = OllamaPool::new(ollama_port, ollama_port + 200);
+    let init_state = Arc::new(Mutex::new(api::models::InitState {
+        initializing: true,
+        ready_models: None,
+    }));
+
+    // プレースホルダー（実際のリストは登録後に取得し上書き）
+    let supported_models_placeholder = Arc::new(Mutex::new(Vec::<String>::new()));
+
+    let state = api::models::AppState {
+        ollama_manager: ollama_manager_for_api,
+        coordinator_url: coordinator_url.clone(),
+        ollama_pool,
+        init_state: init_state.clone(),
+        supported_models: supported_models_placeholder.clone(),
+    };
+    let app_state = state.clone();
+    let app = api::create_router(app_state);
+    let bind_addr = format!("0.0.0.0:{}", agent_api_port);
+
+    info!(
+        "Starting agent HTTP server on {} (pre-registration)",
+        bind_addr
+    );
+
+    // HTTPサーバーをバックグラウンドで起動
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind(&bind_addr)
+            .await
+            .expect("Failed to bind agent HTTP server");
+        axum::serve(listener, app)
+            .await
+            .expect("Agent HTTP server error");
+    });
+
     // エージェント登録
     let gpu_devices = metrics_collector.gpu_devices();
     if !gpu_devices_valid(&gpu_devices) {
@@ -149,6 +195,53 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     let agent_id = register_response.agent_id;
     info!("Registered successfully! Agent ID: {}", agent_id);
 
+    // 対応モデルを取得し、全モデルを先に確保（モデルごとに独立した Ollama インスタンスを起動）
+    let model_list = fetch_models(&coordinator_url).await.unwrap_or_default();
+    {
+        let mut list = supported_models_placeholder.lock().await;
+        *list = model_list.clone();
+    }
+    let total_models = model_list.len().min(u8::MAX as usize) as u8;
+    {
+        let mut st = init_state.lock().await;
+        st.initializing = true;
+        st.ready_models = Some((0, total_models));
+    }
+
+    // コーディネーターがサポートしないモデルは事前に削除して整合性を保つ
+    {
+        let supported = model_list
+            .iter()
+            .map(|s| s.to_lowercase())
+            .collect::<Vec<_>>();
+        let manager = ollama_manager_clone.lock().await;
+        if let Ok(existing) = manager.list_models().await {
+            for m in existing {
+                if !supported.iter().any(|s| s == &m.to_lowercase()) {
+                    info!("Removing unsupported model {}", m);
+                    let _ = manager.remove_model(&m).await;
+                }
+            }
+        }
+    }
+
+    let mut ready: u8 = 0;
+    for m in &model_list {
+        match state.ollama_pool.ensure(m).await {
+            Ok(_) => {
+                ready = ready.saturating_add(1);
+                let mut st = init_state.lock().await;
+                st.ready_models = Some((ready, total_models));
+            }
+            Err(e) => warn!("Failed to ensure model {}: {}", m, e),
+        }
+    }
+    {
+        let mut st = init_state.lock().await;
+        st.initializing = false;
+        st.ready_models = Some((ready, total_models));
+    }
+
     // GPU能力情報を取得（静的な情報、起動時のみ）
     let gpu_capability = metrics_collector.get_gpu_capability();
     if let Some(ref capability) = gpu_capability {
@@ -163,33 +256,36 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
         );
     }
 
-    // HTTPサーバーを起動（コーディネーターからのモデルプル要求を受信）
-    let ollama_manager_for_api = Arc::new(Mutex::new(ollama_manager));
-    let ollama_manager_clone = ollama_manager_for_api.clone();
+    // 初回ハートビートを送信（登録直後に状態を同期）
+    if let Err(e) = send_heartbeat_once(
+        &mut coordinator_client,
+        agent_id,
+        &mut metrics_collector,
+        &gpu_capability,
+        &init_state,
+    )
+    .await
+    {
+        warn!("Initial heartbeat failed: {}", e);
+    }
 
-    let agent_api_port: u16 = std::env::var("AGENT_API_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(11435); // デフォルトはOllamaポート+1
-
-    let state = api::models::AppState {
-        ollama_manager: ollama_manager_for_api,
-        coordinator_url: coordinator_url.clone(),
-    };
-    let app = api::create_router(state);
-    let bind_addr = format!("0.0.0.0:{}", agent_api_port);
-
-    info!("Starting agent HTTP server on {}", bind_addr);
-
-    // HTTPサーバーをバックグラウンドで起動
-    tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(&bind_addr)
-            .await
-            .expect("Failed to bind agent HTTP server");
-        axum::serve(listener, app)
-            .await
-            .expect("Agent HTTP server error");
-    });
+    // pull によって ready_models が進んだ後、初期化完了なら即座に同期ハートビートを追加で送る
+    if {
+        let st = init_state.lock().await;
+        matches!(st.ready_models, Some((ready, total)) if total > 0 && ready >= total)
+    } {
+        if let Err(e) = send_heartbeat_once(
+            &mut coordinator_client,
+            agent_id,
+            &mut metrics_collector,
+            &gpu_capability,
+            &init_state,
+        )
+        .await
+        {
+            warn!("Post-init heartbeat failed: {}", e);
+        }
+    }
 
     // ハートビート送信タスク
     let mut heartbeat_timer = interval(Duration::from_secs(heartbeat_interval_secs));
@@ -203,7 +299,8 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
             Ok(metrics) => metrics,
             Err(e) => {
                 warn!("Failed to collect metrics: {}", e);
-                continue;
+                // 収集に失敗してもハートビートは送る（offline化を防ぐ）
+                ollama_coordinator_agent::metrics::SystemMetrics::placeholder()
             }
         };
 
@@ -217,6 +314,15 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
                     Vec::new()
                 }
             }
+        };
+
+        let ready_models = {
+            let st = init_state.lock().await;
+            st.ready_models
+        };
+        let initializing_flag = {
+            let st = init_state.lock().await;
+            st.initializing
         };
 
         let heartbeat_req = HealthCheckRequest {
@@ -238,6 +344,8 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
             active_requests: 0,
             average_response_time_ms: None,
             loaded_models: models,
+            initializing: initializing_flag,
+            ready_models,
         };
 
         match coordinator_client.send_heartbeat(heartbeat_req).await {
@@ -270,6 +378,57 @@ async fn run_agent(config: LaunchConfig) -> AgentResult<()> {
     {
         Ok(())
     }
+}
+
+#[allow(dead_code)]
+async fn fetch_coordinator_models(coordinator_url: &str) -> AgentResult<Vec<String>> {
+    let url = format!("{}/v1/models", coordinator_url.trim_end_matches('/'));
+    let client = reqwest::Client::new();
+    let mut last_err = None;
+    for attempt in 1..=3 {
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    last_err = Some(AgentError::CoordinatorConnection(format!(
+                        "list models returned HTTP {}",
+                        resp.status()
+                    )));
+                } else {
+                    let body: serde_json::Value = resp.json().await.map_err(|e| {
+                        AgentError::Internal(format!("Failed to parse models response: {}", e))
+                    })?;
+
+                    let models = body
+                        .get("data")
+                        .and_then(|d| d.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|m| {
+                                    m.get("id")
+                                        .and_then(|id| id.as_str())
+                                        .map(|s| s.to_string())
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+
+                    return Ok(models);
+                }
+            }
+            Err(e) => {
+                last_err = Some(AgentError::CoordinatorConnection(format!(
+                    "Failed to list models (attempt {}): {}",
+                    attempt, e
+                )));
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(attempt)).await;
+    }
+
+    Err(last_err.unwrap_or_else(|| {
+        AgentError::CoordinatorConnection("list models failed without details".to_string())
+    }))
 }
 
 #[derive(Clone)]
@@ -312,6 +471,79 @@ fn env_u64(key: &str) -> Option<u64> {
     std::env::var(key)
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
+}
+
+#[allow(dead_code)]
+fn unsupported_models(existing: &[String], supported: &[String]) -> Vec<String> {
+    use std::collections::HashSet;
+
+    let supported_set: HashSet<String> = supported
+        .iter()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    existing
+        .iter()
+        .filter_map(|e| {
+            let trimmed = e.trim();
+            let is_supported = supported_set.contains(&trimmed.to_lowercase());
+            if trimmed.is_empty() || is_supported {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect()
+}
+
+async fn send_heartbeat_once(
+    coordinator_client: &mut CoordinatorClient,
+    agent_id: uuid::Uuid,
+    metrics_collector: &mut MetricsCollector,
+    gpu_capability: &Option<ollama_coordinator_agent::metrics::GpuCapability>,
+    init_state: &Arc<Mutex<api::models::InitState>>,
+) -> AgentResult<()> {
+    let metrics = metrics_collector.collect_metrics().unwrap_or_else(|e| {
+        warn!("Failed to collect metrics for heartbeat: {}", e);
+        ollama_coordinator_agent::metrics::SystemMetrics::placeholder()
+    });
+    let ready_models = {
+        let st = init_state.lock().await;
+        st.ready_models
+    };
+    let initializing_flag = {
+        let st = init_state.lock().await;
+        st.initializing
+    };
+
+    let heartbeat_req = HealthCheckRequest {
+        agent_id,
+        cpu_usage: metrics.cpu_usage,
+        memory_usage: metrics.memory_usage,
+        gpu_usage: metrics.gpu_usage,
+        gpu_memory_usage: metrics.gpu_memory_usage,
+        gpu_memory_total_mb: metrics.gpu_memory_total_mb,
+        gpu_memory_used_mb: metrics.gpu_memory_used_mb,
+        gpu_temperature: metrics.gpu_temperature,
+        gpu_model_name: gpu_capability.as_ref().map(|c| c.model_name.clone()),
+        gpu_compute_capability: gpu_capability
+            .as_ref()
+            .map(|c| format!("{}.{}", c.compute_capability.0, c.compute_capability.1)),
+        gpu_capability_score: gpu_capability.as_ref().map(|c| c.score()),
+        active_requests: 0,
+        average_response_time_ms: None,
+        loaded_models: {
+            let st = init_state.lock().await;
+            st.ready_models
+                .map(|(ready, _)| vec![format!("ready:{ready}")])
+                .unwrap_or_default()
+        },
+        initializing: initializing_flag,
+        ready_models,
+    };
+
+    coordinator_client.send_heartbeat(heartbeat_req).await
 }
 
 /// ローカルIPアドレスを取得
@@ -661,4 +893,21 @@ mod tests {
         let result = register_with_retry(&mut client, register_req).await;
         assert!(result.is_err());
     }
+}
+#[test]
+fn test_unsupported_models_filters_only_extra_models() {
+    let existing = vec![
+        "gpt-oss:20b".to_string(),
+        "extra-old".to_string(),
+        "gpt-oss:120b".to_string(),
+        "QWEN3-CODER:30B".to_string(),
+    ];
+    let supported = vec![
+        "gpt-oss:20b".to_string(),
+        "gpt-oss:120b".to_string(),
+        "gpt-oss-safeguard:20b".to_string(),
+        "qwen3-coder:30b".to_string(),
+    ];
+    let result = unsupported_models(&existing, &supported);
+    assert_eq!(result, vec!["extra-old"]);
 }

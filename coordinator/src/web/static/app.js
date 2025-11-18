@@ -1,66 +1,3 @@
-// === 認証機能 (T077-T078) ===
-
-/**
- * JWTトークンを取得
- * @returns {string|null} JWTトークン
- */
-function getAuthToken() {
-  return localStorage.getItem('jwt_token');
-}
-
-/**
- * 認証済みかチェック
- * @returns {boolean} 認証済みならtrue
- */
-function isAuthenticated() {
-  return !!getAuthToken();
-}
-
-/**
- * ログアウト処理
- */
-function logout() {
-  localStorage.removeItem('jwt_token');
-  window.location.href = '/dashboard/login.html';
-}
-
-/**
- * 認証付きfetch（全APIリクエストに使用）
- * @param {string} url - リクエストURL
- * @param {RequestInit} options - fetchオプション
- * @returns {Promise<Response>} fetchレスポンス
- */
-async function authenticatedFetch(url, options = {}) {
-  // AUTH_DISABLED=true の場合はそのまま実行
-  const token = getAuthToken();
-
-  if (token) {
-    // JWTトークンをAuthorizationヘッダーに追加
-    options.headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
-  }
-
-  try {
-    const response = await fetch(url, options);
-
-    // 401 Unauthorized の場合はログイン画面へリダイレクト (T078)
-    if (response.status === 401) {
-      console.warn('Authentication required, redirecting to login');
-      logout();
-      return response; // リダイレクト後だが一応returnする
-    }
-
-    return response;
-  } catch (error) {
-    console.error('Fetch error:', error);
-    throw error;
-  }
-}
-
-// === ダッシュボード機能 ===
-
 const REFRESH_INTERVAL_MS = 5000;
 const PERFORMANCE_THRESHOLDS = Object.freeze({
   fetch: 2000,
@@ -129,7 +66,6 @@ const state = {
 
 let requestsChart = null;
 let agentMetricsChart = null;
-let modelsInitPromise = null;
 const modalRefs = {
   modal: null,
   close: null,
@@ -189,6 +125,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalDelete = document.getElementById("agent-modal-delete");
   const modalDisconnect = document.getElementById("agent-modal-disconnect");
   const tbody = document.getElementById("agents-body");
+
+  // リロード直後に詳細モーダルが開いたままにならないよう、確実に非表示へ初期化
+  modal?.classList.add("hidden");
+  document.getElementById("request-modal")?.classList.add("hidden");
 
   initTabs();
 
@@ -473,14 +413,12 @@ async function applyOverviewData(overview) {
   renderAgents();
   renderHistory();
   renderLogsAgentOptions();
-  if (state.currentTab === 'logs') {
-    maybeRefreshLogs();
-  }
+  // タブレス表示のため常にログ更新を試みる
+  maybeRefreshLogs();
   hideError();
   setConnectionStatus("online");
   updateLastRefreshed(new Date(), generatedAt);
 
-  await ensureModelsUiReady();
 }
 
 async function fetchLegacyOverview() {
@@ -563,7 +501,7 @@ function evaluatePerformanceSeverity() {
 
 async function fetchJson(url, options = {}) {
   const { headers, ...rest } = options;
-  const response = await authenticatedFetch(url, {
+  const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
     headers: {
@@ -868,7 +806,9 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
 
   const statusLabel =
     agent.status === "online"
-      ? '<span class="badge badge--online">Online</span>'
+      ? agent.initializing
+        ? `<span class="badge badge--warming">Warming up${formatReadyProgress(agent.ready_models)}</span>`
+        : '<span class="badge badge--online">Online</span>'
       : '<span class="badge badge--offline">Offline</span>';
 
   const metricsBadge = agent.metrics_stale
@@ -898,15 +838,10 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
     typeof agent.gpu_memory_usage === "number"
       ? `<div class="cell-sub">GPU ${formatPercentage(agent.gpu_memory_usage)} (${gpuModelDisplay})</div>`
       : `<div class="cell-sub">${gpuModelDisplay}</div>`;
-  const models = getModelList(agent);
-  const primaryModelDisplay = models.length ? models[0] : "-";
-  const extraModels = models.slice(1, 4).join(", ");
-  const remainderCount = Math.max(0, models.length - 4);
-  const modelSub = extraModels
-    ? `<div class="cell-sub">${escapeHtml(extraModels)}${
-        remainderCount > 0 ? ` 他${remainderCount}件` : ""
-      }</div>`
-    : "";
+  const readyText =
+    agent.initializing || agent.ready_models
+      ? `<div class="cell-sub ready-progress">${formatReadyProgress(agent.ready_models)}</div>`
+      : "";
 
   row.innerHTML = `
     <td>
@@ -924,6 +859,7 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
     <td>
       <div class="cell-title">${escapeHtml(agent.ip_address)}</div>
       <div class="cell-sub">Port ${Number.isFinite(agent.ollama_port) ? escapeHtml(agent.ollama_port) : "-"}</div>
+      ${readyText}
     </td>
     <td>${statusLabel}</td>
     <td>${formatDuration(agent.uptime_seconds)}</td>
@@ -943,10 +879,6 @@ function buildAgentRow(agent, row = document.createElement("tr")) {
       </div>
     </td>
     <td>${formatAverage(agent.average_response_time_ms)}</td>
-    <td>
-      <div class="cell-title">${escapeHtml(primaryModelDisplay)}</div>
-      ${modelSub}
-    </td>
     <td>
       <div class="cell-title">${formatTimestamp(agent.last_seen)}</div>
       <div class="cell-sub">${metricsDetail}</div>
@@ -972,7 +904,7 @@ function syncAgentRowSelection(row, agentId) {
 function buildPlaceholderRow(message) {
   const row = document.createElement("tr");
   row.className = "empty-row";
-  row.innerHTML = `<td colspan="13">${escapeHtml(message)}</td>`;
+  row.innerHTML = `<td colspan="12">${escapeHtml(message)}</td>`;
   return row;
 }
 
@@ -991,6 +923,8 @@ function getAgentSignature(agent) {
     agent.gpu_capability_score ?? "",
     agent.gpu_model_name ?? "",
     agent.gpu_compute_capability ?? "",
+    agent.initializing ? 1 : 0,
+    Array.isArray(agent.ready_models) ? agent.ready_models.join(":") : "",
     agent.active_requests ?? 0,
     agent.total_requests ?? 0,
     agent.successful_requests ?? 0,
@@ -999,7 +933,6 @@ function getAgentSignature(agent) {
     agent.last_seen ?? "",
     agent.metrics_last_updated_at ?? "",
     agent.metrics_stale ? 1 : 0,
-    getModelList(agent).join("|") ?? "",
   ].join("|");
 }
 
@@ -1019,13 +952,6 @@ function getDisplayName(agent) {
   return agent.machine_name ?? "-";
 }
 
-function getModelList(agent) {
-  if (!agent) return [];
-  const list = Array.isArray(agent.loaded_models) ? agent.loaded_models : [];
-  return list
-    .map((model) => (typeof model === "string" ? model.trim() : ""))
-    .filter((model) => model.length);
-}
 
 function filterAgent(agent, statusFilter, query) {
   if (statusFilter === "online" && agent.status !== "online") {
@@ -1042,10 +968,7 @@ function filterAgent(agent, statusFilter, query) {
   const machine = (agent.machine_name ?? "").toLowerCase();
   const ip = (agent.ip_address ?? "").toLowerCase();
   const custom = (agent.custom_name ?? "").toLowerCase();
-  const models = getModelList(agent).join(" ").toLowerCase();
-  return (
-    machine.includes(query) || ip.includes(query) || custom.includes(query) || models.includes(query)
-  );
+  return (machine.includes(query) || ip.includes(query) || custom.includes(query));
 }
 
 function getFilteredAgents() {
@@ -1135,7 +1058,8 @@ function openAgentModal(agent) {
   modalRefs.ipAddress.textContent = agent.ip_address ?? "-";
   modalRefs.ollamaVersion.textContent = agent.ollama_version ?? "-";
   if (modalRefs.loadedModels) {
-    const models = getModelList(agent);
+    const models = Array.isArray(agent.loaded_models) ? agent.loaded_models : [];
+
     modalRefs.loadedModels.textContent = models.length ? models.join(", ") : "-";
   }
   modalRefs.uptime.textContent = formatDuration(agent.uptime_seconds);
@@ -1462,7 +1386,7 @@ async function saveAgentSettings(agentId) {
   };
 
   try {
-    const response = await authenticatedFetch(`/api/agents/${agentId}/settings`, {
+    const response = await fetch(`/api/agents/${agentId}/settings`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -1485,7 +1409,7 @@ async function saveAgentSettings(agentId) {
 
 async function deleteAgent(agentId) {
   try {
-    const response = await authenticatedFetch(`/api/agents/${agentId}`, {
+    const response = await fetch(`/api/agents/${agentId}`, {
       method: "DELETE",
       headers: {
         Accept: "application/json",
@@ -1503,7 +1427,7 @@ async function deleteAgent(agentId) {
 
 async function disconnectAgent(agentId) {
   try {
-    const response = await authenticatedFetch(`/api/agents/${agentId}/disconnect`, {
+    const response = await fetch(`/api/agents/${agentId}/disconnect`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -1538,12 +1462,10 @@ function downloadCsv(data, filename) {
     "gpu_memory_usage",
     "registered_at",
     "last_seen",
-    "loaded_models",
     "tags",
   ];
 
   const rows = data.map((agent) => {
-    const models = getModelList(agent).join("|");
     return [
       agent.id,
       getDisplayName(agent),
@@ -1557,7 +1479,6 @@ function downloadCsv(data, filename) {
       agent.gpu_memory_usage ?? "",
       agent.registered_at ?? "",
       agent.last_seen ?? "",
-      models,
       Array.isArray(agent.tags) ? agent.tags.join("|") : "",
     ]
       .map((value) => `"${String(value).replace(/"/g, '""')}"`)
@@ -1666,6 +1587,13 @@ function formatAverage(value) {
   return `${value.toFixed(0)} ms`;
 }
 
+function formatReadyProgress(ready) {
+  if (!ready || !Array.isArray(ready) || ready.length !== 2) return "";
+  const [done, total] = ready;
+  if (typeof done !== "number" || typeof total !== "number" || total === 0) return "";
+  return `(ready ${done}/${total})`;
+}
+
 function formatTimestamp(isoString) {
   if (!isoString) {
     return "-";
@@ -1678,14 +1606,19 @@ function formatDate(date) {
     return "-";
   }
 
-  return date.toLocaleString("ja-JP", {
+  // ブラウザのローカルタイムゾーンで表示し、タイムゾーン略称を明示する
+  const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
+    hour12: false,
+    timeZone,
+    timeZoneName: "short",
+  }).format(date);
 }
 
 function formatMetricLabel(date) {
@@ -1742,7 +1675,7 @@ let historyPerPage = 50;
 
 async function fetchRequestHistory() {
   try {
-    const response = await authenticatedFetch("/api/dashboard/request-responses");
+    const response = await fetch("/api/dashboard/request-responses");
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -1843,7 +1776,7 @@ function updateHistoryPagination(currentPage, totalPages) {
 
 async function showRequestDetail(id) {
   try {
-    const response = await authenticatedFetch(`/api/dashboard/request-responses/${id}`);
+    const response = await fetch(`/api/dashboard/request-responses/${id}`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -2340,114 +2273,19 @@ function renderModalAgentLogs() {
  * タブ切り替え処理
  */
 function switchTab(tabName) {
-  // タブボタンのアクティブ状態を更新
-  document.querySelectorAll('.tab-button').forEach((btn) => {
-    if (btn.dataset.tab === tabName) {
-      btn.classList.add('tab-button--active');
-      btn.setAttribute('aria-selected', 'true');
-    } else {
-      btn.classList.remove('tab-button--active');
-      btn.setAttribute('aria-selected', 'false');
-    }
-  });
-
-  // タブパネルの表示/非表示を切り替え
+  // タブUIは廃止。全パネルを常時表示し、currentTab はログ自動更新の判定にだけ使う。
   document.querySelectorAll('.tab-panel').forEach((panel) => {
-    if (panel.id === `tab-${tabName}`) {
-      panel.classList.add('tab-panel--active');
-      panel.setAttribute('aria-hidden', 'false');
-    } else {
-      panel.classList.remove('tab-panel--active');
-      panel.setAttribute('aria-hidden', 'true');
-    }
+    panel.classList.add('tab-panel--active');
+    panel.removeAttribute('aria-hidden');
   });
 
   state.currentTab = tabName;
-
-  // モデル管理タブがアクティブになった時の処理
-  if (tabName === 'models' && typeof window.updateModelsUI === 'function') {
-    window.updateModelsUI(state.agents);
-  }
-
-  if (tabName === 'logs') {
-    maybeRefreshLogs();
-  }
 }
 
 /**
  * タブ切り替えイベントリスナーを登録
  */
 function initTabs() {
-  document.querySelectorAll('.tab-button').forEach((button) => {
-    button.addEventListener('click', () => {
-      switchTab(button.dataset.tab);
-    });
-
-    // キーボードナビゲーション
-    button.addEventListener('keydown', (e) => {
-      const buttons = Array.from(document.querySelectorAll('.tab-button'));
-      const index = buttons.indexOf(button);
-
-      if (e.key === 'ArrowLeft' && index > 0) {
-        buttons[index - 1].focus();
-      } else if (e.key === 'ArrowRight' && index < buttons.length - 1) {
-        buttons[index + 1].focus();
-      } else if (e.key === 'Home') {
-        buttons[0].focus();
-      } else if (e.key === 'End') {
-        buttons[buttons.length - 1].focus();
-      }
-    });
-  });
+  // 旧タブパネルは全て表示状態にしておく
+  switchTab('all');
 }
-
-// ========== models.js統合 ==========
-
-/**
- * models.jsを動的にインポートしてモデル管理UIを初期化
- */
-async function initModels() {
-  const modelsModule = await import('/dashboard/models.js');
-
-  if (typeof modelsModule.initModelsUI !== 'function') {
-    throw new Error('models.js is missing initModelsUI export');
-  }
-
-  await modelsModule.initModelsUI(state.agents);
-
-  if (typeof modelsModule.updateModelsUI === 'function') {
-    window.updateModelsUI = modelsModule.updateModelsUI;
-  }
-}
-
-async function ensureModelsUiReady() {
-  if (typeof window.updateModelsUI === 'function') {
-    window.updateModelsUI(state.agents);
-    return;
-  }
-
-  if (!modelsInitPromise) {
-    modelsInitPromise = initModels().catch((error) => {
-      modelsInitPromise = null;
-      throw error;
-    });
-  }
-
-  try {
-    await modelsInitPromise;
-    if (typeof window.updateModelsUI === 'function') {
-      window.updateModelsUI(state.agents);
-    }
-  } catch (error) {
-    console.error('Failed to initialize models UI:', error);
-  }
-}
-
-// ログアウトボタンのイベントリスナー
-const logoutButton = document.getElementById("logout-button");
-if (logoutButton) {
-  logoutButton.addEventListener("click", function() {
-    logout();
-  });
-}
-

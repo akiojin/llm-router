@@ -40,15 +40,15 @@ pub struct RegisterResponse {
     pub agent_id: Uuid,
     /// ステータス ("registered" または "updated")
     pub status: RegisterStatus,
+    /// エージェントAPIポート（OpenAI互換API）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_api_port: Option<u16>,
     /// 自動配布されたモデル名（オプション）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_distributed_model: Option<String>,
     /// ダウンロードタスクID（オプション）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub download_task_id: Option<Uuid>,
-    /// エージェント認証トークン（新規登録時のみ）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_token: Option<String>,
 }
 
 /// 登録ステータス
@@ -102,6 +102,12 @@ pub struct HealthCheckRequest {
     /// エージェントがロード済みのモデル一覧
     #[serde(default)]
     pub loaded_models: Vec<String>,
+    /// モデル起動中フラグ
+    #[serde(default)]
+    pub initializing: bool,
+    /// 起動済みモデル数/総数
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready_models: Option<(u8, u8)>,
 }
 
 /// Ollamaチャットリクエスト
@@ -259,6 +265,8 @@ mod tests {
             active_requests: 3,
             average_response_time_ms: Some(123.4),
             loaded_models: vec!["gpt-oss:20b".to_string()],
+            initializing: true,
+            ready_models: Some((1, 2)),
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -293,6 +301,8 @@ mod tests {
             active_requests: 2,
             average_response_time_ms: Some(100.0),
             loaded_models: vec!["llama3:8b".to_string()],
+            initializing: false,
+            ready_models: Some((1, 1)),
         };
 
         let json = serde_json::to_string(&request).unwrap();

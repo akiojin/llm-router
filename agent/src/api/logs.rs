@@ -1,108 +1,131 @@
-//! ログ閲覧エンドポイント
+//! ログ閲覧API (Agent側)
 
-use super::models::AppError;
 use crate::logging;
-use axum::{extract::Query, Json};
-use ollama_coordinator_common::log::{tail_json_logs, LogEntry};
+use axum::{extract::Query, http::StatusCode, response::IntoResponse, Json};
+use ollama_coordinator_common::log::tail_json_logs;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use tokio::task;
 
-const DEFAULT_LIMIT: usize = 200;
-const MAX_LIMIT: usize = 1000;
+const DEFAULT_TAIL: usize = 200;
+const MAX_TAIL: usize = 2000;
 
-/// クエリパラメーター（ログ取得件数）
-#[derive(Debug, Clone, Deserialize)]
+/// ログ取得のクエリパラメータ
+#[derive(Debug, Deserialize)]
 pub struct LogQuery {
-    /// 取得するログ件数（1-1000）
-    #[serde(default = "default_limit")]
-    pub limit: usize,
+    #[serde(default = "default_tail")]
+    /// 末尾から取得する行数
+    pub tail: usize,
 }
 
-/// ログ一覧レスポンス
-#[derive(Debug, Clone, Serialize)]
-pub struct AgentLogResponse {
-    /// ログエントリ一覧
-    pub entries: Vec<LogEntry>,
-    /// ログファイルパス（存在する場合）
+fn default_tail() -> usize {
+    DEFAULT_TAIL
+}
+
+fn clamp_tail(tail: usize) -> usize {
+    tail.clamp(1, MAX_TAIL)
+}
+
+/// ログ取得レスポンス
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LogResponse {
+    /// 取得したログエントリ
+    pub entries: Vec<ollama_coordinator_common::log::LogEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// 対象ログファイルパス（存在しない場合は None）
     pub path: Option<String>,
 }
 
-fn default_limit() -> usize {
-    DEFAULT_LIMIT
+/// GET /api/logs?tail=N
+pub async fn list_logs(Query(query): Query<LogQuery>) -> impl IntoResponse {
+    let tail = clamp_tail(query.tail);
+    let log_path = match logging::log_file_path() {
+        Ok(path) => path,
+        Err(_) => {
+            return (
+                StatusCode::OK,
+                Json(LogResponse {
+                    entries: vec![],
+                    path: None,
+                }),
+            );
+        }
+    };
+
+    let entries = match read_logs(log_path.clone(), tail).await {
+        Ok(entries) => entries,
+        Err(err) => {
+            tracing::warn!(error = %err, "Failed to read logs");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(LogResponse {
+                    entries: vec![],
+                    path: Some(log_path.display().to_string()),
+                }),
+            );
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(LogResponse {
+            entries,
+            path: Some(log_path.display().to_string()),
+        }),
+    )
 }
 
-fn clamp_limit(limit: usize) -> usize {
-    limit.clamp(1, MAX_LIMIT)
-}
-
-/// GET /logs - エージェントローカルログを取得
-pub async fn list_logs(Query(query): Query<LogQuery>) -> Result<Json<AgentLogResponse>, AppError> {
-    let path = logging::log_file_path()
-        .map_err(|err| AppError::from(format!("Failed to resolve agent log path: {err}")))?;
-    let entries = read_logs(path.clone(), clamp_limit(query.limit))
+async fn read_logs(
+    path: std::path::PathBuf,
+    tail: usize,
+) -> Result<Vec<ollama_coordinator_common::log::LogEntry>, String> {
+    task::spawn_blocking(move || tail_json_logs(&path, tail))
         .await
-        .map_err(AppError::from)?;
-    Ok(Json(AgentLogResponse {
-        entries,
-        path: Some(path.display().to_string()),
-    }))
-}
-
-async fn read_logs(path: PathBuf, limit: usize) -> Result<Vec<LogEntry>, String> {
-    task::spawn_blocking(move || tail_json_logs(&path, limit))
-        .await
-        .map_err(|err| format!("Failed to join log reader: {err}"))?
-        .map_err(|err| format!("Failed to read log file: {err}"))
+        .map_err(|e| format!("join error: {e}"))?
+        .map_err(|e| format!("read error: {e}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use once_cell::sync::Lazy;
-    use serde_json::json;
-    use std::fs::OpenOptions;
-    use std::io::Write;
+    use axum::body::to_bytes;
+    use std::fs;
     use tempfile::tempdir;
-    use tokio::sync::Mutex;
-
-    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     #[tokio::test]
-    async fn list_logs_returns_entries() {
-        let _guard = ENV_LOCK.lock().await;
-        let temp = tempdir().unwrap();
-        std::env::set_var("OLLAMA_AGENT_DATA_DIR", temp.path());
-        let path = logging::log_file_path().unwrap();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
+    async fn returns_empty_when_missing() {
+        // override data dir so log file is absent
+        let tmp = tempdir().unwrap();
+        std::env::set_var("OLLAMA_AGENT_DATA_DIR", tmp.path());
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .unwrap();
-        writeln!(
-            file,
-            "{}",
-            json!({
-                "timestamp": "2025-11-14T00:00:00Z",
-                "level": "INFO",
-                "target": "agent",
-                "fields": { "message": "agent-started" }
-            })
+        let res = list_logs(Query(LogQuery { tail: 10 }))
+            .await
+            .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body: LogResponse = serde_json::from_slice(&bytes).unwrap();
+        assert!(body.entries.is_empty());
+
+        std::env::remove_var("OLLAMA_AGENT_DATA_DIR");
+    }
+
+    #[tokio::test]
+    async fn tails_logs() {
+        let tmp = tempdir().unwrap();
+        std::env::set_var("OLLAMA_AGENT_DATA_DIR", tmp.path());
+        let log_path = logging::log_file_path().unwrap();
+        fs::create_dir_all(log_path.parent().unwrap()).unwrap();
+        fs::write(
+            &log_path,
+            "{\"timestamp\":\"2025-11-17T00:00:00Z\",\"level\":\"INFO\",\"target\":\"t\",\"fields\":{\"message\":\"first\"}}\n{\"timestamp\":\"2025-11-17T00:01:00Z\",\"level\":\"INFO\",\"target\":\"t\",\"fields\":{\"message\":\"second\"}}\n",
         )
         .unwrap();
 
-        let response = list_logs(Query(LogQuery { limit: 10 })).await.unwrap().0;
-        assert_eq!(response.entries.len(), 1);
-        assert_eq!(
-            response.entries[0].message.as_deref(),
-            Some("agent-started")
-        );
-        assert!(response.path.is_some());
+        let res = list_logs(Query(LogQuery { tail: 1 })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body: LogResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body.entries.len(), 1);
+        assert_eq!(body.entries[0].message.as_deref(), Some("second"));
 
         std::env::remove_var("OLLAMA_AGENT_DATA_DIR");
     }

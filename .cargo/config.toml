@@ -13,10 +13,11 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 # macOS x86_64 (Intel) cross-compilation with osxcross
 [target.x86_64-apple-darwin]
-linker = "x86_64-apple-darwin23-clang"
-ar = "x86_64-apple-darwin23-ar"
+# Prefer native toolchain on macOS hosts; override via CARGO_TARGET_* envs when using osxcross
+linker = "clang"
+ar = "ar"
 
 # macOS aarch64 (Apple Silicon) cross-compilation with osxcross
 [target.aarch64-apple-darwin]
-linker = "aarch64-apple-darwin23-clang"
-ar = "aarch64-apple-darwin23-ar"
+linker = "clang"
+ar = "ar"

@@ -23,8 +23,6 @@ Ollama Coordinator is a system that provides unified management and a single API
 - **Cross-Platform Support**: Works on Windows 10+, macOS 12+, and Linux
 - **GPU-Aware Routing**: Intelligent request routing based on GPU capabilities
   and availability
-- **Authentication & Authorization**: Secure access with JWT, API keys, and agent
-  tokens; role-based access control (Admin/Viewer); OpenAI-compatible authentication
 
 ## Load Balancing
 
@@ -370,171 +368,6 @@ OLLAMA_GPU_COUNT=1 \
 ./target/release/ollama-coordinator-agent
 ```
 
-## Authentication
-
-Ollama Coordinator implements multi-layered authentication to secure access to the system.
-
-### Authentication Types
-
-#### 1. JWT Authentication (Admin Users)
-
-JWT-based authentication for web dashboard and management API access.
-
-**Initial Setup:**
-
-On first startup, the coordinator prompts you to create an admin account:
-
-```bash
-./target/release/ollama-coordinator-coordinator
-
-# You will see:
-No admin users found. Please create the first admin account.
-Username: admin
-Password: ********
-Confirm password: ********
-Admin account created successfully!
-```
-
-**Login:**
-
-```bash
-# Login and get JWT token
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "your-password"
-  }'
-
-# Response:
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "admin",
-    "role": "admin"
-  }
-}
-```
-
-**Using JWT Token:**
-
-```bash
-# Access protected endpoints with Bearer token
-curl http://localhost:8080/api/users \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
-**Token Expiration:** JWT tokens expire after 24 hours. Re-login to obtain a new token.
-
-#### 2. API Key Authentication (External Applications)
-
-API keys provide long-lived authentication for external applications and scripts.
-
-**Create API Key:**
-
-```bash
-# Login first to get JWT token
-TOKEN="your-jwt-token"
-
-# Create API key
-curl -X POST http://localhost:8080/api/api-keys \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Production API Key",
-    "expires_at": "2025-12-31T23:59:59Z"
-  }'
-
-# Response:
-{
-  "id": "660f9511-f39c-52e5-c827-557766551111",
-  "key": "sk_1234567890abcdef1234567890abcdef",
-  "name": "Production API Key",
-  "created_at": "2025-11-17T10:00:00Z",
-  "expires_at": "2025-12-31T23:59:59Z"
-}
-```
-
-**Using API Key:**
-
-```bash
-# Use API key for OpenAI-compatible endpoints
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer sk_1234567890abcdef1234567890abcdef" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama2",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
-**List API Keys:**
-
-```bash
-curl http://localhost:8080/api/api-keys \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-**Delete API Key:**
-
-```bash
-curl -X DELETE http://localhost:8080/api/api-keys/{key_id} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-#### 3. Agent Token Authentication (Agents)
-
-Agents receive authentication tokens upon registration for secure communication.
-
-**Agent Registration:**
-
-```bash
-# Agent automatically registers and receives token
-./target/release/ollama-coordinator-agent
-
-# Token is saved to: ~/.ollama-agent/token
-```
-
-**Token is automatically included in all agent requests:**
-
-- Health checks (`POST /api/health`)
-- Metrics updates (`POST /api/agents/:id/metrics`)
-- Agent re-registration
-
-### Protected Endpoints
-
-The following endpoints require authentication:
-
-**JWT Authentication Required:**
-- `GET /api/users` - List users
-- `POST /api/users` - Create user
-- `PUT /api/users/:id` - Update user
-- `DELETE /api/users/:id` - Delete user
-- `GET /api/api-keys` - List API keys
-- `POST /api/api-keys` - Create API key
-- `DELETE /api/api-keys/:id` - Delete API key
-
-**API Key Authentication Required:**
-- `POST /v1/chat/completions` - OpenAI-compatible chat
-- `POST /v1/completions` - OpenAI-compatible completions
-- `POST /api/chat` - Ollama chat (also accepts API key)
-- `POST /api/generate` - Ollama generate (also accepts API key)
-
-**Agent Token Authentication Required:**
-- `POST /api/health` - Agent health check
-- `POST /api/agents/:id/metrics` - Agent metrics update
-
-### Disabling Authentication (Development Only)
-
-For development and testing, authentication can be disabled:
-
-```bash
-AUTH_DISABLED=true ./target/release/ollama-coordinator-coordinator
-```
-
-**Warning:** Never disable authentication in production environments.
-
 ## Usage
 
 ### Basic Usage
@@ -592,8 +425,6 @@ AUTH_DISABLED=true ./target/release/ollama-coordinator-coordinator
 - `HEALTH_CHECK_INTERVAL`: Health check interval in seconds (default: `30`)
 - `AGENT_TIMEOUT`: Agent timeout in seconds (default: `60`)
 - `LOAD_BALANCER_MODE`: Load balancing strategy - `metrics` for metrics-based or `auto` for advanced (default: `auto`)
-- `JWT_SECRET`: Secret key for JWT token signing (randomly generated on first startup)
-- `AUTH_DISABLED`: Disable authentication (default: `false`, **development only**)
 
 #### Agent
 - `COORDINATOR_URL`: Coordinator URL (default: `http://localhost:8080`)
@@ -761,209 +592,6 @@ The file is automatically managed with:
 
 ### Coordinator API
 
-#### Authentication Endpoints
-
-##### POST /api/auth/login
-Login with username and password to obtain a JWT token.
-
-**Request:**
-```json
-{
-  "username": "admin",
-  "password": "your-password"
-}
-```
-
-**Response:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "admin",
-    "role": "admin",
-    "created_at": "2025-11-17T10:00:00Z"
-  }
-}
-```
-
-##### POST /api/auth/logout
-Logout and invalidate the current JWT token.
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Response:** `200 OK`
-
-##### GET /api/auth/me
-Get information about the currently authenticated user.
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Response:**
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "username": "admin",
-  "role": "admin",
-  "created_at": "2025-11-17T10:00:00Z"
-}
-```
-
-#### User Management Endpoints
-
-##### GET /api/users
-List all users (Admin only).
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Response:**
-```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "admin",
-    "role": "admin",
-    "created_at": "2025-11-17T10:00:00Z"
-  }
-]
-```
-
-##### POST /api/users
-Create a new user (Admin only).
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Request:**
-```json
-{
-  "username": "newuser",
-  "password": "secure-password",
-  "role": "viewer"
-}
-```
-
-**Response:**
-```json
-{
-  "id": "660f9511-f39c-52e5-c827-557766551111",
-  "username": "newuser",
-  "role": "viewer",
-  "created_at": "2025-11-17T10:05:00Z"
-}
-```
-
-##### PUT /api/users/:id
-Update a user (Admin only).
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Request:**
-```json
-{
-  "password": "new-password",
-  "role": "admin"
-}
-```
-
-**Response:**
-```json
-{
-  "id": "660f9511-f39c-52e5-c827-557766551111",
-  "username": "newuser",
-  "role": "admin",
-  "created_at": "2025-11-17T10:05:00Z"
-}
-```
-
-##### DELETE /api/users/:id
-Delete a user (Admin only).
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Response:** `204 No Content`
-
-#### API Key Management Endpoints
-
-##### GET /api/api-keys
-List all API keys for the authenticated user.
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Response:**
-```json
-[
-  {
-    "id": "770ea622-g49d-63f6-d938-668877662222",
-    "name": "Production API Key",
-    "created_at": "2025-11-17T10:00:00Z",
-    "expires_at": "2025-12-31T23:59:59Z",
-    "last_used_at": "2025-11-17T11:30:00Z"
-  }
-]
-```
-
-##### POST /api/api-keys
-Create a new API key.
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Request:**
-```json
-{
-  "name": "Production API Key",
-  "expires_at": "2025-12-31T23:59:59Z"
-}
-```
-
-**Response:**
-```json
-{
-  "id": "770ea622-g49d-63f6-d938-668877662222",
-  "key": "sk_1234567890abcdef1234567890abcdef",
-  "name": "Production API Key",
-  "created_at": "2025-11-17T10:00:00Z",
-  "expires_at": "2025-12-31T23:59:59Z"
-}
-```
-
-**Note:** The plaintext `key` is only returned once during creation. Store it securely.
-
-##### DELETE /api/api-keys/:id
-Delete an API key.
-
-**Headers:**
-```
-Authorization: Bearer <jwt-token>
-```
-
-**Response:** `204 No Content`
-
-#### Agent Management Endpoints
-
 #### POST /api/agents
 Register an agent.
 
@@ -981,33 +609,13 @@ Register an agent.
 }
 ```
 
-**Response (First Registration):**
+**Response:**
 ```json
 {
   "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-  "agent_token": "at_1234567890abcdef1234567890abcdef",
   "status": "registered"
 }
 ```
-
-**Response (Re-registration with existing token):**
-```json
-{
-  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-  "agent_token": null,
-  "status": "registered"
-}
-```
-
-**Headers (for re-registration):**
-```
-X-Agent-Token: at_1234567890abcdef1234567890abcdef
-```
-
-**Note:** The `agent_token` is only returned during the first registration.
-For re-registration (e.g., after restart), include the existing token in
-the `X-Agent-Token` header. The token is automatically saved to
-`~/.ollama-agent/token` by the agent.
 
 #### GET /api/agents
 Get list of registered agents.
@@ -1037,11 +645,6 @@ Get list of registered agents.
 #### POST /api/health
 Receive health check information (Agent→Coordinator).
 
-**Headers:**
-```
-X-Agent-Token: at_1234567890abcdef1234567890abcdef
-```
-
 **Request:**
 ```json
 {
@@ -1052,15 +655,8 @@ X-Agent-Token: at_1234567890abcdef1234567890abcdef
 }
 ```
 
-**Response:** `200 OK`
-
 #### POST /api/agents/:id/metrics
 Update agent metrics for load balancing (Agent→Coordinator).
-
-**Headers:**
-```
-X-Agent-Token: at_1234567890abcdef1234567890abcdef
-```
 
 **Request:**
 ```json

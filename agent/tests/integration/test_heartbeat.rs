@@ -52,6 +52,8 @@ async fn test_heartbeat_sending_after_registration() {
         active_requests: 0,
         average_response_time_ms: None,
         loaded_models: Vec::new(),
+        initializing: false,
+        ready_models: None,
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -116,6 +118,8 @@ async fn test_heartbeat_with_real_metrics() {
         active_requests: 0,
         average_response_time_ms: None,
         loaded_models: Vec::new(),
+        initializing: false,
+        ready_models: None,
     };
 
     let heartbeat_result = client.send_heartbeat(heartbeat_req).await;
@@ -153,6 +157,8 @@ async fn test_heartbeat_unregistered_agent() {
         active_requests: 0,
         average_response_time_ms: None,
         loaded_models: Vec::new(),
+        initializing: false,
+        ready_models: None,
     };
 
     // Act: 未登録エージェントでハートビート送信
@@ -210,6 +216,8 @@ async fn test_multiple_heartbeats() {
             active_requests: i,
             average_response_time_ms: None,
             loaded_models: Vec::new(),
+            initializing: false,
+            ready_models: None,
         };
 
         let result = client.send_heartbeat(heartbeat_req).await;

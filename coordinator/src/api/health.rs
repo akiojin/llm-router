@@ -23,6 +23,8 @@ pub async fn health_check(
             req.gpu_model_name.clone(),
             req.gpu_compute_capability.clone(),
             req.gpu_capability_score,
+            Some(req.initializing),
+            req.ready_models,
         )
         .await?;
 
@@ -43,6 +45,8 @@ pub async fn health_check(
             gpu_capability_score: req.gpu_capability_score,
             active_requests: req.active_requests,
             average_response_time_ms: req.average_response_time_ms,
+            initializing: req.initializing,
+            ready_models: req.ready_models,
         })
         .await?;
 
@@ -57,29 +61,23 @@ mod tests {
     use std::net::IpAddr;
     use uuid::Uuid;
 
-    async fn create_test_state() -> AppState {
+    fn create_test_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
-        let db_pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .expect("Failed to create test database");
-        let jwt_secret = "test_jwt_secret_key_for_testing_only".to_string();
         AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
-            db_pool,
-            jwt_secret,
         }
     }
 
     #[tokio::test]
     async fn test_health_check_success() {
-        let state = create_test_state().await;
+        let state = create_test_state();
 
         // まずエージェントを登録
         let register_req = RegisterRequest {
@@ -114,6 +112,8 @@ mod tests {
             active_requests: 3,
             average_response_time_ms: Some(110.0),
             loaded_models: vec!["gpt-oss:20b".into()],
+            initializing: false,
+            ready_models: Some((1, 5)),
         };
 
         let result = health_check(State(state.clone()), Json(health_req)).await;
@@ -134,7 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_unknown_agent() {
-        let state = create_test_state().await;
+        let state = create_test_state();
 
         let health_req = HealthCheckRequest {
             agent_id: Uuid::new_v4(),
@@ -151,6 +151,8 @@ mod tests {
             active_requests: 3,
             average_response_time_ms: None,
             loaded_models: Vec::new(),
+            initializing: false,
+            ready_models: None,
         };
 
         let result = health_check(State(state), Json(health_req)).await;

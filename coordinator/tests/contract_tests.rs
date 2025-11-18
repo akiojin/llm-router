@@ -18,6 +18,8 @@ mod test_agent_register_gpu;
 #[path = "contract/test_proxy_chat.rs"]
 mod test_proxy_chat;
 
+#[path = "contract/test_proxy_completions.rs"]
+mod test_proxy_completions;
 #[path = "contract/test_proxy_generate.rs"]
 mod test_proxy_generate;
 
@@ -26,15 +28,6 @@ mod test_metrics;
 
 #[path = "contract/models_api_test.rs"]
 mod models_api_test;
-
-#[path = "contract/auth_api_test.rs"]
-mod auth_api_test;
-
-#[path = "contract/users_api_test.rs"]
-mod users_api_test;
-
-#[path = "contract/api_keys_api_test.rs"]
-mod api_keys_api_test;
 
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.

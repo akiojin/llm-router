@@ -84,40 +84,6 @@ async fn run_server(config: ServerConfig) {
     let load_manager = balancer::LoadManager::new(registry.clone());
     info!("Storage initialized successfully");
 
-    // データベース初期化
-    info!("Initializing authentication database");
-    let db_path = ollama_coordinator_coordinator::logging::resolve_data_dir()
-        .expect("Failed to resolve data directory")
-        .join("coordinator.db")
-        .to_string_lossy()
-        .to_string();
-    let db_pool = sqlx::SqlitePool::connect(&format!("sqlite:{}", db_path))
-        .await
-        .expect("Failed to connect to database");
-    ollama_coordinator_coordinator::db::migrations::run_migrations(&db_pool)
-        .await
-        .expect("Failed to run database migrations");
-    info!("Database initialized successfully");
-
-    // JWT秘密鍵を環境変数から取得（未設定ならランダム生成）
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-        use rand::Rng;
-        let random_secret: String = rand::thread_rng()
-            .sample_iter(&rand::distributions::Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect();
-        tracing::warn!(
-            "JWT_SECRET not set, using randomly generated secret (not suitable for production)"
-        );
-        random_secret
-    });
-
-    // 初回起動時の管理者作成
-    ollama_coordinator_coordinator::auth::bootstrap::ensure_admin_exists(&db_pool)
-        .await
-        .expect("Failed to ensure admin user exists");
-
     let health_check_interval_secs: u64 = std::env::var("HEALTH_CHECK_INTERVAL")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -153,8 +119,6 @@ async fn run_server(config: ServerConfig) {
         load_manager,
         request_history,
         task_manager,
-        db_pool,
-        jwt_secret,
     };
 
     let router = api::create_router(state);

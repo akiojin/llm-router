@@ -78,17 +78,65 @@ pub async fn embeddings(
 }
 
 /// GET /v1/models - モデル一覧取得
-pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppError> {
-    proxy_openai_get(&state, "/v1/models").await
+pub async fn list_models(State(_state): State<AppState>) -> Result<Response, AppError> {
+    // コーディネーターがサポートするモデルを返す（プロキシせずローカルリストを使用）
+    let client = crate::ollama::OllamaClient::new()?;
+    let models = client.get_predefined_models();
+
+    // OpenAI互換レスポンス形式に合わせる
+    // https://platform.openai.com/docs/api-reference/models/list
+    let data: Vec<Value> = models
+        .into_iter()
+        .map(|m| {
+            json!({
+                "id": m.name,
+                "object": "model",
+                "created": 0,
+                "owned_by": "coordinator",
+            })
+        })
+        .collect();
+
+    let body = json!({
+        "object": "list",
+        "data": data,
+    });
+
+    Ok((StatusCode::OK, Json(body)).into_response())
 }
 
 /// GET /v1/models/:id - モデル詳細取得
 pub async fn get_model(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Path(model_id): Path<String>,
 ) -> Result<Response, AppError> {
-    let path = format!("/v1/models/{}", model_id);
-    proxy_openai_get(&state, &path).await
+    let client = crate::ollama::OllamaClient::new()?;
+    let exists = client
+        .get_predefined_models()
+        .into_iter()
+        .any(|m| m.name == model_id);
+
+    if !exists {
+        // 404 を OpenAI 換算で返す
+        let body = json!({
+            "error": {
+                "message": "The model does not exist",
+                "type": "invalid_request_error",
+                "param": "model",
+                "code": "model_not_found"
+            }
+        });
+        return Ok((StatusCode::NOT_FOUND, Json(body)).into_response());
+    }
+
+    let body = json!({
+        "id": model_id,
+        "object": "model",
+        "created": 0,
+        "owned_by": "coordinator",
+    });
+
+    Ok((StatusCode::OK, Json(body)).into_response())
 }
 
 fn extract_model(payload: &Value) -> Result<String, AppError> {
@@ -130,9 +178,10 @@ async fn proxy_openai_post(
         .map_err(AppError::from)?;
 
     let client = reqwest::Client::new();
+    let agent_api_port = agent.ollama_port + 1;
     let ollama_url = format!(
         "http://{}:{}{}",
-        agent.ip_address, agent.ollama_port, target_path
+        agent.ip_address, agent_api_port, target_path
     );
     let start = Instant::now();
 
@@ -172,6 +221,37 @@ async fn proxy_openai_post(
             );
         }
     };
+
+    // ストリームの場合はレスポンスをそのままパススルー
+    if stream {
+        let duration = start.elapsed();
+        state
+            .load_manager
+            .finish_request(agent_id, RequestOutcome::Success, duration)
+            .await
+            .map_err(AppError::from)?;
+
+        save_request_record(
+            state.request_history.clone(),
+            RequestResponseRecord {
+                id: record_id,
+                timestamp,
+                request_type,
+                model: model.clone(),
+                agent_id,
+                agent_machine_name: agent_machine_name.clone(),
+                agent_ip,
+                client_ip: None,
+                request_body: request_body.clone(),
+                response_body: None, // ストリームボディは記録しない
+                duration_ms: duration.as_millis() as u64,
+                status: RecordStatus::Success,
+                completed_at: Utc::now(),
+            },
+        );
+
+        return forward_streaming_response(response).map_err(AppError::from);
+    }
 
     if !response.status().is_success() {
         let duration = start.elapsed();
@@ -317,6 +397,7 @@ async fn proxy_openai_post(
     }
 }
 
+#[allow(dead_code)]
 async fn proxy_openai_get(state: &AppState, target_path: &str) -> Result<Response, AppError> {
     let agent = select_available_agent(state).await?;
     let agent_id = agent.id;

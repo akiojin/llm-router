@@ -40,13 +40,6 @@ thiserror = { workspace = true }
 sysinfo = "0.32"
 csv = "1.3"
 
-# 認証
-bcrypt = { workspace = true }
-jsonwebtoken = { workspace = true }
-sqlx = { workspace = true }
-sha2 = { workspace = true }
-rand = { workspace = true }
-
 [build-dependencies]
 winresource = "0.1.27"
 
@@ -61,7 +54,6 @@ tempfile = "3.8"
 once_cell = "1.21"
 wiremock = "0.6.5"
 criterion = { version = "0.5", features = ["async_tokio"] }
-serial_test = "3.2"
 
 [[bench]]
 name = "loadbalancer_bench"

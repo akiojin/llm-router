@@ -56,6 +56,8 @@ async fn setup_agents(count: usize) -> LoadManager {
                 gpu_capability_score: None,
                 active_requests: (i % 5) as u32,
                 average_response_time_ms: Some(100.0 + (i % 200) as f32),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();

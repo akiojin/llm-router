@@ -68,7 +68,7 @@ async fn proxy_generate_end_to_end_success() {
     let register_response = register_agent(coordinator.addr(), agent_stub.addr())
         .await
         .expect("register agent must succeed");
-    assert_eq!(register_response.status(), ReqStatusCode::CREATED);
+    assert_eq!(register_response.status(), ReqStatusCode::OK);
 
     let client = Client::new();
     let response = client
@@ -106,7 +106,7 @@ async fn proxy_generate_propagates_upstream_error() {
     let register_response = register_agent(coordinator.addr(), agent_stub.addr())
         .await
         .expect("register agent must succeed");
-    assert_eq!(register_response.status(), ReqStatusCode::CREATED);
+    assert_eq!(register_response.status(), ReqStatusCode::OK);
 
     let client = Client::new();
     let response = client

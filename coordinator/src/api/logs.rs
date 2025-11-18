@@ -79,7 +79,7 @@ pub async fn get_agent_logs(
     let limit = clamp_limit(query.limit);
     let agent_api_port = agent.ollama_port.saturating_add(1); // APIポートはOllamaポート+1
     let url = format!(
-        "http://{}:{}/logs?limit={}",
+        "http://{}:{}/api/logs?tail={}",
         agent.ip_address, agent_api_port, limit
     );
 
@@ -162,24 +162,18 @@ mod tests {
         }]
     }
 
-    async fn coordinator_state() -> AppState {
+    fn coordinator_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history = Arc::new(
             crate::db::request_history::RequestHistoryStorage::new().expect("history init"),
         );
         let task_manager = DownloadTaskManager::new();
-        let db_pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .expect("Failed to create test database");
-        let jwt_secret = "test_jwt_secret_key_for_testing_only".to_string();
         AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
-            db_pool,
-            jwt_secret,
         }
     }
 
@@ -218,7 +212,7 @@ mod tests {
         let agent_ip: IpAddr = mock.address().ip();
 
         Mock::given(method("GET"))
-            .and(path("/logs"))
+            .and(path("/api/logs"))
             .respond_with(ResponseTemplate::new(200).set_body_raw(
                 r#"{"entries":[{"timestamp":"2025-11-14T00:00:00Z","level":"INFO","target":"agent","message":"remote","fields":{}}],"path":"/var/log/agent.log"}"#,
                 "application/json",
@@ -226,7 +220,7 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let state = coordinator_state().await;
+        let state = coordinator_state();
         let register_req = RegisterRequest {
             machine_name: "agent-1".to_string(),
             ip_address: agent_ip,

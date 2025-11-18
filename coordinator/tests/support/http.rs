@@ -1,17 +1,17 @@
-#![allow(dead_code)]
-
 use std::{io, net::SocketAddr};
 
 use axum::Router;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 
 /// 汎用的にテスト用のHTTPサーバーを起動するためのユーティリティ
+#[allow(dead_code)]
 pub struct TestServer {
     addr: SocketAddr,
     shutdown: Option<oneshot::Sender<()>>,
     handle: JoinHandle<Result<(), io::Error>>,
 }
 
+#[allow(dead_code)]
 impl TestServer {
     /// サーバーがバインドしているアドレスを返す
     pub fn addr(&self) -> SocketAddr {

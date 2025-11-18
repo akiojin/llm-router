@@ -44,6 +44,9 @@ impl DownloadTaskManager {
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.get_mut(&task_id) {
             task.update_progress(progress, speed);
+            if progress >= 1.0 {
+                task.mark_completed();
+            }
             Some(task.clone())
         } else {
             None

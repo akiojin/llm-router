@@ -1,8 +1,5 @@
 //! Coordinator GPU-focused integration tests entrypoint
 
-#[path = "support/mod.rs"]
-pub mod support;
-
 #[path = "integration/registry_cleanup.rs"]
 mod registry_cleanup;
 

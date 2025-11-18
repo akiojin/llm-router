@@ -452,23 +452,17 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use tokio::time::Duration;
 
-    async fn create_state() -> AppState {
+    fn create_state() -> AppState {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
-        let db_pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .expect("Failed to create test database");
-        let jwt_secret = "test_jwt_secret_key_for_testing_only".to_string();
         AppState {
             registry,
             load_manager,
             request_history,
             task_manager,
-            db_pool,
-            jwt_secret,
         }
     }
 
@@ -482,7 +476,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_agents_returns_joined_state() {
-        let state = create_state().await;
+        let state = create_state();
 
         // エージェントを登録
         let register_req = RegisterRequest {
@@ -519,6 +513,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 2,
                 average_response_time_ms: Some(110.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -553,7 +549,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats_summarises_registry_and_metrics() {
-        let state = create_state().await;
+        let state = create_state();
 
         let first_agent = state
             .registry
@@ -604,6 +600,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 3,
                 average_response_time_ms: Some(95.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -632,7 +630,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_request_history_returns_series() {
-        let state = create_state().await;
+        let state = create_state();
 
         let agent_id = state
             .registry
@@ -677,7 +675,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_overview_combines_all_sections() {
-        let state = create_state().await;
+        let state = create_state();
 
         let agent_id = state
             .registry
@@ -714,7 +712,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_agent_metrics_returns_history() {
-        let state = create_state().await;
+        let state = create_state();
 
         let response = state
             .registry
@@ -749,6 +747,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(110.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -768,6 +768,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 0,
                 average_response_time_ms: Some(95.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();

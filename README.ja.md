@@ -19,10 +19,8 @@ Ollama Coordinatorは、複数のマシン上で動作するOllamaインスタ�
 - **WebUI管理**: ブラウザベースのダッシュボードでエージェント設定、監視、制御が可能
 - **クロスプラットフォーム対応**: Windows 10+、macOS 12+、Linuxで動作
 - **GPU対応ルーティング**: GPU能力と可用性に基づくインテリジェントなリクエストルーティング
-- **認証・認可**: JWT、APIキー、エージェントトークンによるセキュアなアクセス制御；
-  ロールベースアクセス制御（Admin/Viewer）；OpenAI互換認証
 
-## アーキテクチャ
+## アーキテクチャ（最新仕様）
 
 ### システム構成
 
@@ -56,7 +54,13 @@ Ollama Coordinatorは、複数のマシン上で動作するOllamaインスタ�
 Machine 1          Machine 2          Machine 3
 ```
 
-### 通信フロー（プロキシパターン）
+### 通信フロー（プロキシパターン・エージェント経由のみ）
+
+**要点（2025-11 更新）**
+- コーディネーターはエージェントの OpenAI互換API（標準 `ollama_port+1`）のみを叩き、エージェント内部の Ollama を直接呼ばない。
+- エージェントは対応モデル4件（gpt-oss:20b/120b、gpt-oss-safeguard:20b、qwen3-coder:30b）を起動し、モデルごとに独立した `ollama serve` をポート割り当てして常駐。
+- 全エージェントが `initializing=true` の間、リクエストは待機キュー（上限1024、超過で503）。`ready_models=(n/5)` が進み、全完了で `initializing=false`。
+- 手動配布UI/APIは廃止。 `/v1/models` と UI は常に上記5モデルのみを表示。
 
 Ollama Coordinatorは**プロキシパターン**を採用しており、クライアントはCoordinator URLだけを知っていればOKです。
 

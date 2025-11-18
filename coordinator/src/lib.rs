@@ -45,9 +45,6 @@ pub mod config {
     // 未実装: 設定ファイル読み込み
 }
 
-/// 認証機能（パスワードハッシュ、JWT、ミドルウェア）
-pub mod auth;
-
 /// アプリケーション状態
 #[derive(Clone)]
 pub struct AppState {
@@ -59,8 +56,4 @@ pub struct AppState {
     pub request_history: std::sync::Arc<db::request_history::RequestHistoryStorage>,
     /// ダウンロードタスクマネージャー
     pub task_manager: tasks::DownloadTaskManager,
-    /// SQLiteデータベース接続プール
-    pub db_pool: sqlx::SqlitePool,
-    /// JWT署名用シークレットキー
-    pub jwt_secret: String,
 }

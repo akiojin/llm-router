@@ -26,14 +26,12 @@ reqwest = { version = "0.11", features = ["json", "stream"] }
 axum = "0.7"
 tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
-bcrypt = "0.15"
-jsonwebtoken = "9.2"
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls", "macros"] }
-sha2 = "0.10"
-rand = "0.8"
 
 # Agent専用
 sysinfo = "0.30"
+
+[patch.crates-io]
+pest_generator = { path = "vendor/pest_generator" }
 
 [profile.release]
 opt-level = 3

@@ -3,10 +3,6 @@
 //! エージェント登録、ヘルスチェック、プロキシAPI
 
 pub mod agent;
-/// APIキー管理API
-pub mod api_keys;
-/// 認証API
-pub mod auth;
 pub mod dashboard;
 pub mod health;
 pub mod logs;
@@ -14,16 +10,12 @@ pub mod metrics;
 pub mod models;
 pub mod openai;
 pub mod proxy;
-/// ユーザー管理API
-pub mod users;
 
-use crate::auth::middleware;
 use crate::AppState;
 use axum::{
     body::Body,
     extract::Path as AxumPath,
     http::{header, StatusCode},
-    middleware as axum_middleware,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Router,
@@ -36,38 +28,11 @@ const DASHBOARD_INDEX: &str = "index.html";
 
 /// APIルーターを作成
 pub fn create_router(state: AppState) -> Router {
-    // 認証無効化フラグをチェック（T074）
-    let auth_disabled = std::env::var("AUTH_DISABLED")
-        .unwrap_or_else(|_| "false".to_string())
-        .to_lowercase()
-        == "true";
-
-    if auth_disabled {
-        tracing::warn!("⚠️  Authentication is DISABLED (AUTH_DISABLED=true)");
-    }
-
-    // JWT認証が必要なエンドポイント（T071）
-    let jwt_protected_routes = Router::new()
-        // 認証API（meとlogoutのみJWT必須）
-        .route("/api/auth/logout", post(auth::logout))
-        .route("/api/auth/me", get(auth::me))
-        // ユーザー管理API
+    Router::new()
         .route(
-            "/api/users",
-            get(users::list_users).post(users::create_user),
+            "/api/agents",
+            post(agent::register_agent).get(agent::list_agents),
         )
-        .route(
-            "/api/users/:user_id",
-            put(users::update_user).delete(users::delete_user),
-        )
-        // APIキー管理API
-        .route(
-            "/api/api-keys",
-            get(api_keys::list_api_keys).post(api_keys::create_api_key),
-        )
-        .route("/api/api-keys/:key_id", delete(api_keys::delete_api_key))
-        // エージェント管理API（GET/DELETE/PUTはJWT必須）
-        .route("/api/agents", get(agent::list_agents))
         .route("/api/agents/:agent_id", delete(agent::delete_agent))
         .route(
             "/api/agents/:agent_id/disconnect",
@@ -77,9 +42,12 @@ pub fn create_router(state: AppState) -> Router {
             "/api/agents/:agent_id/settings",
             put(agent::update_agent_settings),
         )
+        .route(
+            "/api/agents/:agent_id/metrics",
+            post(metrics::update_metrics),
+        )
         .route("/api/agents/metrics", get(agent::list_agent_metrics))
         .route("/api/metrics/summary", get(agent::metrics_summary))
-        // ダッシュボードAPI
         .route("/api/dashboard/agents", get(dashboard::get_agents))
         .route("/api/dashboard/stats", get(dashboard::get_stats))
         .route(
@@ -111,8 +79,19 @@ pub fn create_router(state: AppState) -> Router {
             "/api/dashboard/logs/agents/:agent_id",
             get(logs::get_agent_logs),
         )
-        // モデル管理API
+        // FR-002: agent log proxy (spec path)
+        .route("/api/agents/:agent_id/logs", get(logs::get_agent_logs))
+        .route("/api/health", post(health::health_check))
+        .route("/api/chat", post(proxy::proxy_chat))
+        .route("/api/generate", post(proxy::proxy_generate))
+        .route("/v1/chat/completions", post(openai::chat_completions))
+        .route("/v1/completions", post(openai::completions))
+        .route("/v1/embeddings", post(openai::embeddings))
+        .route("/v1/models", get(openai::list_models))
+        .route("/v1/models/:model_id", get(openai::get_model))
+        // モデル管理API (SPEC-8ae67d67)
         .route("/api/models/available", get(models::get_available_models))
+        .route("/api/models/loaded", get(models::get_loaded_models))
         .route("/api/models/distribute", post(models::distribute_models))
         .route(
             "/api/agents/:agent_id/models",
@@ -122,74 +101,14 @@ pub fn create_router(state: AppState) -> Router {
             "/api/agents/:agent_id/models/pull",
             post(models::pull_model_to_agent),
         )
-        .route("/api/tasks/:task_id", get(models::get_task_progress));
-
-    // APIキー認証が必要なエンドポイント（T072）
-    let api_key_protected_routes = Router::new()
-        .route("/v1/chat/completions", post(openai::chat_completions))
-        .route("/v1/completions", post(openai::completions))
-        .route("/v1/embeddings", post(openai::embeddings))
-        .route("/v1/models", get(openai::list_models))
-        .route("/v1/models/:model_id", get(openai::get_model))
-        .route("/api/chat", post(proxy::proxy_chat))
-        .route("/api/generate", post(proxy::proxy_generate));
-
-    // エージェントトークン認証が必要なエンドポイント（T073）
-    let agent_token_protected_routes = Router::new()
-        .route("/api/health", post(health::health_check))
-        .route(
-            "/api/agents/:agent_id/metrics",
-            post(metrics::update_metrics),
-        )
+        .route("/api/tasks/:task_id", get(models::get_task_progress))
         .route(
             "/api/tasks/:task_id/progress",
             post(models::update_progress),
-        );
-
-    // 認証不要なエンドポイント
-    let public_routes = Router::new()
-        .route("/api/auth/login", post(auth::login))
-        .route("/api/agents", post(agent::register_agent))
+        )
         .route("/dashboard", get(serve_dashboard_index))
         .route("/dashboard/", get(serve_dashboard_index))
-        .route("/dashboard/*path", get(serve_dashboard_asset));
-
-    // ルーターを統合（認証無効化フラグに応じてミドルウェアを適用）
-    let jwt_routes = if auth_disabled {
-        // AUTH_DISABLED=trueの場合、ダミーのAdmin Claimsを注入
-        jwt_protected_routes.layer(axum_middleware::from_fn(
-            middleware::inject_dummy_admin_claims,
-        ))
-    } else {
-        jwt_protected_routes.layer(axum_middleware::from_fn_with_state(
-            state.jwt_secret.clone(),
-            middleware::jwt_auth_middleware,
-        ))
-    };
-
-    let api_key_routes = if auth_disabled {
-        api_key_protected_routes
-    } else {
-        api_key_protected_routes.layer(axum_middleware::from_fn_with_state(
-            state.db_pool.clone(),
-            middleware::api_key_auth_middleware,
-        ))
-    };
-
-    let agent_token_routes = if auth_disabled {
-        agent_token_protected_routes
-    } else {
-        agent_token_protected_routes.layer(axum_middleware::from_fn_with_state(
-            state.db_pool.clone(),
-            middleware::agent_token_auth_middleware,
-        ))
-    };
-
-    Router::new()
-        .merge(jwt_routes)
-        .merge(api_key_routes)
-        .merge(agent_token_routes)
-        .merge(public_routes)
+        .route("/dashboard/*path", get(serve_dashboard_asset))
         .with_state(state)
 }
 
@@ -247,24 +166,17 @@ mod tests {
     use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use tower::Service;
 
-    async fn test_state() -> (AppState, AgentRegistry) {
+    fn test_state() -> (AppState, AgentRegistry) {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
-        // テスト用インメモリデータベース
-        let db_pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .expect("Failed to create test database");
-        let jwt_secret = "test_jwt_secret_key_for_testing_only".to_string();
         let state = AppState {
             registry: registry.clone(),
             load_manager,
             request_history,
             task_manager,
-            db_pool,
-            jwt_secret,
         };
         (state, registry)
     }
@@ -279,7 +191,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_static_served() {
-        let (state, _) = test_state().await;
+        let (state, _) = test_state();
         let mut router = create_router(state);
         let response = router
             .call(
@@ -306,8 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_agents_endpoint_returns_json() {
-        std::env::set_var("AUTH_DISABLED", "true");
-        let (state, registry) = test_state().await;
+        let (state, registry) = test_state();
         registry
             .register(RegisterRequest {
                 machine_name: "test-agent".into(),
@@ -342,8 +253,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_overview_endpoint_returns_all_sections() {
-        std::env::set_var("AUTH_DISABLED", "true");
-        let (state, registry) = test_state().await;
+        let (state, registry) = test_state();
         registry
             .register(RegisterRequest {
                 machine_name: "overview-agent".into(),
@@ -381,8 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_metrics_endpoint_returns_history() {
-        std::env::set_var("AUTH_DISABLED", "true");
-        let (state, registry) = test_state().await;
+        let (state, registry) = test_state();
         let agent_id = registry
             .register(RegisterRequest {
                 machine_name: "metrics-route".into(),
@@ -414,6 +323,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(90.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();

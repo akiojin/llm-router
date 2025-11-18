@@ -46,6 +46,21 @@ pub struct GpuCapability {
     pub memory_total_mb: u64,
 }
 
+impl SystemMetrics {
+    /// ゼロ値のプレースホルダー
+    pub fn placeholder() -> Self {
+        Self {
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
+        }
+    }
+}
+
 impl GpuCapability {
     /// GPU能力スコアを計算
     ///
@@ -85,6 +100,27 @@ pub struct MetricsCollector {
 }
 
 impl MetricsCollector {
+    /// メトリクス収集失敗時のフォールバック（ゼロ値）
+    pub fn placeholder_metrics() -> SystemMetrics {
+        SystemMetrics {
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
+        }
+    }
+
+    /// メトリクス収集失敗時のフォールバック（ゼロ値）
+    pub fn placeholder() -> Self {
+        MetricsCollector {
+            system: System::new(),
+            gpu: None,
+        }
+    }
+
     /// 新しいメトリクスコレクターを作成
     pub fn new() -> Self {
         Self::with_ollama_path(None)

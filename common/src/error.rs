@@ -56,6 +56,10 @@ pub enum CoordinatorError {
     #[error("タイムアウトエラー: {0}")]
     Timeout(String),
 
+    /// サービス利用不可（初期化中など）
+    #[error("サービス利用不可: {0}")]
+    ServiceUnavailable(String),
+
     /// 内部エラー
     #[error("内部エラー: {0}")]
     Internal(String),
@@ -71,34 +75,6 @@ pub enum CoordinatorError {
     /// ストレージ容量不足
     #[error("ストレージ容量不足: {0}")]
     InsufficientStorage(String),
-
-    /// 認証エラー
-    #[error("認証エラー: {0}")]
-    Authentication(String),
-
-    /// パスワードハッシュエラー
-    #[error("パスワードハッシュエラー: {0}")]
-    PasswordHash(String),
-
-    /// JWTエラー
-    #[error("JWTエラー: {0}")]
-    Jwt(String),
-
-    /// APIキーエラー
-    #[error("APIキーエラー: {0}")]
-    ApiKey(String),
-
-    /// エージェントトークンエラー
-    #[error("エージェントトークンエラー: {0}")]
-    AgentToken(String),
-
-    /// 権限エラー（Forbidden）
-    #[error("権限がありません: {0}")]
-    Forbidden(String),
-
-    /// 未認証エラー（Unauthorized）
-    #[error("未認証です: {0}")]
-    Unauthorized(String),
 }
 
 /// Agentエラー型

@@ -5,6 +5,7 @@
 use crate::registry::models::ModelInfo;
 use ollama_coordinator_common::error::{CoordinatorError, CoordinatorResult};
 use reqwest::Client;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use std::time::Duration;
 use tracing::{debug, warn};
@@ -91,50 +92,69 @@ impl OllamaClient {
         Ok(models)
     }
 
+    /// エージェント側のOllamaが起動しているか簡易ヘルスチェック
+    pub async fn check_ollama_health(&self, agent_base_url: &str) -> CoordinatorResult<()> {
+        let url = format!("{}/api/version", agent_base_url);
+        debug!("Checking ollama health: {}", url);
+
+        let response = self.http_client.get(&url).send().await.map_err(|e| {
+            CoordinatorError::Internal(format!("Failed to connect to agent ollama: {}", e))
+        })?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            // /api/version がない場合でも200以外ならエラーとせず通す（古いバージョン向け）
+            return Ok(());
+        }
+
+        if !response.status().is_success() {
+            return Err(CoordinatorError::Internal(format!(
+                "Agent ollama health check failed: HTTP {}",
+                response.status()
+            )));
+        }
+
+        Ok(())
+    }
+
     /// 事前定義モデルリストを取得
     pub fn get_predefined_models(&self) -> Vec<ModelInfo> {
         vec![
             ModelInfo::new(
                 "gpt-oss:20b".to_string(),
-                10_000_000_000,
+                14_500_000_000, // ≈14.5GB (Q4_K_M)
                 "GPT-OSS 20B parameter model".to_string(),
+                16_000_000_000, // 推奨16GB VRAMクラス
+                vec![
+                    "llm".to_string(),
+                    "text".to_string(),
+                    "code".to_string(),
+                    "cot".to_string(),
+                ],
+            ),
+            ModelInfo::new(
+                "gpt-oss-safeguard:20b".to_string(),
+                14_000_000_000,
+                "GPT-OSS Safeguard 20B safety classifier".to_string(),
                 16_000_000_000,
-                vec!["llm".to_string(), "text".to_string()],
+                vec!["safety".to_string(), "moderation".to_string()],
             ),
             ModelInfo::new(
-                "gpt-oss:7b".to_string(),
-                4_000_000_000,
-                "GPT-OSS 7B parameter model".to_string(),
-                8_000_000_000,
-                vec!["llm".to_string(), "text".to_string()],
+                "gpt-oss:120b".to_string(),
+                65_000_000_000, // ≈65GB Q4_K_M
+                "GPT-OSS 120B flagship model (high accuracy)".to_string(),
+                80_000_000_000, // 推奨80GB級
+                vec![
+                    "llm".to_string(),
+                    "text".to_string(),
+                    "analysis".to_string(),
+                ],
             ),
             ModelInfo::new(
-                "gpt-oss:3b".to_string(),
-                2_000_000_000,
-                "GPT-OSS 3B parameter model".to_string(),
-                4_500_000_000,
-                vec!["llm".to_string(), "text".to_string()],
-            ),
-            ModelInfo::new(
-                "gpt-oss:1b".to_string(),
-                1_000_000_000,
-                "GPT-OSS 1B parameter model".to_string(),
-                2_000_000_000,
-                vec!["llm".to_string(), "text".to_string()],
-            ),
-            ModelInfo::new(
-                "llama3.2".to_string(),
-                5_000_000_000,
-                "Llama 3.2 model".to_string(),
-                6_000_000_000,
-                vec!["llm".to_string(), "text".to_string()],
-            ),
-            ModelInfo::new(
-                "deepseek-r1".to_string(),
-                8_000_000_000,
-                "DeepSeek R1 reasoning model".to_string(),
-                10_000_000_000,
-                vec!["llm".to_string(), "reasoning".to_string()],
+                "qwen3-coder:30b".to_string(),
+                17_000_000_000, // ≈17GB (Q4_K_M)
+                "Qwen3-Coder 30B Instruct".to_string(),
+                22_000_000_000,
+                vec!["code".to_string(), "llm".to_string(), "text".to_string()],
             ),
         ]
     }
@@ -218,7 +238,10 @@ mod tests {
 
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.name == "gpt-oss:20b"));
-        assert!(models.iter().any(|m| m.name == "llama3.2"));
+        assert!(models.iter().any(|m| m.name == "gpt-oss:120b"));
+        assert!(models.iter().any(|m| m.name == "gpt-oss-safeguard:20b"));
+        assert!(models.iter().any(|m| m.name == "qwen3-coder:30b"));
+        assert_eq!(models.len(), 4);
     }
 
     #[test]

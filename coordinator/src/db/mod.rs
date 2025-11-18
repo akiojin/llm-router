@@ -1,16 +1,8 @@
 //! データベースアクセス層
 //!
-//! JSONファイルベースのデータ永続化 + SQLite認証データ
+//! JSONファイルベースのデータ永続化
 
-/// エージェントトークン管理
-pub mod agent_tokens;
-/// APIキー管理
-pub mod api_keys;
-/// データベースマイグレーション
-pub mod migrations;
 pub mod request_history;
-/// ユーザー管理
-pub mod users;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
@@ -261,6 +253,9 @@ mod tests {
             gpu_model_name: None,
             gpu_compute_capability: None,
             gpu_capability_score: None,
+            agent_api_port: Some(11435),
+            initializing: false,
+            ready_models: None,
         };
 
         // 保存
@@ -311,6 +306,9 @@ mod tests {
             gpu_model_name: None,
             gpu_compute_capability: None,
             gpu_capability_score: None,
+            agent_api_port: Some(11435),
+            initializing: false,
+            ready_models: None,
         };
 
         save_agent(&agent).await.unwrap();
@@ -359,6 +357,9 @@ mod tests {
             gpu_model_name: None,
             gpu_compute_capability: None,
             gpu_capability_score: None,
+            agent_api_port: Some(11435),
+            initializing: false,
+            ready_models: None,
         };
 
         save_agent(&agent1).await.unwrap();
@@ -390,6 +391,9 @@ mod tests {
             gpu_model_name: None,
             gpu_compute_capability: None,
             gpu_capability_score: None,
+            agent_api_port: Some(11435),
+            initializing: false,
+            ready_models: None,
         };
 
         save_agent(&agent2).await.unwrap();

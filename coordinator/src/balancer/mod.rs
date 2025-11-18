@@ -19,7 +19,7 @@ use std::{
     },
     time::Duration as StdDuration,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
 
 /// メトリクスを新鮮とみなすための許容秒数
@@ -38,6 +38,8 @@ pub enum RequestOutcome {
     Success,
     /// エラー終了
     Error,
+    /// キュー待ち
+    Queued,
 }
 
 fn compare_option_f32(a: Option<f32>, b: Option<f32>) -> Ordering {
@@ -94,6 +96,7 @@ mod tests {
     use ollama_coordinator_common::protocol::RegisterRequest;
     use ollama_coordinator_common::types::GpuDeviceInfo;
     use std::net::{IpAddr, Ipv4Addr};
+    use tokio::time::{sleep, timeout, Duration};
 
     fn sample_gpu_devices() -> Vec<GpuDeviceInfo> {
         vec![GpuDeviceInfo {
@@ -194,6 +197,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(240.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -212,6 +217,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(120.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -256,6 +263,8 @@ mod tests {
                     gpu_capability_score: None,
                     active_requests: 1,
                     average_response_time_ms: Some(100.0),
+                    initializing: false,
+                    ready_models: None,
                 })
                 .await
                 .unwrap();
@@ -325,6 +334,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(100.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -346,6 +357,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 5,
                 average_response_time_ms: Some(200.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -405,6 +418,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 2,
                 average_response_time_ms: Some(120.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -424,6 +439,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 2,
                 average_response_time_ms: Some(120.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -482,6 +499,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(180.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -501,6 +520,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(200.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -559,6 +580,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 0,
                 average_response_time_ms: Some(110.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -623,6 +646,8 @@ mod tests {
                 gpu_capability_score: Some(9850),
                 active_requests: 0,
                 average_response_time_ms: Some(90.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -642,6 +667,8 @@ mod tests {
                 gpu_capability_score: Some(9170),
                 active_requests: 0,
                 average_response_time_ms: Some(90.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -708,6 +735,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 2,
                 average_response_time_ms: Some(150.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -769,6 +798,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(140.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -788,6 +819,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 1,
                 average_response_time_ms: Some(140.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -846,6 +879,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 0,
                 average_response_time_ms: Some(90.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -868,6 +903,8 @@ mod tests {
                 gpu_capability_score: None,
                 active_requests: 4,
                 average_response_time_ms: Some(170.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -926,6 +963,8 @@ mod tests {
                 gpu_capability_score: Some(9850),
                 active_requests: 0,
                 average_response_time_ms: Some(80.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -945,6 +984,8 @@ mod tests {
                 gpu_capability_score: Some(6500),
                 active_requests: 0,
                 average_response_time_ms: Some(80.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
@@ -967,12 +1008,175 @@ mod tests {
                 gpu_capability_score: Some(9850),
                 active_requests: 3,
                 average_response_time_ms: Some(150.0),
+                initializing: false,
+                ready_models: None,
             })
             .await
             .unwrap();
 
         let second = manager.select_agent_by_metrics().await.unwrap();
         assert_eq!(second.id, low_spec_agent);
+    }
+
+    #[tokio::test]
+    async fn wait_for_ready_unblocks_when_agent_becomes_ready() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "init-agent".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 4, 0, 1)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 5.0,
+                memory_usage: 5.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: None,
+                initializing: true,
+                ready_models: Some((0, 2)),
+            })
+            .await
+            .unwrap();
+
+        let waiter = {
+            let manager = manager.clone();
+            tokio::spawn(async move {
+                timeout(Duration::from_millis(200), manager.wait_for_ready(1024)).await
+            })
+        };
+
+        // wait_until ready metrics apply
+        sleep(Duration::from_millis(20)).await;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 5.0,
+                memory_usage: 5.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: Some(10.0),
+                initializing: false,
+                ready_models: Some((2, 2)),
+            })
+            .await
+            .unwrap();
+
+        let result = waiter
+            .await
+            .expect("join should succeed")
+            .expect("wait_for_ready should not time out");
+        assert!(result);
+    }
+
+    #[tokio::test]
+    async fn wait_for_ready_limits_waiters_and_notifies_first() {
+        let registry = AgentRegistry::new();
+        let manager = LoadManager::new(registry.clone());
+
+        let agent_id = registry
+            .register(RegisterRequest {
+                machine_name: "limited".to_string(),
+                ip_address: IpAddr::V4(Ipv4Addr::new(10, 4, 0, 2)),
+                ollama_version: "0.1.0".to_string(),
+                ollama_port: 11434,
+                gpu_available: true,
+                gpu_devices: sample_gpu_devices(),
+                gpu_count: Some(1),
+                gpu_model: Some("Test GPU".to_string()),
+            })
+            .await
+            .unwrap()
+            .agent_id;
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: None,
+                initializing: true,
+                ready_models: Some((0, 1)),
+            })
+            .await
+            .unwrap();
+
+        let first_waiter = {
+            let manager = manager.clone();
+            tokio::spawn(async move {
+                timeout(Duration::from_millis(200), manager.wait_for_ready(1)).await
+            })
+        };
+
+        // Ensure first waiter is registered
+        sleep(Duration::from_millis(10)).await;
+
+        let second_allowed = manager.wait_for_ready(1).await;
+        assert!(!second_allowed);
+
+        manager
+            .record_metrics(MetricsUpdate {
+                agent_id,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                gpu_usage: None,
+                gpu_memory_usage: None,
+                gpu_memory_total_mb: None,
+                gpu_memory_used_mb: None,
+                gpu_temperature: None,
+                gpu_model_name: None,
+                gpu_compute_capability: None,
+                gpu_capability_score: None,
+                active_requests: 0,
+                average_response_time_ms: Some(1.0),
+                initializing: false,
+                ready_models: Some((1, 1)),
+            })
+            .await
+            .unwrap();
+
+        let first_allowed = first_waiter
+            .await
+            .expect("join should succeed")
+            .expect("wait_for_ready should not time out");
+        assert!(first_allowed);
     }
 }
 
@@ -986,6 +1190,8 @@ struct AgentLoadState {
     error_count: u64,
     total_latency_ms: u128,
     metrics_history: VecDeque<HealthMetrics>,
+    initializing: bool,
+    ready_models: Option<(u8, u8)>,
 }
 
 impl AgentLoadState {
@@ -1118,6 +1324,13 @@ pub struct LoadManager {
     state: Arc<RwLock<HashMap<Uuid, AgentLoadState>>>,
     round_robin: Arc<AtomicUsize>,
     history: Arc<RwLock<VecDeque<RequestHistoryPoint>>>,
+    /// 待機中リクエスト数（簡易カウンタ）
+    #[allow(dead_code)]
+    pending: Arc<AtomicUsize>,
+    /// ready通知
+    ready_notify: Arc<Notify>,
+    /// 待機中リクエスト数（上限判定用）
+    waiters: Arc<AtomicUsize>,
 }
 
 /// ハートビートから記録するメトリクス値
@@ -1149,6 +1362,10 @@ pub struct MetricsUpdate {
     pub active_requests: u32,
     /// 平均レスポンスタイム（ミリ秒）
     pub average_response_time_ms: Option<f32>,
+    /// 初期化中フラグ
+    pub initializing: bool,
+    /// 起動済みモデル数/総数
+    pub ready_models: Option<(u8, u8)>,
 }
 
 impl LoadManager {
@@ -1159,6 +1376,9 @@ impl LoadManager {
             state: Arc::new(RwLock::new(HashMap::new())),
             round_robin: Arc::new(AtomicUsize::new(0)),
             history: Arc::new(RwLock::new(VecDeque::new())),
+            pending: Arc::new(AtomicUsize::new(0)),
+            ready_notify: Arc::new(Notify::new()),
+            waiters: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -1178,10 +1398,28 @@ impl LoadManager {
             gpu_capability_score,
             active_requests,
             average_response_time_ms,
+            initializing,
+            ready_models,
         } = update;
 
         // エージェントが存在することを確認
         self.registry.get(agent_id).await?;
+
+        // レジストリの初期化フラグ/ready_models を最新の値で前倒し更新し、select_agent が stale な状態を返さないようにする
+        if initializing || ready_models.is_some() {
+            let _ = self
+                .registry
+                .update_last_seen(
+                    agent_id,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(initializing),
+                    ready_models,
+                )
+                .await;
+        }
 
         let mut state = self.state.write().await;
         let entry = state.entry(agent_id).or_default();
@@ -1208,8 +1446,41 @@ impl LoadManager {
 
         entry.last_metrics = Some(metrics.clone());
         entry.push_metrics(metrics);
+        entry.initializing = initializing;
+        entry.ready_models = ready_models;
+        if !entry.initializing {
+            self.ready_notify.notify_waiters();
+        }
 
         Ok(())
+    }
+
+    /// 初期化完了しているエージェントが存在するか
+    pub async fn has_ready_agents(&self) -> bool {
+        let state = self.state.read().await;
+        state.values().any(|s| !s.initializing)
+    }
+
+    /// 全エージェントが初期化中かを判定
+    pub async fn all_initializing(&self) -> bool {
+        let state = self.state.read().await;
+        !state.is_empty() && state.values().all(|s| s.initializing)
+    }
+
+    /// readyなエージェントが出るまで待機。待ち人数が上限を超えたらfalse。
+    pub async fn wait_for_ready(&self, max_waiters: usize) -> bool {
+        let current = self.waiters.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+        if current > max_waiters {
+            self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
+            return false;
+        }
+        if self.has_ready_agents().await {
+            self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
+            return true;
+        }
+        self.ready_notify.notified().await;
+        self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
+        true
     }
 
     /// リクエスト開始を記録
@@ -1236,16 +1507,23 @@ impl LoadManager {
         let mut state = self.state.write().await;
         let entry = state.entry(agent_id).or_default();
 
-        if entry.assigned_active > 0 {
-            entry.assigned_active -= 1;
-        }
+        if let RequestOutcome::Queued = outcome {
+            // キューに積んだだけのものは active を増減させない
+        } else {
+            if entry.assigned_active > 0 {
+                entry.assigned_active -= 1;
+            }
 
-        match outcome {
-            RequestOutcome::Success => entry.success_count = entry.success_count.saturating_add(1),
-            RequestOutcome::Error => entry.error_count = entry.error_count.saturating_add(1),
-        }
+            match outcome {
+                RequestOutcome::Success => {
+                    entry.success_count = entry.success_count.saturating_add(1)
+                }
+                RequestOutcome::Error => entry.error_count = entry.error_count.saturating_add(1),
+                RequestOutcome::Queued => {}
+            }
 
-        entry.total_latency_ms = entry.total_latency_ms.saturating_add(duration.as_millis());
+            entry.total_latency_ms = entry.total_latency_ms.saturating_add(duration.as_millis());
+        }
 
         let updated_average = entry.average_latency_ms();
 
@@ -1539,7 +1817,8 @@ impl LoadManager {
         build_history_window(&history)
     }
 
-    async fn record_request_history(&self, outcome: RequestOutcome, timestamp: DateTime<Utc>) {
+    /// リクエスト履歴にアウトカムを記録（分単位で集計）
+    pub async fn record_request_history(&self, outcome: RequestOutcome, timestamp: DateTime<Utc>) {
         let minute = align_to_minute(timestamp);
         let mut history = self.history.write().await;
 
@@ -1790,6 +2069,7 @@ fn increment_history(point: &mut RequestHistoryPoint, outcome: RequestOutcome) {
     match outcome {
         RequestOutcome::Success => point.success = point.success.saturating_add(1),
         RequestOutcome::Error => point.error = point.error.saturating_add(1),
+        RequestOutcome::Queued => {} // キューは履歴ではカウントしない
     }
 }
 

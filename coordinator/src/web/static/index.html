@@ -27,38 +27,13 @@
         <button id="refresh-button" class="refresh-button" type="button">
           手動更新
         </button>
-        <button id="logout-button" class="refresh-button" type="button">
-          ログアウト
-        </button>
       </div>
     </header>
 
     <main>
-      <section class="banner hidden" id="error-banner"></section>
+    <section class="banner hidden" id="error-banner"></section>
 
-      <nav class="tabs-nav">
-        <button type="button" class="tab-button tab-button--active" data-tab="dashboard">
-          ダッシュボード
-        </button>
-        <button type="button" class="tab-button" data-tab="agents">
-          エージェント一覧
-        </button>
-        <button type="button" class="tab-button" data-tab="models">
-          モデル管理
-        </button>
-        <button type="button" class="tab-button" data-tab="history">
-          リクエスト履歴
-        </button>
-        <button type="button" class="tab-button" data-tab="logs">
-          ログ
-        </button>
-        <button type="button" class="tab-button" data-tab="api-keys">
-          APIキー管理
-        </button>
-        <button type="button" class="tab-button" data-tab="users">
-          ユーザー管理
-        </button>
-      </nav>
+      <!-- タブナビゲーションは廃止（単一ビュー） -->
 
       <div class="tab-panel tab-panel--active" id="tab-dashboard">
       <section class="stats-grid">
@@ -132,25 +107,24 @@
           </div>
         </header>
 
-        <div class="table-wrapper">
-          <table class="agents-table">
-            <colgroup>
-              <col class="col-select" />
-              <col class="col-name" />
+            <div class="table-wrapper">
+              <table class="agents-table">
+                <colgroup>
+                  <col class="col-select" />
+                  <col class="col-name" />
               <col class="col-address" />
               <col class="col-status" />
               <col class="col-uptime" />
               <col class="col-cpu" />
               <col class="col-memory" />
-              <col class="col-active" />
-              <col class="col-total" />
-              <col class="col-average" />
-              <col class="col-models" />
-              <col class="col-last-seen" />
-              <col class="col-actions" />
-            </colgroup>
-            <thead>
-              <tr>
+                  <col class="col-active" />
+                  <col class="col-total" />
+                  <col class="col-average" />
+                  <col class="col-last-seen" />
+                  <col class="col-actions" />
+                </colgroup>
+                <thead>
+                  <tr>
                 <th>
                   <input type="checkbox" id="select-all" aria-label="すべて選択" />
                 </th>
@@ -171,21 +145,20 @@
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
                 <th>CPU / GPU</th>
-                <th>メモリ / GPU</th>
-                <th>処理中</th>
-                <th data-sort="total" class="sortable">
-                  <span>累積</span>
-                  <span class="sort-indicator" aria-hidden="true">–</span>
-                </th>
-                <th>平均応答</th>
-                <th>モデル</th>
-                <th>最終確認</th>
-                <th>操作</th>
-              </tr>
-            </thead>
+                  <th>メモリ / GPU</th>
+                  <th>処理中</th>
+                  <th data-sort="total" class="sortable">
+                    <span>累積</span>
+                    <span class="sort-indicator" aria-hidden="true">–</span>
+                  </th>
+                  <th>平均応答</th>
+                  <th>最終確認</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
             <tbody id="agents-body">
               <tr class="empty-row">
-                <td colspan="13">データ取得中…</td>
+                <td colspan="12">データ取得中…</td>
               </tr>
             </tbody>
           </table>
@@ -206,56 +179,6 @@
           <canvas id="requests-chart" aria-label="Requests per minute" role="img"></canvas>
         </div>
       </section>
-      </div>
-
-      <div class="tab-panel" id="tab-models">
-        <section class="models-section">
-          <header class="section-header">
-            <h2>モデル管理</h2>
-          </header>
-
-          <div class="models-container">
-            <div class="models-sidebar">
-              <h3>利用可能なモデル</h3>
-              <div id="available-models-list" class="models-list">
-                <p class="loading-message">モデル一覧を読み込み中...</p>
-              </div>
-            </div>
-
-            <div class="models-main">
-              <div class="models-toolbar">
-                <h3>配布先エージェント</h3>
-                <div class="toolbar-buttons">
-                  <button type="button" id="select-all-agents" class="btn btn--secondary">
-                    すべて選択
-                  </button>
-                  <button type="button" id="deselect-all-agents" class="btn btn--secondary">
-                    選択解除
-                  </button>
-                  <button
-                    type="button"
-                    id="distribute-model-button"
-                    class="btn btn--primary"
-                    disabled
-                  >
-                    選択したモデルを配布
-                  </button>
-                </div>
-              </div>
-
-              <div id="agents-for-distribution" class="agents-checklist">
-                <p class="loading-message">エージェント一覧を読み込み中...</p>
-              </div>
-
-              <div class="download-tasks-section">
-                <h3>ダウンロードタスク</h3>
-                <div id="download-tasks-list" class="tasks-list">
-                  <p class="empty-message">実行中のタスクはありません</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
 
       <div class="tab-panel" id="tab-history">
@@ -358,66 +281,6 @@
             <p class="log-card__status" id="logs-agent-status">-</p>
             <div class="log-viewer" id="logs-agent-list" role="log" aria-live="polite"></div>
           </article>
-        </section>
-      </div>
-
-      <div class="tab-panel" id="tab-api-keys">
-        <section class="api-keys-section">
-          <header class="section-header">
-            <h2>APIキー管理</h2>
-            <button type="button" id="create-api-key-button" class="btn btn--primary">
-              新しいAPIキーを発行
-            </button>
-          </header>
-
-          <div class="table-wrapper">
-            <table class="api-keys-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>名前</th>
-                  <th>作成日時</th>
-                  <th>有効期限</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="api-keys-tbody">
-                <tr>
-                  <td colspan="5" class="empty-message">APIキーを読み込み中...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <div class="tab-panel" id="tab-users">
-        <section class="users-section">
-          <header class="section-header">
-            <h2>ユーザー管理</h2>
-            <button type="button" id="create-user-button" class="btn btn--primary">
-              新しいユーザーを作成
-            </button>
-          </header>
-
-          <div class="table-wrapper">
-            <table class="users-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>ユーザー名</th>
-                  <th>ロール</th>
-                  <th>作成日時</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="users-tbody">
-                <tr>
-                  <td colspan="5" class="empty-message">ユーザーを読み込み中...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </section>
       </div>
     </main>
@@ -599,91 +462,6 @@
       </div>
     </div>
 
-    <!-- APIキー発行モーダル -->
-    <div id="api-key-modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal__dialog">
-        <header class="modal__header">
-          <h2 id="api-key-modal-title">新しいAPIキーを発行</h2>
-          <button type="button" id="api-key-modal-close" class="modal__close" aria-label="閉じる">×</button>
-        </header>
-        <section class="modal__content">
-          <form id="api-key-form">
-            <div class="form-group">
-              <label for="api-key-name">キーの名前</label>
-              <input type="text" id="api-key-name" required />
-            </div>
-            <div class="form-group">
-              <label for="api-key-expires">有効期限（オプション）</label>
-              <input type="datetime-local" id="api-key-expires" />
-            </div>
-          </form>
-        </section>
-        <footer class="modal__footer">
-          <button type="button" id="api-key-modal-cancel" class="btn">キャンセル</button>
-          <button type="button" id="api-key-modal-create" class="btn btn--primary">発行</button>
-        </footer>
-      </div>
-    </div>
-
-    <!-- APIキー表示モーダル -->
-    <div id="api-key-display-modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal__dialog">
-        <header class="modal__header">
-          <h2>APIキーが発行されました</h2>
-          <button type="button" id="api-key-display-close" class="modal__close" aria-label="閉じる">×</button>
-        </header>
-        <section class="modal__content">
-          <p style="color: #c53030; margin-bottom: 1rem;">
-            このAPIキーは今だけ表示されます。必ず安全な場所にコピーしてください。
-          </p>
-          <div class="form-group">
-            <label>APIキー</label>
-            <input type="text" id="api-key-display-value" readonly style="font-family: monospace;" />
-          </div>
-        </section>
-        <footer class="modal__footer">
-          <button type="button" id="api-key-display-copy" class="btn btn--secondary">コピー</button>
-          <button type="button" id="api-key-display-ok" class="btn btn--primary">閉じる</button>
-        </footer>
-      </div>
-    </div>
-
-    <!-- ユーザー作成/編集モーダル -->
-    <div id="user-modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal__dialog">
-        <header class="modal__header">
-          <h2 id="user-modal-title">ユーザーを作成</h2>
-          <button type="button" id="user-modal-close" class="modal__close" aria-label="閉じる">×</button>
-        </header>
-        <section class="modal__content">
-          <form id="user-form">
-            <div class="form-group">
-              <label for="user-username">ユーザー名</label>
-              <input type="text" id="user-username" required />
-            </div>
-            <div class="form-group">
-              <label for="user-password">パスワード</label>
-              <input type="password" id="user-password" />
-              <small>※編集時は変更する場合のみ入力</small>
-            </div>
-            <div class="form-group">
-              <label for="user-role">ロール</label>
-              <select id="user-role" required>
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </form>
-        </section>
-        <footer class="modal__footer">
-          <button type="button" id="user-modal-cancel" class="btn">キャンセル</button>
-          <button type="button" id="user-modal-save" class="btn btn--primary">保存</button>
-        </footer>
-      </div>
-    </div>
-
     <script src="/dashboard/app.js" defer></script>
-    <script src="/dashboard/api-keys.js" defer></script>
-    <script src="/dashboard/users.js" defer></script>
   </body>
 </html>

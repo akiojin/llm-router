@@ -1,6 +1,3 @@
-#[path = "support/mod.rs"]
-mod support;
-
 use axum::{
     extract::connect_info::ConnectInfo,
     http::{header::CONTENT_TYPE, StatusCode},
@@ -18,25 +15,17 @@ use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn build_state_with_mock(mock: &MockServer) -> AppState {
-    // AUTH_DISABLED=trueで認証を無効化
-    std::env::set_var("AUTH_DISABLED", "true");
-
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
-    let db_pool = support::coordinator::create_test_db_pool().await;
-    let jwt_secret = support::coordinator::test_jwt_secret();
-
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
-        db_pool,
-        jwt_secret,
     };
 
     // 登録済みエージェントを追加
@@ -46,7 +35,8 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             machine_name: "mock-agent".into(),
             ip_address: mock.address().ip(),
             ollama_version: "0.0.0".into(),
-            ollama_port: mock.address().port(),
+            // APIポート=ollama_port+1 となる仕様のため、実際のモックポートに合わせて -1 する
+            ollama_port: mock.address().port().saturating_sub(1),
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -55,6 +45,46 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
             }],
             gpu_count: Some(1),
             gpu_model: Some("Test GPU".to_string()),
+        })
+        .await
+        .unwrap();
+
+    // エージェントをready状態にしておく（初期化待ちやモデル未ロードで404/503にならないように）
+    let agent_id = state.registry.list().await[0].id;
+
+    // レジストリにロード済みモデル・初期化解除を反映
+    state
+        .registry
+        .update_last_seen(
+            agent_id,
+            Some(vec!["gpt-oss:20b".to_string(), "gpt-oss:120b".to_string()]),
+            None,
+            None,
+            None,
+            Some(false),
+            Some((4, 4)),
+        )
+        .await
+        .ok();
+
+    state
+        .load_manager
+        .record_metrics(ollama_coordinator_coordinator::balancer::MetricsUpdate {
+            agent_id,
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            gpu_usage: None,
+            gpu_memory_usage: None,
+            gpu_memory_total_mb: None,
+            gpu_memory_used_mb: None,
+            gpu_temperature: None,
+            gpu_model_name: None,
+            gpu_compute_capability: None,
+            gpu_capability_score: None,
+            active_requests: 0,
+            average_response_time_ms: Some(1.0),
+            initializing: false,
+            ready_models: Some((4, 4)),
         })
         .await
         .unwrap();
@@ -223,25 +253,17 @@ async fn test_proxy_chat_missing_model_returns_openai_error() {
 
 #[tokio::test]
 async fn test_proxy_chat_no_agents() {
-    // AUTH_DISABLED=trueで認証を無効化
-    std::env::set_var("AUTH_DISABLED", "true");
-
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
-    let db_pool = support::coordinator::create_test_db_pool().await;
-    let jwt_secret = support::coordinator::test_jwt_secret();
-
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
-        db_pool,
-        jwt_secret,
     });
 
     let payload = ChatRequest {
@@ -359,25 +381,17 @@ async fn test_proxy_generate_streaming_passthrough() {
 
 #[tokio::test]
 async fn test_proxy_generate_no_agents() {
-    // AUTH_DISABLED=trueで認証を無効化
-    std::env::set_var("AUTH_DISABLED", "true");
-
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
-    let db_pool = support::coordinator::create_test_db_pool().await;
-    let jwt_secret = support::coordinator::test_jwt_secret();
-
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
-        db_pool,
-        jwt_secret,
     });
 
     let payload = GenerateRequest {
@@ -714,7 +728,7 @@ async fn test_openai_models_list_success() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "object": "list",
             "data": [{
-                "id": "llama3",
+                "id": "gpt-oss:20b",
                 "object": "model",
                 "owned_by": "ollama"
             }]
@@ -743,7 +757,7 @@ async fn test_openai_models_list_success() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(value["data"][0]["id"], "llama3");
+    assert_eq!(value["data"][0]["id"], "gpt-oss:20b");
 }
 
 #[tokio::test]
@@ -751,9 +765,9 @@ async fn test_openai_model_detail_success() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("GET"))
-        .and(path("/v1/models/phi3"))
+        .and(path("/v1/models/gpt-oss:20b"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "phi3",
+            "id": "gpt-oss:20b",
             "object": "model",
             "owned_by": "ollama"
         })))
@@ -767,7 +781,7 @@ async fn test_openai_model_detail_success() {
         .oneshot(
             axum::http::Request::builder()
                 .method("GET")
-                .uri("/v1/models/phi3")
+                .uri("/v1/models/gpt-oss:20b")
                 .body(axum::body::Body::empty())
                 .unwrap(),
         )
