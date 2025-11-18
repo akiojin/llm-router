@@ -3,6 +3,8 @@
 //! エージェント登録、ヘルスチェック、プロキシAPI
 
 pub mod agent;
+pub mod api_keys;
+pub mod auth;
 pub mod dashboard;
 pub mod health;
 pub mod logs;
@@ -10,12 +12,14 @@ pub mod metrics;
 pub mod models;
 pub mod openai;
 pub mod proxy;
+pub mod users;
 
 use crate::AppState;
 use axum::{
     body::Body,
     extract::Path as AxumPath,
     http::{header, StatusCode},
+    middleware,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Router,
@@ -28,7 +32,54 @@ const DASHBOARD_INDEX: &str = "index.html";
 
 /// APIルーターを作成
 pub fn create_router(state: AppState) -> Router {
+    // JWT認証が必要な保護されたルート
+    let protected_routes = Router::new()
+        .route("/api/auth/me", get(auth::me))
+        .route(
+            "/api/users",
+            get(users::list_users).post(users::create_user),
+        )
+        .route(
+            "/api/users/:id",
+            put(users::update_user).delete(users::delete_user),
+        )
+        .route(
+            "/api/api-keys",
+            get(api_keys::list_api_keys).post(api_keys::create_api_key),
+        )
+        .route("/api/api-keys/:id", delete(api_keys::delete_api_key))
+        .layer(middleware::from_fn_with_state(
+            state.jwt_secret.clone(),
+            crate::auth::middleware::jwt_auth_middleware,
+        ));
+
+    // エージェントトークン認証が必要なルート
+    let agent_protected_routes = Router::new()
+        .route("/api/health", post(health::health_check))
+        .layer(middleware::from_fn_with_state(
+            state.db_pool.clone(),
+            crate::auth::middleware::agent_token_auth_middleware,
+        ));
+
+    // APIキー認証が必要なルート（OpenAI互換エンドポイント）
+    let api_key_protected_routes = Router::new()
+        .route("/v1/chat/completions", post(openai::chat_completions))
+        .route("/v1/completions", post(openai::completions))
+        .route("/v1/embeddings", post(openai::embeddings))
+        .layer(middleware::from_fn_with_state(
+            state.db_pool.clone(),
+            crate::auth::middleware::api_key_auth_middleware,
+        ));
+
     Router::new()
+        // 認証エンドポイント（認証不要）
+        .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/logout", post(auth::logout))
+        // 保護されたルート
+        .merge(protected_routes)
+        .merge(agent_protected_routes)
+        .merge(api_key_protected_routes)
+        // 既存のルート
         .route(
             "/api/agents",
             post(agent::register_agent).get(agent::list_agents),
@@ -81,12 +132,8 @@ pub fn create_router(state: AppState) -> Router {
         )
         // FR-002: agent log proxy (spec path)
         .route("/api/agents/:agent_id/logs", get(logs::get_agent_logs))
-        .route("/api/health", post(health::health_check))
         .route("/api/chat", post(proxy::proxy_chat))
         .route("/api/generate", post(proxy::proxy_generate))
-        .route("/v1/chat/completions", post(openai::chat_completions))
-        .route("/v1/completions", post(openai::completions))
-        .route("/v1/embeddings", post(openai::embeddings))
         .route("/v1/models", get(openai::list_models))
         .route("/v1/models/:model_id", get(openai::get_model))
         // モデル管理API (SPEC-8ae67d67)
@@ -166,17 +213,27 @@ mod tests {
     use ollama_coordinator_common::{protocol::RegisterRequest, types::GpuDeviceInfo};
     use tower::Service;
 
-    fn test_state() -> (AppState, AgentRegistry) {
+    async fn test_state() -> (AppState, AgentRegistry) {
         let registry = AgentRegistry::new();
         let load_manager = LoadManager::new(registry.clone());
         let request_history =
             std::sync::Arc::new(crate::db::request_history::RequestHistoryStorage::new().unwrap());
         let task_manager = DownloadTaskManager::new();
+        let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+        sqlx::migrate!("./migrations")
+            .run(&db_pool)
+            .await
+            .expect("Failed to run migrations");
+        let jwt_secret = "test-secret".to_string();
         let state = AppState {
             registry: registry.clone(),
             load_manager,
             request_history,
             task_manager,
+            db_pool,
+            jwt_secret,
         };
         (state, registry)
     }
@@ -191,7 +248,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_static_served() {
-        let (state, _) = test_state();
+        let (state, _) = test_state().await;
         let mut router = create_router(state);
         let response = router
             .call(
@@ -218,7 +275,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_agents_endpoint_returns_json() {
-        let (state, registry) = test_state();
+        let (state, registry) = test_state().await;
         registry
             .register(RegisterRequest {
                 machine_name: "test-agent".into(),
@@ -253,7 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_overview_endpoint_returns_all_sections() {
-        let (state, registry) = test_state();
+        let (state, registry) = test_state().await;
         registry
             .register(RegisterRequest {
                 machine_name: "overview-agent".into(),
@@ -291,7 +348,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dashboard_metrics_endpoint_returns_history() {
-        let (state, registry) = test_state();
+        let (state, registry) = test_state().await;
         let agent_id = registry
             .register(RegisterRequest {
                 machine_name: "metrics-route".into(),

@@ -13,18 +13,28 @@ use ollama_coordinator_coordinator::{
 use serde_json::json;
 use tower::ServiceExt;
 
-fn build_app() -> Router {
+async fn build_app() -> Router {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     };
 
     api::create_router(state)
@@ -33,7 +43,7 @@ fn build_app() -> Router {
 #[tokio::test]
 async fn register_gpu_agent_success() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     let payload = json!({
         "machine_name": "gpu-node",
@@ -59,7 +69,7 @@ async fn register_gpu_agent_success() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let list_response = app
         .oneshot(
@@ -97,7 +107,7 @@ async fn register_gpu_agent_success() {
 #[tokio::test]
 async fn register_gpu_agent_missing_devices_is_rejected() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     let payload = json!({
         "machine_name": "cpu-only",

@@ -215,6 +215,12 @@ impl IntoResponse for AppError {
             CoordinatorError::Internal(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
             }
+            CoordinatorError::PasswordHash(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string())
+            }
+            CoordinatorError::Jwt(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()),
+            CoordinatorError::Authentication(_) => (StatusCode::UNAUTHORIZED, self.0.to_string()),
+            CoordinatorError::Authorization(_) => (StatusCode::FORBIDDEN, self.0.to_string()),
             CoordinatorError::Common(err) => (StatusCode::BAD_REQUEST, err.to_string()),
         };
 

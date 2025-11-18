@@ -13,18 +13,28 @@ use ollama_coordinator_coordinator::{
 use serde_json::json;
 use tower::ServiceExt;
 
-fn build_app() -> Router {
+async fn build_app() -> Router {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = ollama_coordinator_coordinator::tasks::DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     };
 
     api::create_router(state)
@@ -33,7 +43,7 @@ fn build_app() -> Router {
 /// T018: Ollamaライブラリから利用可能なモデル一覧を取得
 #[tokio::test]
 async fn test_list_available_models_from_ollama_library() {
-    let app = build_app();
+    let app = build_app().await;
 
     let response = app
         .oneshot(
@@ -95,7 +105,7 @@ async fn test_list_available_models_from_ollama_library() {
 #[tokio::test]
 async fn test_list_installed_models_on_agent() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     // テスト用エージェントを登録
     let register_payload = json!({
@@ -122,7 +132,7 @@ async fn test_list_installed_models_on_agent() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::OK);
+    assert_eq!(register_response.status(), StatusCode::CREATED);
 
     let body = to_bytes(register_response.into_body(), usize::MAX)
         .await
@@ -176,7 +186,7 @@ async fn test_list_installed_models_on_agent() {
 #[tokio::test]
 async fn test_model_matrix_view_multiple_agents() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     // 複数のエージェントを登録
     let mut agent_ids = Vec::new();
@@ -280,7 +290,7 @@ async fn test_model_matrix_view_multiple_agents() {
 /// T021: /v1/models は対応モデル5件のみを返す
 #[tokio::test]
 async fn test_v1_models_returns_fixed_list() {
-    let app = build_app();
+    let app = build_app().await;
 
     let response = app
         .oneshot(

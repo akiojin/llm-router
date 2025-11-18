@@ -13,7 +13,7 @@ clippy:
 	cargo clippy -- -D warnings
 
 test:
-	cargo test
+	cargo test -- --test-threads=1
 
 markdownlint:
 	pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"

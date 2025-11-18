@@ -14,18 +14,28 @@ use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn build_app() -> Router {
+async fn build_app() -> Router {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = ollama_coordinator_coordinator::tasks::DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     };
 
     api::create_router(state)
@@ -35,7 +45,7 @@ fn build_app() -> Router {
 #[tokio::test]
 async fn test_get_available_models_contract() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     let response = app
         .oneshot(
@@ -100,7 +110,7 @@ async fn test_get_available_models_contract() {
 #[tokio::test]
 async fn test_distribute_models_contract() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     // テスト用リクエスト
     let request_body = json!({
@@ -155,7 +165,7 @@ async fn test_distribute_models_contract() {
 #[tokio::test]
 async fn test_get_agent_models_contract() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     // テスト用のエージェントを登録
     let register_payload = json!({
@@ -182,7 +192,7 @@ async fn test_get_agent_models_contract() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::OK);
+    assert_eq!(register_response.status(), StatusCode::CREATED);
 
     // エージェントIDを取得
     let body = to_bytes(register_response.into_body(), usize::MAX)
@@ -236,7 +246,7 @@ async fn test_get_agent_models_contract() {
 #[tokio::test]
 async fn test_pull_model_contract() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     // テスト用のエージェントを登録
     let register_payload = json!({
@@ -263,7 +273,7 @@ async fn test_pull_model_contract() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::OK);
+    assert_eq!(register_response.status(), StatusCode::CREATED);
 
     // エージェントIDを取得
     let body = to_bytes(register_response.into_body(), usize::MAX)
@@ -317,7 +327,7 @@ async fn test_pull_model_contract() {
 #[tokio::test]
 async fn test_get_task_progress_contract() {
     std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
-    let app = build_app();
+    let app = build_app().await;
 
     // テスト用のエージェントを登録
     let register_payload = json!({
@@ -344,7 +354,7 @@ async fn test_get_task_progress_contract() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::OK);
+    assert_eq!(register_response.status(), StatusCode::CREATED);
 
     // エージェントIDを取得
     let body = to_bytes(register_response.into_body(), usize::MAX)

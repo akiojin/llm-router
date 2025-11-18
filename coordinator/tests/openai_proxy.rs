@@ -14,18 +14,28 @@ use tower::ServiceExt;
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-async fn build_state_with_mock(mock: &MockServer) -> AppState {
+async fn build_state_with_mock(mock: &MockServer) -> (AppState, String) {
     let registry = AgentRegistry::new();
     let load_manager = LoadManager::new(registry.clone());
     let request_history = std::sync::Arc::new(
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool: db_pool.clone(),
+        jwt_secret,
     };
 
     // 登録済みエージェントを追加
@@ -93,7 +103,27 @@ async fn build_state_with_mock(mock: &MockServer) -> AppState {
         .await
         .unwrap();
 
-    state
+    // テスト用のユーザーを作成
+    let test_user = ollama_coordinator_coordinator::db::users::create(
+        &db_pool,
+        "test-user",
+        "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyWpLF5JRSia", // bcrypt hash of "password"
+        ollama_coordinator_common::auth::UserRole::Admin,
+    )
+    .await
+    .expect("Failed to create test user");
+
+    // テスト用のAPIキーを作成
+    let api_key = ollama_coordinator_coordinator::db::api_keys::create(
+        &db_pool,
+        "test-key",
+        test_user.id,
+        None,
+    )
+    .await
+    .expect("Failed to create test API key");
+
+    (state, api_key.key)
 }
 
 fn attach_test_client_ip<B>(mut request: axum::http::Request<B>) -> axum::http::Request<B> {
@@ -120,7 +150,7 @@ async fn test_proxy_chat_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = ChatRequest {
@@ -169,7 +199,7 @@ async fn test_proxy_chat_streaming_passthrough() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = ChatRequest {
@@ -216,7 +246,7 @@ async fn test_proxy_chat_missing_model_returns_openai_error() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = ChatRequest {
@@ -263,11 +293,21 @@ async fn test_proxy_chat_no_agents() {
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     });
 
     let payload = ChatRequest {
@@ -308,7 +348,7 @@ async fn test_proxy_generate_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = GenerateRequest {
@@ -349,7 +389,7 @@ async fn test_proxy_generate_streaming_passthrough() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = GenerateRequest {
@@ -391,11 +431,21 @@ async fn test_proxy_generate_no_agents() {
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    let jwt_secret = "test-secret".to_string();
     let router = api::create_router(AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     });
 
     let payload = GenerateRequest {
@@ -440,7 +490,7 @@ async fn test_openai_chat_completions_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = serde_json::json!({
@@ -457,6 +507,7 @@ async fn test_openai_chat_completions_success() {
                 .method("POST")
                 .uri("/v1/chat/completions")
                 .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -490,7 +541,7 @@ async fn test_openai_chat_completions_streaming_passthrough() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = serde_json::json!({
@@ -507,6 +558,7 @@ async fn test_openai_chat_completions_streaming_passthrough() {
                 .method("POST")
                 .uri("/v1/chat/completions")
                 .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -537,7 +589,7 @@ async fn test_openai_completions_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = serde_json::json!({
@@ -552,6 +604,7 @@ async fn test_openai_completions_success() {
                 .method("POST")
                 .uri("/v1/completions")
                 .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -581,7 +634,7 @@ async fn test_openai_completions_streaming_passthrough() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = serde_json::json!({
@@ -596,6 +649,7 @@ async fn test_openai_completions_streaming_passthrough() {
                 .method("POST")
                 .uri("/v1/completions")
                 .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -643,7 +697,7 @@ async fn test_openai_chat_completions_preserves_extra_fields() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = serde_json::json!({
@@ -666,6 +720,7 @@ async fn test_openai_chat_completions_preserves_extra_fields() {
                 .method("POST")
                 .uri("/v1/chat/completions")
                 .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -693,7 +748,7 @@ async fn test_openai_embeddings_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let payload = serde_json::json!({
@@ -707,6 +762,7 @@ async fn test_openai_embeddings_success() {
                 .method("POST")
                 .uri("/v1/embeddings")
                 .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -740,7 +796,7 @@ async fn test_openai_models_list_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let response = router
@@ -778,7 +834,7 @@ async fn test_openai_model_detail_success() {
         .mount(&mock_server)
         .await;
 
-    let state = build_state_with_mock(&mock_server).await;
+    let (state, _api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let response = router

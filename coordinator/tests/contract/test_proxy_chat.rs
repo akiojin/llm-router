@@ -78,7 +78,7 @@ async fn proxy_chat_end_to_end_success() {
     let register_response = register_agent(coordinator.addr(), agent_stub.addr())
         .await
         .expect("register agent request must succeed");
-    assert_eq!(register_response.status(), ReqStatusCode::OK);
+    assert_eq!(register_response.status(), ReqStatusCode::CREATED);
 
     // Act: /api/chat にOpenAI互換リクエストを送信
     let client = Client::new();
@@ -123,7 +123,7 @@ async fn proxy_chat_propagates_upstream_error() {
     let register_response = register_agent(coordinator.addr(), agent_stub.addr())
         .await
         .expect("register agent must succeed");
-    assert_eq!(register_response.status(), ReqStatusCode::OK);
+    assert_eq!(register_response.status(), ReqStatusCode::CREATED);
 
     // Act: 存在しないモデルを指定
     let client = Client::new();

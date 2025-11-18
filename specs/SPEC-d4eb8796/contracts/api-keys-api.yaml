@@ -1,0 +1,225 @@
+openapi: 3.0.3
+info:
+  title: コーディネーターAPIキー管理API
+  description: 外部アプリケーション向けAPIキーの発行・削除API（管理者専用）
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: ローカル開発環境
+
+paths:
+  /api/api-keys:
+    get:
+      summary: APIキー一覧取得
+      description: 発行済みのすべてのAPIキーを取得（管理者専用）
+      operationId: listApiKeys
+      tags:
+        - API Keys
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: APIキー一覧取得成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKeyInfo'
+        '401':
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限不足（管理者のみアクセス可能）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: APIキー発行
+      description: 新しいAPIキーを発行（管理者専用）
+      operationId: createApiKey
+      tags:
+        - API Keys
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: APIキーの説明（用途を識別）
+                  example: my-chatbot
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: 有効期限（省略時は無期限）
+                  example: '2026-11-17T00:00:00Z'
+      responses:
+        '201':
+          description: APIキー発行成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyWithPlaintext'
+        '400':
+          description: リクエストが不正
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/api-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: APIキーID
+
+    delete:
+      summary: APIキー削除
+      description: APIキーを無効化し削除（管理者専用）
+      operationId: deleteApiKey
+      tags:
+        - API Keys
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: APIキー削除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: API key deleted successfully
+        '401':
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: APIキーが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ApiKeyInfo:
+      type: object
+      required:
+        - id
+        - name
+        - created_by
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: my-chatbot
+        created_by:
+          type: string
+          format: uuid
+          description: 発行したユーザーのID
+          example: 987e6543-e21a-45d6-b789-123456789abc
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-11-17T10:30:00Z'
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-11-17T00:00:00Z'
+      description: APIキー情報（キー本体はハッシュ化済みのため含まれない）
+
+    ApiKeyWithPlaintext:
+      type: object
+      required:
+        - id
+        - key
+        - name
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        key:
+          type: string
+          description: APIキー本体（平文、発行時のみ表示される）
+          example: sk_a1b2c3d4e5f67890a1b2c3d4e5f67890
+        name:
+          type: string
+          example: my-chatbot
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-11-17T10:30:00Z'
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-11-17T00:00:00Z'
+      description: APIキー発行レスポンス（平文キーを含む、一度しか表示されない）
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: API key not found

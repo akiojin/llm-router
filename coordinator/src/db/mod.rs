@@ -4,6 +4,18 @@
 
 pub mod request_history;
 
+/// ユーザー管理
+pub mod users;
+
+/// APIキー管理
+pub mod api_keys;
+
+/// エージェントトークン管理
+pub mod agent_tokens;
+
+/// データベースマイグレーション
+pub mod migrations;
+
 #[cfg(test)]
 pub(crate) mod test_utils {
     use once_cell::sync::Lazy;

@@ -238,6 +238,7 @@ impl AgentRegistry {
             agent_api_port: Some(agent.ollama_port + 1),
             auto_distributed_model: None,
             download_task_id: None,
+            agent_token: None,
         })
     }
 

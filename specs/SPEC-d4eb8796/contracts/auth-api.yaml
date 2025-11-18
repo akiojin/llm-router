@@ -1,0 +1,163 @@
+openapi: 3.0.3
+info:
+  title: コーディネーター認証API
+  description: ユーザー認証とセッション管理API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: ローカル開発環境
+
+paths:
+  /api/auth/login:
+    post:
+      summary: ログイン
+      description: ユーザー名とパスワードでログインし、JWTトークンを取得
+      operationId: login
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 50
+                  pattern: ^[a-zA-Z0-9_]+$
+                  example: admin
+                password:
+                  type: string
+                  minLength: 8
+                  example: secure123
+      responses:
+        '200':
+          description: ログイン成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                  - user
+                properties:
+                  token:
+                    type: string
+                    description: JWTトークン
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    $ref: '#/components/schemas/UserInfo'
+        '401':
+          description: 認証失敗（ユーザー名またはパスワードが間違っている）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/logout:
+    post:
+      summary: ログアウト
+      description: 現在のセッションを無効化
+      operationId: logout
+      tags:
+        - Authentication
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: ログアウト成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/me:
+    get:
+      summary: 現在のユーザー情報取得
+      description: JWTトークンから現在ログイン中のユーザー情報を取得
+      operationId: getCurrentUser
+      tags:
+        - Authentication
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: ユーザー情報取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '401':
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserInfo:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        username:
+          type: string
+          example: admin
+        role:
+          type: string
+          enum: [admin, viewer]
+          example: admin
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-11-17T10:30:00Z'
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2025-11-17T15:45:00Z'
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: Invalid credentials

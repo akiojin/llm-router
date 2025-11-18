@@ -5,8 +5,29 @@ use ollama_coordinator_coordinator::{
 };
 use reqwest::{Client, Response};
 use serde_json::json;
+use sqlx::SqlitePool;
 
 use super::http::{spawn_router, TestServer};
+
+/// テスト用のSQLiteデータベースプールを作成する
+pub async fn create_test_db_pool() -> SqlitePool {
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create in-memory SQLite pool");
+
+    // マイグレーションを実行
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
+    pool
+}
+
+/// テスト用のJWT秘密鍵を生成する
+pub fn test_jwt_secret() -> String {
+    "test-jwt-secret-key-for-testing-only".to_string()
+}
 
 /// コーディネーターサーバーをテスト用に起動する
 pub async fn spawn_coordinator() -> TestServer {
@@ -16,11 +37,16 @@ pub async fn spawn_coordinator() -> TestServer {
         ollama_coordinator_coordinator::db::request_history::RequestHistoryStorage::new().unwrap(),
     );
     let task_manager = DownloadTaskManager::new();
+    let db_pool = create_test_db_pool().await;
+    let jwt_secret = test_jwt_secret();
+
     let state = AppState {
         registry,
         load_manager,
         request_history,
         task_manager,
+        db_pool,
+        jwt_secret,
     };
 
     let router = api::create_router(state);
