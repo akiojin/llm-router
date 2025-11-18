@@ -129,7 +129,7 @@ async fn test_list_installed_models_on_agent() {
         .await
         .unwrap();
 
-    assert_eq!(register_response.status(), StatusCode::OK);
+    assert_eq!(register_response.status(), StatusCode::CREATED);
 
     let body = to_bytes(register_response.into_body(), usize::MAX)
         .await
