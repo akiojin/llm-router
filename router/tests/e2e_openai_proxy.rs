@@ -94,7 +94,7 @@ async fn agent_generate_handler(
 
 #[tokio::test]
 async fn openai_proxy_end_to_end_updates_dashboard_history() {
-    std::env::set_var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK", "1");
+    std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let node_stub = spawn_agent_stub(AgentStubState {
         chat_response: ChatResponse {
             message: ollama_router_common::protocol::ChatMessage {
