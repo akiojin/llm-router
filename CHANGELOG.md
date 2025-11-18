@@ -89,20 +89,20 @@
 既存ユーザーは以下の対応が必要です:
 
 1. データ移行:
-   - 旧: ~/.ollama-coordinator/
-   - 新: ~/.or/
+   * 旧: ~/.ollama-coordinator/
+   * 新: ~/.or/
 
 2. 環境変数更新:
-   - COORDINATOR_* → ROUTER_*
-   - AGENT_* → NODE_*
+   * `COORDINATOR_*`→`ROUTER_*`
+   * `AGENT_*`→`NODE_*`
 
 3. 実行ファイル名:
-   - ollama-coordinator-coordinator → or-router
-   - ollama-coordinator-agent → or-node
+   * `ollama-coordinator-coordinator`→`or-router`
+   * `ollama-coordinator-agent`→`or-node`
 
 4. Docker/設定ファイル:
-   - docker-compose.ymlのサービス名変更
-   - 環境変数の更新
+   * docker-compose.ymlのサービス名変更
+   * 環境変数の更新
 
 # [1.5.0](https://github.com/akiojin/ollama-router/compare/v1.4.1...v1.5.0) (2025-11-15)
 

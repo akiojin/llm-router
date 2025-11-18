@@ -2,9 +2,6 @@ services:
   ollama-router:
     build:
       context: .
-      args:
-        SDK_VERSION: ${SDK_VERSION:-14.2}
-        OSX_VERSION_MIN: ${OSX_VERSION_MIN:-11.0}
     container_name: ollama-router
     mem_limit: 16g
     mem_reservation: 13g
