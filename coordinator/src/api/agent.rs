@@ -102,7 +102,8 @@ pub async fn register_agent(
     let agent_api_base = format!("http://{}:{}", req.ip_address, agent_api_port);
     let health_url = format!("{}/v1/models", agent_api_base);
 
-    let skip_health_check = cfg!(test) || std::env::var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK").is_ok();
+    let skip_health_check =
+        cfg!(test) || std::env::var("OLLAMA_COORDINATOR_SKIP_HEALTH_CHECK").is_ok();
     let (loaded_models, initializing, ready_models) = if skip_health_check {
         (vec!["gpt-oss:20b".to_string()], false, Some((1, 1)))
     } else {
