@@ -1,3 +1,10 @@
+## [2.0.4](https://github.com/akiojin/ollama-router/compare/v2.0.3...v2.0.4) (2025-11-19)
+
+
+### Bug Fixes
+
+* **build:** resolve wix per-user shortcut registry issues ([5ba4f71](https://github.com/akiojin/ollama-router/commit/5ba4f71222d0e2ae11ae0750f7270df01a1c1a54))
+
 ## [2.0.3](https://github.com/akiojin/ollama-router/compare/v2.0.2...v2.0.3) (2025-11-18)
 
 
