@@ -12,19 +12,6 @@
 * **release:** improve workflow robustness with tag-based verification ([6f18acb](https://github.com/akiojin/ollama-router/commit/6f18acb7d19506cfa08aa7747b17861c81c3410a))
 * **release:** resolve git fetch error in verify step ([7d3ce0c](https://github.com/akiojin/ollama-router/commit/7d3ce0c742f9cabb36c757dd7e68b8297f2c50fc))
 
-## [2.0.5](https://github.com/akiojin/ollama-router/compare/v2.0.4...v2.0.5) (2025-11-19)
-
-
-### Bug Fixes
-
-* **ci:** skip ICE03 validation for Windows MSI build ([3391b7d](https://github.com/akiojin/ollama-router/commit/3391b7d0c120e249837ddd985c1da13d0dba9b15))
-* **deps:** upgrade sqlx to 0.8.6 to address security vulnerability ([cef2542](https://github.com/akiojin/ollama-router/commit/cef2542b08144154a02546f29d763c9ef508c026)), closes [#3](https://github.com/akiojin/ollama-router/issues/3)
-* **installer:** move KeyPath from RemoveFolder to RegistryValue ([d23230e](https://github.com/akiojin/ollama-router/commit/d23230e5c2756be7f4feed3c17d537f57e97f220))
-* **installer:** resolve ICE03 validation errors in WiX ([1303301](https://github.com/akiojin/ollama-router/commit/1303301196269fb3b3375feee443787f4b52e150))
-* **release:** improve tag detection in release workflow ([c317474](https://github.com/akiojin/ollama-router/commit/c317474f8aed2b8d149559e0c8dd315cac28da92))
-* **release:** improve workflow robustness with tag-based verification ([6f18acb](https://github.com/akiojin/ollama-router/commit/6f18acb7d19506cfa08aa7747b17861c81c3410a))
-* **release:** resolve git fetch error in verify step ([7d3ce0c](https://github.com/akiojin/ollama-router/commit/7d3ce0c742f9cabb36c757dd7e68b8297f2c50fc))
-
 ## [2.0.4](https://github.com/akiojin/ollama-router/compare/v2.0.3...v2.0.4) (2025-11-19)
 
 
