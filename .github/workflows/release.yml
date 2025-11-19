@@ -73,21 +73,28 @@ jobs:
         run: |
           # Gitタグを確認してリリース成功を判定
           git fetch --tags --force
+          git fetch origin "${GITHUB_REF#refs/heads/}:${GITHUB_REF#refs/heads/}"
 
-          # 現在のコミットに対応するタグを取得
-          CURRENT_TAG=$(git describe --exact-match HEAD 2>/dev/null || echo "")
+          # リリースブランチの最新のタグを取得（バージョン順でソート）
+          LATEST_TAG=$(git tag -l "v*" --sort=-version:refname --merged "${GITHUB_REF#refs/heads/}" | head -1)
 
-          if [ -n "$CURRENT_TAG" ] && [[ "$CURRENT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            VERSION="${CURRENT_TAG#v}"
+          if [ -n "$LATEST_TAG" ] && [[ "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="${LATEST_TAG#v}"
 
-            echo "new_release_published=true" >> $GITHUB_OUTPUT
-            echo "new_release_version=$VERSION" >> $GITHUB_OUTPUT
-            echo "new_release_git_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
-            echo "✓ Release verified: $CURRENT_TAG"
+            # タグが現在のリリースブランチに含まれているか確認
+            if git merge-base --is-ancestor "$LATEST_TAG" "${GITHUB_REF#refs/heads/}"; then
+              echo "new_release_published=true" >> $GITHUB_OUTPUT
+              echo "new_release_version=$VERSION" >> $GITHUB_OUTPUT
+              echo "new_release_git_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+              echo "✓ Release verified: $LATEST_TAG"
 
-            # semantic-releaseの出力をログに記録
-            if [ "${{ steps.semantic.outputs.semantic_exit_code }}" != "0" ]; then
-              echo "⚠️ semantic-release exited with code ${{ steps.semantic.outputs.semantic_exit_code }}, but release was created successfully"
+              # semantic-releaseの出力をログに記録
+              if [ "${{ steps.semantic.outputs.semantic_exit_code }}" != "0" ]; then
+                echo "⚠️ semantic-release exited with code ${{ steps.semantic.outputs.semantic_exit_code }}, but release was created successfully"
+              fi
+            else
+              echo "new_release_published=false" >> $GITHUB_OUTPUT
+              echo "No new release published (tag not in branch)"
             fi
           else
             echo "new_release_published=false" >> $GITHUB_OUTPUT
