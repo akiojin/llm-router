@@ -224,9 +224,9 @@ jobs:
           }
           Remove-Item $extractDir -Recurse -Force
 
-      - name: Build macOS installer (.pkg)
+      - name: Build macOS installers (.pkg)
         if: matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin'
-        id: package_macos_installer
+        id: package_macos_installers
         shell: bash
         run: |
           set -euo pipefail
@@ -235,24 +235,36 @@ jobs:
             echo "::error::Release version is not available."
             exit 1
           fi
-          pkg_root="$(pwd)/pkgroot"
-          install_dir="$pkg_root/usr/local/bin"
-          mkdir -p "$install_dir"
-          install -m 0755 "target/${{ matrix.target }}/release/or-router" "$install_dir/"
-          install -m 0755 "target/${{ matrix.target }}/release/or-node" "$install_dir/"
-          pkg_name="ollama-router-${{ matrix.artifact }}.pkg"
+          pkg_root_router="$(pwd)/pkgroot-router"
+          install_dir_router="$pkg_root_router/usr/local/bin"
+          mkdir -p "$install_dir_router"
+          install -m 0755 "target/${{ matrix.target }}/release/or-router" "$install_dir_router/"
+          pkg_router="or-router-${{ matrix.artifact }}.pkg"
           pkgbuild \
-            --root "$pkg_root" \
+            --root "$pkg_root_router" \
             --identifier "io.ollama.router" \
             --version "$version" \
             --install-location "/" \
-            "$pkg_name"
-          rm -rf "$pkg_root"
-          echo "pkg=$pkg_name" >> "$GITHUB_OUTPUT"
+            "$pkg_router"
+          rm -rf "$pkg_root_router"
+          pkg_root_node="$(pwd)/pkgroot-node"
+          install_dir_node="$pkg_root_node/usr/local/bin"
+          mkdir -p "$install_dir_node"
+          install -m 0755 "target/${{ matrix.target }}/release/or-node" "$install_dir_node/"
+          pkg_node="or-node-${{ matrix.artifact }}.pkg"
+          pkgbuild \
+            --root "$pkg_root_node" \
+            --identifier "io.ollama.router.agent" \
+            --version "$version" \
+            --install-location "/" \
+            "$pkg_node"
+          rm -rf "$pkg_root_node"
+          echo "router_pkg=$pkg_router" >> "$GITHUB_OUTPUT"
+          echo "node_pkg=$pkg_node" >> "$GITHUB_OUTPUT"
 
-      - name: Build Windows installer (.msi)
+      - name: Build Windows installers (.msi)
         if: runner.os == 'Windows'
-        id: package_windows_installer
+        id: package_windows_installers
         shell: pwsh
         run: |
           $version = "${env:RELEASE_VERSION}"
@@ -261,14 +273,20 @@ jobs:
             exit 1
           }
           $binaryDir = Join-Path $PWD "target/${{ matrix.target }}/release"
-          $wxs = Join-Path $PWD "installers/windows/ollama-router.wxs"
-          $obj = "ollama-router.wixobj"
-          $msi = "ollama-router-${{ matrix.artifact }}.msi"
+          $routerWxs = Join-Path $PWD "installers/windows/ollama-router.wxs"
+          $nodeWxs = Join-Path $PWD "installers/windows/ollama-router-node.wxs"
+          $routerObj = "ollama-router.wixobj"
+          $nodeObj = "ollama-router-node.wixobj"
+          $routerMsi = "or-router-${{ matrix.artifact }}.msi"
+          $nodeMsi = "or-node-${{ matrix.artifact }}.msi"
           $wixPath = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
           $env:PATH = "$wixPath;$env:PATH"
-          candle.exe $wxs -out $obj -dBinariesDir="$binaryDir" -dProductVersion="$version"
-          light.exe $obj -out $msi -sice:ICE03
-          "msi=$msi" >> $env:GITHUB_OUTPUT
+          candle.exe $routerWxs -out $routerObj -dBinariesDir="$binaryDir" -dProductVersion="$version"
+          light.exe $routerObj -out $routerMsi -sice:ICE03
+          candle.exe $nodeWxs -out $nodeObj -dBinariesDir="$binaryDir" -dProductVersion="$version"
+          light.exe $nodeObj -out $nodeMsi -sice:ICE03
+          "router_msi=$routerMsi" >> $env:GITHUB_OUTPUT
+          "node_msi=$nodeMsi" >> $env:GITHUB_OUTPUT
 
       - name: Upload release artifact (Unix)
         if: runner.os != 'Windows'
@@ -286,20 +304,36 @@ jobs:
           path: ${{ steps.package_windows.outputs.archive }}
           if-no-files-found: error
 
-      - name: Upload macOS installer artifact
-        if: (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin') && steps.package_macos_installer.outputs.pkg != ''
+      - name: Upload macOS router installer
+        if: (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin') && steps.package_macos_installers.outputs.router_pkg != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-pkg
-          path: ${{ steps.package_macos_installer.outputs.pkg }}
+          name: ${{ matrix.artifact }}-router-pkg
+          path: ${{ steps.package_macos_installers.outputs.router_pkg }}
           if-no-files-found: error
 
-      - name: Upload Windows installer artifact
-        if: runner.os == 'Windows'
+      - name: Upload macOS agent installer
+        if: (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin') && steps.package_macos_installers.outputs.node_pkg != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-msi
-          path: ${{ steps.package_windows_installer.outputs.msi }}
+          name: ${{ matrix.artifact }}-node-pkg
+          path: ${{ steps.package_macos_installers.outputs.node_pkg }}
+          if-no-files-found: error
+
+      - name: Upload Windows router installer
+        if: runner.os == 'Windows' && steps.package_windows_installers.outputs.router_msi != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-router-msi
+          path: ${{ steps.package_windows_installers.outputs.router_msi }}
+          if-no-files-found: error
+
+      - name: Upload Windows agent installer
+        if: runner.os == 'Windows' && steps.package_windows_installers.outputs.node_msi != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-node-msi
+          path: ${{ steps.package_windows_installers.outputs.node_msi }}
           if-no-files-found: error
 
   publish-binaries:

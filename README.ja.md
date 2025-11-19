@@ -265,7 +265,7 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
 1. 開発者は `develop` ブランチ上で `/release` コマンド、もしくは `./scripts/create-release-branch.sh` を実行します。内部では `scripts/create-release-branch.sh` が `gh workflow run create-release.yml --ref develop` を呼び出し、semantic-release のドライランで次バージョンを計算しつつ `release/vX.Y.Z` ブランチを作成・push します。
 2. release ブランチの push を契機に `.github/workflows/release.yml` が起動し、semantic-release 本番実行 → CHANGELOG / Cargo.toml / バージョンタグ更新 → main への自動マージ → develop へのバックマージ → release ブランチ削除までを一括で行います。
 3. main へのマージにより `.github/workflows/publish.yml` が動作し、Linux / macOS (x86_64, ARM64) / Windows 向けバイナリをビルド・検証し、GitHub Release に添付します。
-   - この publish フェーズでは従来の `.tar.gz` / `.zip` アーカイブに加えて、`pkgbuild` で作成した macOS 用 `.pkg` と、WiX Toolset で作成した Windows 用 `.msi` も同時に生成・添付されます。既存のリリース資産は削除せず、そのまま維持します。
+   - この publish フェーズでは従来の `.tar.gz` / `.zip` アーカイブに加えて、`pkgbuild` で作成した macOS 向け `or-router-<platform>.pkg` / `or-node-<platform>.pkg` と、WiX Toolset で作成した Windows 向け `or-router-<platform>.msi` / `or-node-<platform>.msi` を個別に生成・添付します。既存のリリース資産は削除せず、そのまま維持します。
 
 人手が必要なのは `/release` の実行と、必要に応じた進捗モニタリング（`gh run watch …`）だけです。バージョン決定からリリースノート生成、develop への同期まで CI が自動で完了させます。
 

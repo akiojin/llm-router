@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="Ollama Router Agent"
+    Language="1041"
+    Version="$(var.ProductVersion)"
+    Manufacturer="Ollama Router"
+    Codepage="65001"
+    UpgradeCode="{7AD8BFEC-71DE-45E7-A75C-A0E95D7CF21D}"
+  >
+    <Package
+      InstallerVersion="500"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Platform="x64"
+    />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <MajorUpgrade
+      AllowDowngrades="no"
+      DowngradeErrorMessage="A newer version of Ollama Router Agent is already installed."
+    />
+
+    <Feature Id="MainFeature" Title="Ollama Router Agent" Level="1">
+      <ComponentGroupRef Id="RuntimeComponents" />
+    </Feature>
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Ollama Router Agent" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Ollama Router Agent" />
+      </Directory>
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <Icon Id="AgentIcon" SourceFile="assets\\icons\\node.ico" />
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="RuntimeComponents">
+      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="{0A68FBF8-A12B-4424-93E0-D04FCBFBE329}" Win64="yes">
+        <File
+          Id="AgentExe"
+          KeyPath="yes"
+          Source="$(var.BinariesDir)\or-node.exe"
+        />
+      </Component>
+
+      <Component Id="AgentStartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{D640E8B1-D561-4CEB-9CD9-6FFD20186187}" Win64="yes">
+        <Shortcut
+          Id="AgentShortcut"
+          Name="Ollama Router Agent"
+          Description="Ollama Router Agent を起動"
+          Target="[INSTALLFOLDER]or-node.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="AgentIcon"
+          IconIndex="0"
+        />
+        <RemoveFolder Id="RemoveAgentProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\\OllamaRouter" Name="AgentShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

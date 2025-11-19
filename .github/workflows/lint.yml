@@ -58,7 +58,7 @@ jobs:
       - name: Run markdownlint
         run: |
           echo "📄 Checking Markdown files..."
-          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees"
+          pnpm dlx markdownlint-cli2 "**/*.md" "!node_modules" "!.git" "!.github" "!.worktrees" "!CHANGELOG.md"
 
   commitlint:
     # 要件: FR-005

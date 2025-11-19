@@ -121,6 +121,25 @@ async fn run_server(config: ServerConfig) {
         format!("sqlite:{}/.or/router.db", home)
     });
 
+    // SQLiteファイルはディレクトリが存在しないと作成できないため、先に作成しておく
+    if let Some(path) = database_url.strip_prefix("sqlite:") {
+        // `sqlite::memory:` のような特殊指定はスキップ
+        if !path.starts_with(':') {
+            // `sqlite://` 形式に備えてスラッシュを除去
+            let normalized = path.trim_start_matches("//");
+            let db_path = std::path::Path::new(normalized);
+            if let Some(parent) = db_path.parent() {
+                if let Err(err) = std::fs::create_dir_all(parent) {
+                    panic!(
+                        "Failed to create database directory {}: {}",
+                        parent.display(),
+                        err
+                    );
+                }
+            }
+        }
+    }
+
     let db_pool = sqlx::SqlitePool::connect(&database_url)
         .await
         .expect("Failed to connect to database");

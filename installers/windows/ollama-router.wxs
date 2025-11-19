@@ -42,7 +42,6 @@
   <Fragment>
     <!-- Paths are resolved relative to repository root (workflow runs from repo root) -->
     <Icon Id="CoordIcon" SourceFile="assets\\icons\\router.ico" />
-    <Icon Id="AgentIcon" SourceFile="assets\\icons\\node.ico" />
   </Fragment>
 
   <Fragment>
@@ -52,14 +51,6 @@
           Id="CoordinatorExe"
           KeyPath="yes"
           Source="$(var.BinariesDir)\or-router.exe"
-        />
-      </Component>
-
-      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="{A34E05F3-4200-4B88-B583-6D4509708D52}" Win64="yes">
-        <File
-          Id="AgentExe"
-          KeyPath="yes"
-          Source="$(var.BinariesDir)\or-node.exe"
         />
       </Component>
 
@@ -77,19 +68,6 @@
         <RegistryValue Root="HKCU" Key="Software\\OllamaRouter" Name="CoordinatorShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
 
-      <Component Id="AgentStartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{B32759F0-6604-4281-8211-244CC30417B5}" Win64="yes">
-        <Shortcut
-          Id="AgentShortcut"
-          Name="Ollama Router Agent"
-          Description="Ollama Router Agent を起動"
-          Target="[INSTALLFOLDER]or-node.exe"
-          WorkingDirectory="INSTALLFOLDER"
-          Icon="AgentIcon"
-          IconIndex="0"
-        />
-        <RemoveFolder Id="RemoveAgentProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\\OllamaRouter" Name="AgentShortcut" Type="integer" Value="1" KeyPath="yes" />
-      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>

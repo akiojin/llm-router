@@ -332,7 +332,7 @@ We follow the same release-branch workflow as `akiojin/unity-mcp-server`, with i
 1. While on `develop`, run the `/release` slash command or execute `./scripts/create-release-branch.sh`. The helper script calls `gh workflow run create-release.yml --ref develop`, which performs a semantic-release dry-run and creates `release/vX.Y.Z`.
 2. Pushing `release/vX.Y.Z` triggers `.github/workflows/release.yml`. That workflow runs semantic-release for real, updates CHANGELOG/Cargo manifests, creates the Git tag and GitHub Release, merges the release branch into `main`, backmerges `main` into `develop`, and deletes the release branch.
 3. The `main` push kicks off `.github/workflows/publish.yml`, which builds and attaches Linux/macOS/Windows archives to the GitHub Release.
-   - During this phase the workflow now also builds platform installers: `.pkg` bundles for macOS (Intel/Apple Silicon) via `pkgbuild`, and `.msi` installers for Windows via WiX. These ship alongside the existing `.tar.gz` / `.zip` archives so current release consumers stay unaffected.
+   - During this phase the workflow now also builds platform installers **per binary**: macOS gets `or-router-<platform>.pkg` and `or-node-<platform>.pkg` via `pkgbuild`, while Windows receives `or-router-<platform>.msi` and `or-node-<platform>.msi` via WiX. These ship alongside the existing `.tar.gz` / `.zip` archives so current release consumers stay unaffected.
 
 Monitor the pipeline with:
 
