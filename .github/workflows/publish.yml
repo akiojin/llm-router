@@ -260,7 +260,7 @@ jobs:
           $wixPath = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
           $env:PATH = "$wixPath;$env:PATH"
           candle.exe $wxs -out $obj -dBinariesDir="$binaryDir" -dProductVersion="$version"
-          light.exe $obj -out $msi
+          light.exe $obj -out $msi -sice:ICE03
           "msi=$msi" >> $env:GITHUB_OUTPUT
 
       - name: Upload release artifact (Unix)
