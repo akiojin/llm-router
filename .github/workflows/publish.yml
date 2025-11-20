@@ -320,32 +320,3 @@ jobs:
           git fetch origin main
           git merge --no-ff origin/main -m "chore(release): sync main into develop"
           git push origin develop
-
-  backmerge-to-develop:
-    name: Backmerge to develop
-    needs: [detect-release]
-    if: needs.detect-release.outputs.is_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Backmerge main to develop
-        run: |
-          echo "Checking out develop..."
-          git fetch origin develop
-          git checkout develop
-
-          echo "Merging main to develop..."
-          git merge origin/main --no-edit -m "chore: Backmerge main to develop [skip ci]"
-
-          echo "Pushing to develop..."
-          git push origin develop
