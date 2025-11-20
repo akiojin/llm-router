@@ -1,8 +1,4 @@
 # Publish Workflow
-# 由来: release-binaries.yml + claude-worktree/publish.yml統合
-# 目的: mainへのpush時にバイナリをビルド・公開し、developへbackmerge
-# トリガー: main push (chore(release): コミット) または手動実行
-
 name: Publish
 
 on:
@@ -19,22 +15,19 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
+
 jobs:
-  build-binaries:
+  build-unix:
     name: Build ${{ matrix.artifact }}
     runs-on: ${{ matrix.os }}
-    env:
-      RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
-      RELEASE_VERSION: ${{ (github.event.inputs.release_tag != '' && github.event.inputs.release_tag) || github.ref_name }}
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact: linux-x86_64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: windows-x86_64
           - os: macos-15-intel
             target: x86_64-apple-darwin
             artifact: macos-x86_64
@@ -49,6 +42,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Derive release version
+        shell: bash
         run: |
           ver="${RELEASE_TAG#v}"
           echo "RELEASE_VERSION=$ver" >> $GITHUB_ENV
@@ -58,7 +52,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Configure macOS toolchain
+      - name: Configure macOS toolchain (aarch64)
         if: matrix.target == 'aarch64-apple-darwin'
         shell: bash
         run: |
@@ -76,11 +70,6 @@ jobs:
 
       - name: Build release binaries
         run: cargo build --release --target ${{ matrix.target }} -p or-router -p or-node
-
-      - name: Install WiX Toolset
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: choco install wixtoolset --version 3.11.2 -y --allow-downgrade --force
 
       - name: Package binaries (Unix)
         if: runner.os != 'Windows'
@@ -110,117 +99,137 @@ jobs:
           set -o pipefail
           [[ -n "$root_dir" ]] || { echo "::error::failed to detect root directory"; exit 1; }
           tar -tzf "$archive" > contents.txt 2>&1
-          grep -q "^${root_dir}/or-router\$" contents.txt || { echo "::error::or-router not found"; exit 1; }
-          grep -q "^${root_dir}/or-node\$" contents.txt || { echo "::error::or-node not found"; exit 1; }
-          grep -q "^${root_dir}/README.md\$" contents.txt || { echo "::error::README.md not found"; exit 1; }
-          grep -q "^${root_dir}/README.ja.md\$" contents.txt || { echo "::error::README.ja.md not found"; exit 1; }
-          grep -q "^${root_dir}/LICENSE\$" contents.txt || { echo "::error::LICENSE not found"; exit 1; }
+          grep -q "^${root_dir}/or-router$" contents.txt || { echo "::error::or-router not found"; exit 1; }
+          grep -q "^${root_dir}/or-node$" contents.txt || { echo "::error::or-node not found"; exit 1; }
+          grep -q "^${root_dir}/README.md$" contents.txt || { echo "::error::README.md not found"; exit 1; }
+          grep -q "^${root_dir}/README.ja.md$" contents.txt || { echo "::error::README.ja.md not found"; exit 1; }
+          grep -q "^${root_dir}/LICENSE$" contents.txt || { echo "::error::LICENSE not found"; exit 1; }
           rm contents.txt
 
-      - name: Package binaries (Windows)
-        if: runner.os == 'Windows'
-        id: package_windows
-        shell: pwsh
-        run: |
-          $archive = "ollama-router-${{ matrix.artifact }}.zip"
-          $staging = Join-Path "dist" "ollama-router-${{ matrix.artifact }}"
-          New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/or-router.exe" $staging
-          Copy-Item "target/${{ matrix.target }}/release/or-node.exe" $staging
-          Copy-Item README.md,README.ja.md,LICENSE $staging
-          Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $archive -Force
-          "archive=$archive" >> $env:GITHUB_OUTPUT
-
-      - name: Validate archive contents (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $archive = "${{ steps.package_windows.outputs.archive }}"
-          if (-not ($archive -like "ollama-router-*")) {
-            Write-Error "unexpected archive name $archive"
-            exit 1
-          }
-          if (-not ($archive.EndsWith(".zip"))) {
-            Write-Error "expected .zip archive"
-            exit 1
-          }
-          $extractDir = Join-Path $PWD "validate"
-          if (Test-Path $extractDir) {
-            Remove-Item $extractDir -Recurse -Force
-          }
-          Expand-Archive -Path $archive -DestinationPath $extractDir -Force
-          $files = Get-ChildItem -Path $extractDir -File -Recurse
-          $binaryPrefixes = @("or-router","or-node")
-          foreach ($prefix in $binaryPrefixes) {
-            if (-not ($files.Name | Where-Object { $_ -like "$prefix*.exe" })) {
-              Write-Error "missing executable matching $prefix*.exe in archive"
-              exit 1
-            }
-          }
-          $staticFiles = @("README.md","README.ja.md","LICENSE")
-          foreach ($name in $staticFiles) {
-            if (-not ($files.Name -contains $name)) {
-              Write-Error "missing $name in archive"
-              exit 1
-            }
-          }
-          Remove-Item $extractDir -Recurse -Force
-
       - name: Build macOS installers (.pkg)
-        if: matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin'
+        if: runner.os == 'macOS'
         id: package_macos_installers
         shell: bash
         run: |
           set -euo pipefail
           version="${RELEASE_VERSION}"
-          if [[ -z "$version" ]]; then
-            echo "::error::Release version is not available."
-            exit 1
-          fi
           pkg_root_router="$(pwd)/pkgroot-router"
           install_dir_router="$pkg_root_router/usr/local/bin"
           mkdir -p "$install_dir_router"
           install -m 0755 "target/${{ matrix.target }}/release/or-router" "$install_dir_router/"
           pkg_router="or-router-${{ matrix.artifact }}.pkg"
-          pkgbuild \
-            --root "$pkg_root_router" \
-            --identifier "io.ollama.router" \
-            --version "$version" \
-            --install-location "/" \
-            "$pkg_router"
+          pkgbuild --root "$pkg_root_router" --identifier "io.ollama.router" --version "$version" --install-location "/" "$pkg_router"
           rm -rf "$pkg_root_router"
           pkg_root_node="$(pwd)/pkgroot-node"
           install_dir_node="$pkg_root_node/usr/local/bin"
           mkdir -p "$install_dir_node"
           install -m 0755 "target/${{ matrix.target }}/release/or-node" "$install_dir_node/"
           pkg_node="or-node-${{ matrix.artifact }}.pkg"
-          pkgbuild \
-            --root "$pkg_root_node" \
-            --identifier "io.ollama.router.agent" \
-            --version "$version" \
-            --install-location "/" \
-            "$pkg_node"
+          pkgbuild --root "$pkg_root_node" --identifier "io.ollama.router.agent" --version "$version" --install-location "/" "$pkg_node"
           rm -rf "$pkg_root_node"
           echo "router_pkg=$pkg_router" >> "$GITHUB_OUTPUT"
           echo "node_pkg=$pkg_node" >> "$GITHUB_OUTPUT"
 
+      - name: Upload artifacts (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ steps.package_unix.outputs.archive }}
+          if-no-files-found: error
+
+      - name: Upload macOS router installer
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-router-pkg
+          path: ${{ steps.package_macos_installers.outputs.router_pkg }}
+          if-no-files-found: error
+
+      - name: Upload macOS agent installer
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-node-pkg
+          path: ${{ steps.package_macos_installers.outputs.node_pkg }}
+          if-no-files-found: error
+
+  build-windows:
+    name: Build windows-x86_64
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Derive release version
+        shell: pwsh
+        run: |
+          $ver = ($env:RELEASE_TAG.TrimStart('v'))
+          "RELEASE_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build release binaries
+        run: cargo build --release --target x86_64-pc-windows-msvc -p or-router -p or-node
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: choco install wixtoolset --version 3.11.2 -y --allow-downgrade --force
+
+      - name: Package binaries (Windows zip)
+        id: package_windows
+        shell: pwsh
+        run: |
+          $archive = "ollama-router-windows-x86_64.zip"
+          $staging = Join-Path "dist" "ollama-router-windows-x86_64"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          Copy-Item "target/x86_64-pc-windows-msvc/release/or-router.exe" $staging
+          Copy-Item "target/x86_64-pc-windows-msvc/release/or-node.exe" $staging
+          Copy-Item README.md,README.ja.md,LICENSE $staging
+          Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $archive -Force
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+
+      - name: Validate archive contents (Windows)
+        shell: pwsh
+        run: |
+          $archive = "${{ steps.package_windows.outputs.archive }}"
+          if (-not ($archive -like "ollama-router-*")) { Write-Error "unexpected archive name $archive"; exit 1 }
+          if (-not ($archive.EndsWith(".zip"))) { Write-Error "expected .zip archive"; exit 1 }
+          $extractDir = Join-Path $PWD "validate"
+          if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+          Expand-Archive -Path $archive -DestinationPath $extractDir -Force
+          $files = Get-ChildItem -Path $extractDir -File -Recurse
+          $binaryPrefixes = @("or-router","or-node")
+          foreach ($prefix in $binaryPrefixes) {
+            if (-not ($files.Name | Where-Object { $_ -like "$prefix*.exe" })) { Write-Error "missing executable matching $prefix*.exe in archive"; exit 1 }
+          }
+          $staticFiles = @("README.md","README.ja.md","LICENSE")
+          foreach ($name in $staticFiles) {
+            if (-not ($files.Name -contains $name)) { Write-Error "missing $name in archive"; exit 1 }
+          }
+          Remove-Item $extractDir -Recurse -Force
+
       - name: Build Windows installers (.msi)
-        if: runner.os == 'Windows'
         id: package_windows_installers
         shell: pwsh
         run: |
-          $version = "${env:RELEASE_VERSION}"
-          if ([string]::IsNullOrEmpty($version)) {
-            Write-Error "Release version is not available."
-            exit 1
-          }
-          $binaryDir = Join-Path $PWD "target/${{ matrix.target }}/release"
+          $version = "$env:RELEASE_VERSION"
+          if ([string]::IsNullOrEmpty($version)) { Write-Error "Release version is not available."; exit 1 }
+          $binaryDir = Join-Path $PWD "target/x86_64-pc-windows-msvc/release"
           $routerWxs = Join-Path $PWD "installers/windows/ollama-router.wxs"
           $nodeWxs = Join-Path $PWD "installers/windows/ollama-router-node.wxs"
           $routerObj = "ollama-router.wixobj"
           $nodeObj = "ollama-router-node.wixobj"
-          $routerMsi = "or-router-${{ matrix.artifact }}.msi"
-          $nodeMsi = "or-node-${{ matrix.artifact }}.msi"
+          $routerMsi = "or-router-windows-x86_64.msi"
+          $nodeMsi = "or-node-windows-x86_64.msi"
           $wixPath = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
           $env:PATH = "$wixPath;$env:PATH"
           candle.exe $routerWxs -out $routerObj -dBinariesDir="$binaryDir" -dProductVersion="$version"
@@ -230,57 +239,19 @@ jobs:
           "router_msi=$routerMsi" >> $env:GITHUB_OUTPUT
           "node_msi=$nodeMsi" >> $env:GITHUB_OUTPUT
 
-      - name: Upload release artifact (Unix)
-        if: runner.os != 'Windows'
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ steps.package_unix.outputs.archive }}
-          if-no-files-found: error
-
-      - name: Upload release artifact (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ steps.package_windows.outputs.archive }}
-          if-no-files-found: error
-
-      - name: Upload macOS router installer
-        if: (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin') && steps.package_macos_installers.outputs.router_pkg != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}-router-pkg
-          path: ${{ steps.package_macos_installers.outputs.router_pkg }}
-          if-no-files-found: error
-
-      - name: Upload macOS agent installer
-        if: (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin') && steps.package_macos_installers.outputs.node_pkg != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}-node-pkg
-          path: ${{ steps.package_macos_installers.outputs.node_pkg }}
-          if-no-files-found: error
-
-      - name: Upload Windows router installer
-        if: runner.os == 'Windows' && steps.package_windows_installers.outputs.router_msi != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}-router-msi
-          path: ${{ steps.package_windows_installers.outputs.router_msi }}
-          if-no-files-found: error
-
-      - name: Upload Windows agent installer
-        if: runner.os == 'Windows' && steps.package_windows_installers.outputs.node_msi != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}-node-msi
-          path: ${{ steps.package_windows_installers.outputs.node_msi }}
+          name: windows-x86_64
+          path: |
+            ${{ steps.package_windows.outputs.archive }}
+            ${{ steps.package_windows_installers.outputs.router_msi }}
+            ${{ steps.package_windows_installers.outputs.node_msi }}
           if-no-files-found: error
 
   publish-binaries:
     name: Attach binaries to GitHub Release
-    needs: [build-binaries]
+    needs: [build-unix, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download build artifacts
