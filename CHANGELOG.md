@@ -5,6 +5,16 @@
 
 * **installer:** ルーターとノードのインストーラーを分離 ([1a29f9f](https://github.com/akiojin/ollama-router/commit/1a29f9fd732a6867931387211760a28c7dd34096))
 
+## [2.1.1](https://github.com/akiojin/ollama-router/compare/v2.1.0...v2.1.1) (2025-11-20)
+
+
+### Bug Fixes
+
+* **ci:** align release-please inputs ([94e5b91](https://github.com/akiojin/ollama-router/commit/94e5b91a4a231df207c3146bc8ee63b959201087))
+* **ci:** finalize release-please setup on main ([523cd38](https://github.com/akiojin/ollama-router/commit/523cd384c7ff4d37c7bb0f8d00aa7e69e74f616e))
+* **ci:** remove stale needs from publish backmerge ([58a04f9](https://github.com/akiojin/ollama-router/commit/58a04f9535da4cac57bde8272bc1723518ddd734))
+* **ci:** use release-please action manifest on main ([bce65ed](https://github.com/akiojin/ollama-router/commit/bce65ed266896bd3a672930f91f118c4522d6381))
+
 ## [2.0.5](https://github.com/akiojin/ollama-router/compare/v2.0.4...v2.0.5) (2025-11-19)
 
 
