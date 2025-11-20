@@ -14,11 +14,13 @@ jobs:
     steps:
       - name: Run release-please (release-pr)
         id: rp
-        uses: google-github-actions/release-please-action@v4
+        uses: googleapis/release-please-action@v4
         with:
-          command: release-pr
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-          default-branch: main
+          release-type: node
+          manifest-file: .release-please-manifest.json
+          config-file: .release-please-config.json
+          target-branch: main
 
       - name: Enable auto-merge for release PR
         if: steps.rp.outputs.pull_request_number != ''
