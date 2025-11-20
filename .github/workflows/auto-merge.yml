@@ -1,7 +1,7 @@
 name: Auto Merge PR
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
@@ -19,14 +19,6 @@ jobs:
     steps:
       - name: Enable auto-merge
         env:
-          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::PERSONAL_ACCESS_TOKEN (or fallback GITHUB_TOKEN) is required to enable auto-merge."
-            exit 1
-          fi
-
-          gh pr merge "${{ github.event.pull_request.number }}" \
-            --auto \
-            --merge \
-            --repo "${{ github.repository }}"
+          gh pr merge "${{ github.event.pull_request.number }}" --auto --merge --repo "${{ github.repository }}"
