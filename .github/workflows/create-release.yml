@@ -5,84 +5,25 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  create-release-branch:
-    name: Create Release Branch
+  release-pr:
+    name: Create release PR/branch (release-please)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout develop branch
-        uses: actions/checkout@v4
+      - name: Run release-please (release-pr)
+        id: rp
+        uses: google-github-actions/release-please-action@v4
         with:
-          ref: develop
-          fetch-depth: 0
+          command: release-pr
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          default-branch: main
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.20.0
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run semantic-release dry-run
-        id: version
+      - name: Enable auto-merge for release PR
+        if: steps.rp.outputs.pull_request_number != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.rp.outputs.pull_request_number }}
         run: |
-          OUTPUT=$(pnpm exec semantic-release --dry-run --branches develop 2>&1)
-          echo "$OUTPUT"
-
-          # Remove ANSI color codes before extracting version
-          CLEAN_OUTPUT=$(echo "$OUTPUT" | sed 's/\x1b\[[0-9;]*m//g')
-          VERSION=$(echo "$CLEAN_OUTPUT" | grep -oP 'The next release version is \K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-
-          if [ -z "$VERSION" ]; then
-            echo "Error: Could not determine next version"
-            echo "No releasable commits found. Make sure you have commits following Conventional Commits format."
-            exit 1
-          fi
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📦 Next Release Version: $VERSION"
-          echo "🔖 Release Branch: release/v$VERSION"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Create release branch
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          RELEASE_BRANCH="release/v${VERSION}"
-
-          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
-            echo "Error: Release branch $RELEASE_BRANCH already exists"
-            exit 1
-          fi
-
-          git checkout -b "$RELEASE_BRANCH"
-          git push --no-verify origin "$RELEASE_BRANCH"
-
-          echo "✓ Created and pushed $RELEASE_BRANCH"
-          echo "Semantic-release will now run on this branch automatically."
-          echo ""
-          echo "Next steps:"
-          echo "1. Wait for release.yml to complete"
-          echo "2. Monitor publish.yml for binary distribution"
+          gh pr merge "$PR_NUMBER" --auto --merge

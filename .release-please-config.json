@@ -1,0 +1,11 @@
+{
+  "bootstrap-sha": "HEAD",
+  "default-branch": "main",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "extra-files": []
+    }
+  },
+  "pull-request-title-pattern": "chore(release): ${version}"
+}
