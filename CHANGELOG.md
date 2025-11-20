@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/akiojin/ollama-router/compare/v2.0.5...v2.1.0) (2025-11-19)
+
+
+### Features
+
+* **installer:** ルーターとノードのインストーラーを分離 ([1a29f9f](https://github.com/akiojin/ollama-router/commit/1a29f9fd732a6867931387211760a28c7dd34096))
+
 ## [2.0.5](https://github.com/akiojin/ollama-router/compare/v2.0.4...v2.0.5) (2025-11-19)
 
 
