@@ -5,6 +5,13 @@
 
 * **installer:** ルーターとノードのインストーラーを分離 ([1a29f9f](https://github.com/akiojin/ollama-router/commit/1a29f9fd732a6867931387211760a28c7dd34096))
 
+## [2.1.3](https://github.com/akiojin/ollama-router/compare/v2.1.2...v2.1.3) (2025-11-21)
+
+
+### Bug Fixes
+
+* **router:** sync readiness after node registration ([147f414](https://github.com/akiojin/ollama-router/commit/147f414c306ef21177b74527b93846ce6e3fc223))
+
 ## [2.1.2](https://github.com/akiojin/ollama-router/compare/v2.1.1...v2.1.2) (2025-11-21)
 
 
