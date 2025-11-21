@@ -53,7 +53,7 @@ The agent with the **lowest score** is selected. If all agents have CPU usage > 
 
 #### 2. Advanced Load Balancing (Default)
 
-Combines multiple factors including response time, active requests, and CPU usage for sophisticated agent selection.
+Combines multiple factors including response time, active requests, and CPU usage to provide sophisticated agent selection with adaptive performance optimization.
 
 **Configuration:**
 ```bash
