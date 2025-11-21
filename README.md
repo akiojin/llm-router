@@ -32,7 +32,7 @@ Ollama Router supports multiple load balancing strategies to optimize request di
 
 #### 1. Metrics-Based Load Balancing (Recommended)
 
-Selects agents based on real-time metrics (CPU usage, memory usage, active requests). This mode provides optimal performance by routing requests to the least loaded agent.
+Selects agents based on real-time metrics (CPU usage, memory usage, active requests). This intelligent mode provides optimal performance by dynamically routing requests to the least loaded agent, ensuring efficient resource utilization.
 
 **Configuration:**
 ```bash
