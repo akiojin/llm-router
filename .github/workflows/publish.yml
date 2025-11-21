@@ -48,10 +48,19 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.ref }}
 
-      - name: Derive release version
+      - name: Derive release version (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           ver="${RELEASE_TAG#v}"
           echo "RELEASE_VERSION=$ver" >> $GITHUB_ENV
+
+      - name: Derive release version (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ver = $env:RELEASE_TAG.TrimStart('v')
+          "RELEASE_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

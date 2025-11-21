@@ -5,6 +5,15 @@
 
 * **installer:** ルーターとノードのインストーラーを分離 ([1a29f9f](https://github.com/akiojin/ollama-router/commit/1a29f9fd732a6867931387211760a28c7dd34096))
 
+## [2.1.2](https://github.com/akiojin/ollama-router/compare/v2.1.1...v2.1.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* **ci:** correct pwsh derive step in publish ([84471bd](https://github.com/akiojin/ollama-router/commit/84471bd77d7f202e32e84f37eb234ac6107824b0))
+* **ci:** derive release version with pwsh on windows ([3787bd4](https://github.com/akiojin/ollama-router/commit/3787bd4481de0ad199a813c23b70a84ed697a093))
+* **ci:** use pwsh syntax in windows derive step ([fb28310](https://github.com/akiojin/ollama-router/commit/fb28310740503c898cf181c528fb41a382703800))
+
 ## [2.1.1](https://github.com/akiojin/ollama-router/compare/v2.1.0...v2.1.1) (2025-11-20)
 
 
