@@ -5,6 +5,14 @@
 
 * **installer:** ルーターとノードのインストーラーを分離 ([1a29f9f](https://github.com/akiojin/ollama-router/commit/1a29f9fd732a6867931387211760a28c7dd34096))
 
+## [2.1.5](https://github.com/akiojin/ollama-router/compare/v2.1.4...v2.1.5) (2025-11-21)
+
+
+### Bug Fixes
+
+* **readme:** enhance monitoring feature description ([23498a7](https://github.com/akiojin/ollama-router/commit/23498a7fd1d8ff02e5144de8b72efd200cb032ef))
+* **readme:** enhance monitoring feature description with performance metrics ([df91e15](https://github.com/akiojin/ollama-router/commit/df91e15c30537b0477e2770a571b6e36c4b5c324))
+
 ## [2.1.4](https://github.com/akiojin/ollama-router/compare/v2.1.3...v2.1.4) (2025-11-21)
 
 
