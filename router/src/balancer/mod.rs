@@ -1455,6 +1455,22 @@ impl LoadManager {
         Ok(())
     }
 
+    /// ノード登録時に初期状態を同期
+    pub async fn upsert_initial_state(
+        &self,
+        node_id: Uuid,
+        initializing: bool,
+        ready_models: Option<(u8, u8)>,
+    ) {
+        let mut state = self.state.write().await;
+        let entry = state.entry(node_id).or_default();
+        entry.initializing = initializing;
+        entry.ready_models = ready_models;
+        if !initializing {
+            self.ready_notify.notify_waiters();
+        }
+    }
+
     /// 初期化完了しているノードが存在するか
     pub async fn has_ready_agents(&self) -> bool {
         let state = self.state.read().await;

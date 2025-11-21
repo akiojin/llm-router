@@ -11,6 +11,7 @@ use or_router::{
     api, balancer::LoadManager, registry::NodeRegistry, tasks::DownloadTaskManager, AppState,
 };
 use serde_json::json;
+use serial_test::serial;
 use tower::ServiceExt;
 
 async fn build_app() -> Router {
@@ -49,6 +50,7 @@ async fn build_app() -> Router {
 }
 
 #[tokio::test]
+#[serial]
 async fn register_gpu_agent_success() {
     std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let app = build_app().await;
@@ -113,6 +115,7 @@ async fn register_gpu_agent_success() {
 }
 
 #[tokio::test]
+#[serial]
 async fn register_gpu_agent_missing_devices_is_rejected() {
     std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let app = build_app().await;

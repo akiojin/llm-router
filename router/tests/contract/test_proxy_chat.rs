@@ -12,6 +12,7 @@ use crate::support::{
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use ollama_router_common::protocol::{ChatRequest, ChatResponse};
 use reqwest::{Client, StatusCode as ReqStatusCode};
+use serial_test::serial;
 
 #[derive(Clone)]
 struct AgentStubState {
@@ -23,6 +24,29 @@ struct AgentStubState {
 enum AgentChatStubResponse {
     Success(ChatResponse),
     Error(StatusCode, String),
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    original: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn remove(key: &'static str) -> Self {
+        let original = std::env::var(key).ok();
+        std::env::remove_var(key);
+        Self { key, original }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(value) = &self.original {
+            std::env::set_var(self.key, value);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
 }
 
 async fn spawn_agent_stub(state: AgentStubState) -> TestServer {
@@ -60,6 +84,7 @@ async fn agent_chat_handler(
 }
 
 #[tokio::test]
+#[serial]
 async fn proxy_chat_end_to_end_success() {
     std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     // Arrange: スタブノードとルーターを実ポートで起動
@@ -110,6 +135,54 @@ async fn proxy_chat_end_to_end_success() {
 }
 
 #[tokio::test]
+#[serial]
+async fn proxy_chat_uses_health_check_without_skip_flag() {
+    let _guard = EnvVarGuard::remove("OLLAMA_ROUTER_SKIP_HEALTH_CHECK");
+
+    let node_stub = spawn_agent_stub(AgentStubState {
+        expected_model: Some("gpt-oss:20b".to_string()),
+        chat_response: AgentChatStubResponse::Success(ChatResponse {
+            message: ollama_router_common::protocol::ChatMessage {
+                role: "assistant".into(),
+                content: "Hello via health check".into(),
+            },
+            done: true,
+        }),
+    })
+    .await;
+    let router = spawn_test_router().await;
+
+    let register_response = register_node(router.addr(), node_stub.addr())
+        .await
+        .expect("register node request must succeed");
+    assert_eq!(register_response.status(), ReqStatusCode::CREATED);
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/api/chat", router.addr()))
+        .json(&ChatRequest {
+            model: "gpt-oss:20b".into(),
+            messages: vec![ollama_router_common::protocol::ChatMessage {
+                role: "user".into(),
+                content: "Hello?".into(),
+            }],
+            stream: false,
+        })
+        .send()
+        .await
+        .expect("chat request should succeed");
+
+    assert_eq!(response.status(), ReqStatusCode::OK);
+    let body: ChatResponse = response.json().await.expect("valid chat response");
+    assert_eq!(body.message.content, "Hello via health check");
+    assert!(body.done);
+
+    router.stop().await;
+    node_stub.stop().await;
+}
+
+#[tokio::test]
+#[serial]
 async fn proxy_chat_propagates_upstream_error() {
     std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     // Arrange: ノードが404を返すケース

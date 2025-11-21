@@ -16,6 +16,7 @@ use axum::{
 use ollama_router_common::protocol::GenerateRequest;
 use reqwest::{Client, StatusCode as ReqStatusCode};
 use serde_json::Value;
+use serial_test::serial;
 
 #[derive(Clone)]
 struct AgentStubState {
@@ -93,6 +94,7 @@ async fn agent_tags_handler(State(state): State<Arc<AgentStubState>>) -> impl In
 }
 
 #[tokio::test]
+#[serial]
 async fn proxy_completions_end_to_end_success() {
     std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let agent_stub = spawn_agent_stub(AgentStubState {
@@ -131,6 +133,7 @@ async fn proxy_completions_end_to_end_success() {
 }
 
 #[tokio::test]
+#[serial]
 async fn proxy_completions_propagates_upstream_error() {
     std::env::set_var("OLLAMA_ROUTER_SKIP_HEALTH_CHECK", "1");
     let agent_stub = spawn_agent_stub(AgentStubState {

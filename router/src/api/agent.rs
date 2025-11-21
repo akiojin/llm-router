@@ -149,22 +149,35 @@ pub async fn register_agent(
             })
             .unwrap_or_default();
 
+        let models_count = models.len().min(u8::MAX as usize) as u8;
+
+        let ready_models = json
+            .get("ready_models")
+            .and_then(|v| {
+                v.as_array().and_then(|arr| {
+                    if arr.len() == 2 {
+                        let a = arr[0].as_u64().unwrap_or(0) as u8;
+                        let b = arr[1].as_u64().unwrap_or(0) as u8;
+                        Some((a, b))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .or(if models_count > 0 {
+                Some((models_count, models_count))
+            } else {
+                None
+            });
+
         let initializing = json
             .get("initializing")
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-
-        let ready_models = json.get("ready_models").and_then(|v| {
-            v.as_array().and_then(|arr| {
-                if arr.len() == 2 {
-                    let a = arr[0].as_u64().unwrap_or(0) as u8;
-                    let b = arr[1].as_u64().unwrap_or(0) as u8;
-                    Some((a, b))
-                } else {
-                    None
-                }
-            })
-        });
+            .unwrap_or_else(|| {
+                ready_models
+                    .map(|(ready, total)| ready < total)
+                    .unwrap_or(false)
+            });
 
         (models, initializing, ready_models)
     };
@@ -201,6 +214,11 @@ pub async fn register_agent(
             Some(initializing),
             ready_models,
         )
+        .await;
+
+    state
+        .load_manager
+        .upsert_initial_state(response.node_id, initializing, ready_models)
         .await;
 
     // HTTPステータスコードを決定（新規登録=201, 更新=200）
