@@ -223,14 +223,14 @@ ollama-node-cpp/
 - [ ] **REFACTOR**: コードクリーンアップ
 
 #### 推論エンジン (core/) - RED-GREEN-REFACTOR
-- [ ] **TEST FIRST**: tests/unit/inference_engine_test.cpp
-  - [ ] プロンプト処理テスト
+- [x] **TEST FIRST**: tests/unit/inference_engine_test.cpp
+  - [x] プロンプト処理テスト
   - [ ] トークン生成テスト
   - [ ] ストリーミングテスト
   - [ ] バッチ推論テスト
-- [ ] inference_engine.h の作成
-- [ ] inference_engine.cpp の実装
-  - [ ] プロンプト処理
+- [x] inference_engine.h の作成
+- [x] inference_engine.cpp の実装
+  - [x] プロンプト処理
   - [ ] トークン生成
   - [ ] ストリーミング対応
   - [ ] バッチ推論
