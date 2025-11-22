@@ -111,7 +111,7 @@ ollama-node-cpp/
 - [x] router_client.cpp の実装
   - [x] ノード登録（POST /api/nodes）
   - [x] ハートビート（10秒間隔）
-  - [ ] 初期化状態報告（initializing, ready_models）
+  - [x] 初期化状態報告（initializing, ready_models）
   - [ ] メトリクス送信
   - [x] エラーハンドリングとリトライ
 - [ ] **REFACTOR**: コードクリーンアップ
