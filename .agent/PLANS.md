@@ -220,7 +220,7 @@ ollama-node-cpp/
   - [x] 動的ロード/アンロード
   - [x] メモリ管理とGC
   - [x] ロック機構
-- [ ] **REFACTOR**: コードクリーンアップ
+- [x] **REFACTOR**: コードクリーンアップ
 
 #### 推論エンジン (core/) - RED-GREEN-REFACTOR
 - [x] **TEST FIRST**: tests/unit/inference_engine_test.cpp
