@@ -294,7 +294,7 @@ ollama-node-cpp/
 
 #### ユーティリティ (utils/)
 - [ ] **TEST FIRST**: tests/unit/utils_test.cpp
-- [ ] config.h/cpp - 設定管理
+- [x] config.h/cpp - 設定管理（環境変数・JSON・ファイルロック対応）
 - [ ] logger.h/cpp - ログシステム（spdlog統合）
 - [ ] json_utils.h/cpp - JSON処理ヘルパー
 - [ ] system_info.h/cpp - システム情報取得
