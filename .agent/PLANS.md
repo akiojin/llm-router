@@ -252,7 +252,7 @@ ollama-node-cpp/
   - [x] エラーハンドリング
   - [x] CORS対応
   - [x] ミドルウェア機構
-- [ ] **REFACTOR**: コードクリーンアップ（残: 共通ログ/CORS設定抽出）
+- [x] **REFACTOR**: コードクリーンアップ（CORS共通化、任意アクセスロガー）
 
 #### OpenAI互換API (api/) - RED-GREEN-REFACTOR
 - [x] **TEST FIRST**: tests/integration/openai_endpoints_test.cpp
