@@ -284,7 +284,7 @@ ollama-node-cpp/
 ### Phase 5: 統合とテスト
 
 #### メインプログラム更新
-- [ ] **TEST FIRST**: tests/integration/main_test.cpp
+- [x] **TEST FIRST**: tests/integration/main_test.cpp
 - [ ] main.cpp の完全実装
   - [ ] 設定読み込み（環境変数/設定ファイル）
   - [ ] 初期化フロー（順序保証）
