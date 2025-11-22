@@ -193,16 +193,16 @@ ollama-node-cpp/
 ### Phase 3: llama.cpp統合（TDD）
 
 #### モデルマネージャー (core/) - RED-GREEN-REFACTOR
-- [ ] **TEST FIRST**: tests/unit/llama_manager_test.cpp
-  - [ ] モデルロードテスト
-  - [ ] コンテキスト作成テスト
+- [x] **TEST FIRST**: tests/unit/llama_manager_test.cpp
+  - [x] モデルロードテスト
+  - [x] コンテキスト作成テスト
   - [ ] GPU/CPUレイヤー分割テスト
   - [ ] メモリ管理テスト
-- [ ] llama_manager.h の作成
-- [ ] llama_manager.cpp の実装
-  - [ ] llama.cpp初期化
-  - [ ] GGUFファイルロード
-  - [ ] コンテキスト管理
+- [x] llama_manager.h の作成
+- [x] llama_manager.cpp の実装
+  - [x] llama.cpp初期化（ダミー）
+  - [x] GGUFファイルロード
+  - [x] コンテキスト管理
   - [ ] GPU/CPUレイヤー分割
   - [ ] エラーハンドリング
 - [ ] **REFACTOR**: コードクリーンアップ
