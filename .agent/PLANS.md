@@ -140,7 +140,7 @@ ollama-node-cpp/
 - [x] ollama_compat.cpp の実装
   - [x] ~/.ollama/models/ のマニフェスト解析
   - [x] GGUFファイルパス解決
-  - [ ] モデルメタデータ読み込み
+  - [x] モデルメタデータ読み込み
   - [ ] モデル検証
 - [ ] **REFACTOR**: コードクリーンアップ
 
