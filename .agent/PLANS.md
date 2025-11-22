@@ -106,13 +106,13 @@ ollama-node-cpp/
   - [x] ノード登録成功テスト
   - [x] ノード登録失敗テスト（GPUなし）
   - [x] ハートビート送信テスト
-  - [ ] 再接続テスト
+  - [x] 再接続テスト
 - [x] router_client.h の作成
 - [x] router_client.cpp の実装
   - [x] ノード登録（POST /api/nodes）
   - [x] ハートビート（10秒間隔）
   - [x] 初期化状態報告（initializing, ready_models）
-  - [ ] メトリクス送信
+  - [x] メトリクス送信
   - [x] エラーハンドリングとリトライ
 - [ ] **REFACTOR**: コードクリーンアップ
 
