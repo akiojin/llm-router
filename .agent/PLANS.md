@@ -141,7 +141,7 @@ ollama-node-cpp/
   - [x] ~/.ollama/models/ のマニフェスト解析
   - [x] GGUFファイルパス解決
   - [x] モデルメタデータ読み込み
-  - [ ] モデル検証
+  - [x] モデル検証
 - [ ] **REFACTOR**: コードクリーンアップ
 
 #### モデルダウンロード (models/) - RED-GREEN-REFACTOR
