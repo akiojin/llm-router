@@ -114,7 +114,7 @@ ollama-node-cpp/
   - [x] 初期化状態報告（initializing, ready_models）
   - [x] メトリクス送信
   - [x] エラーハンドリングとリトライ
-- [ ] **REFACTOR**: コードクリーンアップ
+- [x] **REFACTOR**: コードクリーンアップ
 
 #### モデル同期 (models/) - RED-GREEN-REFACTOR
 - [x] **TEST FIRST**: tests/unit/model_sync_test.cpp
