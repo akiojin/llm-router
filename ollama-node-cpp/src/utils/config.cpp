@@ -1,5 +1,4 @@
 #include "utils/config.h"
-
 #include <cstdlib>
 #include <filesystem>
 #include <optional>

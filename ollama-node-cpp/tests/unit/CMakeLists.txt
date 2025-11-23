@@ -10,6 +10,7 @@ set(UNIT_TEST_SOURCES
     llama_manager_test.cpp
     model_pool_test.cpp
     utils_config_test.cpp
+    utils_misc_test.cpp
     ../../src/system/gpu_detector.cpp
     ../../src/api/router_client.cpp
     ../../src/models/model_sync.cpp

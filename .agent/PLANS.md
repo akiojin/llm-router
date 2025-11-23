@@ -293,11 +293,11 @@ ollama-node-cpp/
   - [x] シグナルハンドリング
 
 #### ユーティリティ (utils/)
-- [ ] **TEST FIRST**: tests/unit/utils_test.cpp
+- [x] **TEST FIRST**: tests/unit/utils_misc_test.cpp
 - [x] config.h/cpp - 設定管理（環境変数・JSON・ファイルロック対応）
-- [ ] logger.h/cpp - ログシステム（spdlog統合）
-- [ ] json_utils.h/cpp - JSON処理ヘルパー
-- [ ] system_info.h/cpp - システム情報取得
+- [x] logger.h/cpp - ログシステム（spdlog統合）
+- [x] json_utils.h/cpp - JSON処理ヘルパー
+- [x] system_info.h/cpp - システム情報取得
 
 ### Phase 6: CI/CD・自動リリース
 

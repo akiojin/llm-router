@@ -46,6 +46,13 @@ set(LLAMA_BUILD_GIT_VERSION OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_GIT_VERSION OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/llama.cpp)
 add_subdirectory(third_party/nlohmann-json)
+include(FetchContent)
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.14.1
+)
+FetchContent_MakeAvailable(spdlog)
 
 # Include directories
 include_directories(
@@ -102,8 +109,12 @@ endif()
 # Utils library (config etc.)
 add_library(utils_lib STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/logger.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_utils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/system_info.cpp
 )
 target_include_directories(utils_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(utils_lib PUBLIC spdlog::spdlog_header_only)
 
 # Collect source files
 file(GLOB_RECURSE SOURCES
