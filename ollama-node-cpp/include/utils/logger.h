@@ -21,6 +21,8 @@ void init(const std::string& level = "info",
 // LOG_LEVEL (trace|debug|info|warn|error|critical|off)
 // LOG_FILE (optional file path)
 // LOG_FORMAT ("json" -> JSON lines, otherwise text pattern)
+// LOG_MAX_SIZE_MB (rotation threshold, default 10)
+// LOG_MAX_FILES (rotation files, default 3)
 void init_from_env();
 
 }  // namespace ollama_node::logger

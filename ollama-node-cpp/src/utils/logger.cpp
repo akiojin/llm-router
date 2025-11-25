@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/rotating_file_sink.h>
 
 namespace ollama_node::logger {
 
@@ -54,12 +55,34 @@ void init_from_env() {
         if (fmt == "json") json = true;
     }
 
+    size_t max_size = 10 * 1024 * 1024;
+    size_t max_files = 3;
+    if (const char* env = std::getenv("LOG_MAX_SIZE_MB")) {
+        try {
+            auto mb = std::stoll(env);
+            if (mb > 0 && mb < 1024) max_size = static_cast<size_t>(mb) * 1024 * 1024;
+        } catch (...) {}
+    }
+    if (const char* env = std::getenv("LOG_MAX_FILES")) {
+        try {
+            auto n = std::stoll(env);
+            if (n > 0 && n < 50) max_files = static_cast<size_t>(n);
+        } catch (...) {}
+    }
+
     std::string pattern = "[%Y-%m-%d %T.%e] [%l] %v";
     if (json) {
         pattern = R"({"ts":"%Y-%m-%dT%H:%M:%S.%e","level":"%l","msg":"%v"})";
     }
 
-    init(level, pattern, file_path);
+    std::vector<spdlog::sink_ptr> sinks;
+    sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+    if (!file_path.empty()) {
+        auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(file_path, max_size, max_files);
+        sinks.push_back(sink);
+    }
+
+    init(level, pattern, "", sinks);
 }
 
 }  // namespace ollama_node::logger
