@@ -36,6 +36,24 @@ services:
     tty: true
     working_dir: /ollama-router
 
+  ollama-node-cpp:
+    build:
+      context: ./ollama-node-cpp
+      dockerfile: Dockerfile
+    container_name: ollama-node-cpp
+    depends_on:
+      - ollama-router
+    environment:
+      - OLLAMA_ROUTER_URL=http://ollama-router:8080
+      - OLLAMA_MODELS_DIR=/models
+      - OLLAMA_NODE_PORT=11435
+      - OLLAMA_ALLOW_NO_GPU=1
+    volumes:
+      - ./ollama-node-cpp/models:/models
+    ports:
+      - "11435:11435"
+    restart: unless-stopped
+
 volumes:
   bash-history: {}
   claude-config: {}

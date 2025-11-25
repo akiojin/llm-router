@@ -329,15 +329,15 @@ ollama-node-cpp/
 ### Phase 7: パッケージング・配布
 
 #### Dockerコンテナ
-- [ ] Dockerfile
-  - [ ] マルチステージビルド
+- [x] Dockerfile
+  - [x] マルチステージビルド
   - [ ] 最小イメージサイズ
   - [ ] GPU対応（nvidia-docker）
 
-- [ ] docker-compose.yml
-  - [ ] ルーターとの連携設定
-  - [ ] ボリュームマウント（モデル）
-  - [ ] ネットワーク設定
+- [x] docker-compose.yml
+  - [x] ルーターとの連携設定
+  - [x] ボリュームマウント（モデル）
+  - [x] ネットワーク設定
 
 #### パッケージマネージャー
 - [ ] Debian/Ubuntuパッケージ（.deb）
