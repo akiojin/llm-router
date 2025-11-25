@@ -30,8 +30,8 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         std::string router_url = cfg.router_url;
         int node_port = cfg.node_port;
 
-        std::cout << "Router URL: " << router_url << std::endl;
-        std::cout << "Node port: " << node_port << std::endl;
+        spdlog::info("Router URL: {}", router_url);
+        spdlog::info("Node port: {}", node_port);
 
         // GPU detection
         std::cout << "Detecting GPUs..." << std::endl;
