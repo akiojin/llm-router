@@ -347,7 +347,7 @@ ollama-node-cpp/
 #### インストールスクリプト
 - [x] install.sh（Linux/macOS）
 - [x] install.ps1（Windows）
-- [ ] 自動アップデート機構
+- [x] 自動アップデート機構
 
 ### Phase 8: ドキュメント
 
