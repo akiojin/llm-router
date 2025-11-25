@@ -6,8 +6,8 @@
 
 namespace ollama_node {
 
-HttpServer::HttpServer(int port, OpenAIEndpoints& openai, NodeEndpoints& node)
-    : port_(port), openai_(openai), node_(node) {}
+HttpServer::HttpServer(int port, OpenAIEndpoints& openai, NodeEndpoints& node, std::string bind_address)
+    : port_(port), bind_address_(std::move(bind_address)), openai_(openai), node_(node) {}
 
 HttpServer::~HttpServer() { stop(); }
 
@@ -97,7 +97,7 @@ void HttpServer::start() {
     node_.registerRoutes(server_);
 
     running_ = true;
-    thread_ = std::thread([this]() { server_.listen("0.0.0.0", port_); });
+    thread_ = std::thread([this]() { server_.listen(bind_address_.c_str(), port_); });
     while (!server_.is_running()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

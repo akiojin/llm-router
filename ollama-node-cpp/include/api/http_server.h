@@ -16,7 +16,7 @@ using Logger = std::function<void(const httplib::Request&, const httplib::Respon
 
 class HttpServer {
 public:
-    HttpServer(int port, OpenAIEndpoints& openai, NodeEndpoints& node);
+    HttpServer(int port, OpenAIEndpoints& openai, NodeEndpoints& node, std::string bind_address = "0.0.0.0");
     ~HttpServer();
 
     void start();
@@ -35,6 +35,7 @@ private:
     void applyCors(httplib::Response& res);
 
     int port_;
+    std::string bind_address_;
     OpenAIEndpoints& openai_;
     NodeEndpoints& node_;
     httplib::Server server_;
