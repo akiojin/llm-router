@@ -180,51 +180,261 @@ fn parse_cloud_model(model: &str) -> Option<(String, String)> {
     None
 }
 
+fn map_openai_messages_to_google_contents(messages: &[Value]) -> Vec<Value> {
+    messages
+        .iter()
+        .filter_map(|m| {
+            let role = m.get("role")?.as_str().unwrap_or("user");
+            let text = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            let mapped_role = match role {
+                "assistant" => "model",
+                _ => "user",
+            };
+            Some(json!({
+                "role": mapped_role,
+                "parts": [{"text": text}]
+            }))
+        })
+        .collect()
+}
+
+fn map_openai_messages_to_anthropic(messages: &[Value]) -> (Option<String>, Vec<Value>) {
+    let mut system_msgs: Vec<String> = Vec::new();
+    let mut regular: Vec<Value> = Vec::new();
+    for m in messages.iter() {
+        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+        let text = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        match role {
+            "system" => system_msgs.push(text.to_string()),
+            "assistant" => regular.push(json!({
+                "role": "assistant",
+                "content": [{"type":"text","text": text}]
+            })),
+            _ => regular.push(json!({
+                "role": "user",
+                "content": [{"type":"text","text": text}]
+            })),
+        }
+    }
+    let system = if system_msgs.is_empty() {
+        None
+    } else {
+        Some(system_msgs.join("\n"))
+    };
+    (system, regular)
+}
+
+async fn proxy_openai_provider(
+    target_path: &str,
+    payload: Value,
+    stream: bool,
+) -> Result<Response, AppError> {
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .map_err(|_| validation_error("OPENAI_API_KEY is required for openai: models"))?;
+    let base = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com".into());
+
+    let client = reqwest::Client::new();
+    let url = format!("{base}{target_path}");
+    let res = client
+        .post(&url)
+        .bearer_auth(api_key)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(map_reqwest_error)?;
+
+    if stream {
+        return forward_streaming_response(res).map_err(AppError::from);
+    }
+
+    let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let ct = res.headers().get(reqwest::header::CONTENT_TYPE).cloned();
+    let bytes = res.bytes().await.map_err(map_reqwest_error)?;
+    let mut resp = Response::builder().status(status);
+    if let Some(ct) = ct {
+        if let Ok(hv) = HeaderValue::from_str(ct.to_str().unwrap_or("")) {
+            resp = resp.header(CONTENT_TYPE, hv);
+        }
+    }
+    Ok(resp.body(Body::from(bytes)).unwrap())
+}
+
+fn map_generation_config(payload: &Value) -> Value {
+    json!({
+        "temperature": payload.get("temperature").and_then(|v| v.as_f64()),
+        "topP": payload.get("top_p").and_then(|v| v.as_f64()),
+        "maxOutputTokens": payload.get("max_tokens").and_then(|v| v.as_i64()),
+    })
+}
+
+async fn proxy_google_provider(
+    model: String,
+    payload: Value,
+    stream: bool,
+) -> Result<Response, AppError> {
+    let api_key = std::env::var("GOOGLE_API_KEY")
+        .map_err(|_| validation_error("GOOGLE_API_KEY is required for google: models"))?;
+    let base = std::env::var("GOOGLE_API_BASE_URL")
+        .unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1beta".into());
+    let messages = payload
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let contents = map_openai_messages_to_google_contents(&messages);
+    let mut body = json!({
+        "contents": contents,
+        "generationConfig": map_generation_config(&payload),
+    });
+    // drop nulls in generationConfig
+    if let Some(gen) = body["generationConfig"].as_object_mut() {
+        gen.retain(|_, v| !v.is_null());
+    }
+
+    let endpoint_suffix = if stream {
+        format!("models/{model}:streamGenerateContent")
+    } else {
+        format!("models/{model}:generateContent")
+    };
+    let url = format!("{base}/{endpoint_suffix}");
+
+    let client = reqwest::Client::new();
+    let req = client.post(&url).query(&[("key", api_key)]).json(&body);
+    let res = req.send().await.map_err(map_reqwest_error)?;
+
+    if stream {
+        return forward_streaming_response(res).map_err(AppError::from);
+    }
+
+    let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let data: Value = res.json().await.map_err(map_reqwest_error)?;
+    let text = data
+        .get("candidates")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("content"))
+        .and_then(|c| c.get("parts"))
+        .and_then(|p| p.get(0))
+        .and_then(|p| p.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+
+    let resp_body = json!({
+        "id": format!("google-{}", Uuid::new_v4()),
+        "object": "chat.completion",
+        "model": format!("google:{model}"),
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": text},
+            "finish_reason": "stop"
+        }],
+    });
+
+    Response::builder()
+        .status(status)
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .body(Body::from(resp_body.to_string()))
+        .map_err(|e| AppError::from(RouterError::Http(e.to_string())))
+}
+
+async fn proxy_anthropic_provider(
+    model: String,
+    payload: Value,
+    stream: bool,
+) -> Result<Response, AppError> {
+    let api_key = std::env::var("ANTHROPIC_API_KEY")
+        .map_err(|_| validation_error("ANTHROPIC_API_KEY is required for anthropic: models"))?;
+    let base = std::env::var("ANTHROPIC_API_BASE_URL")
+        .unwrap_or_else(|_| "https://api.anthropic.com".into());
+    let messages = payload
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let (system, mapped) = map_openai_messages_to_anthropic(&messages);
+    let max_tokens = payload
+        .get("max_tokens")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1024);
+    let mut body = json!({
+        "model": model,
+        "messages": mapped,
+        "max_tokens": max_tokens,
+        "stream": stream,
+        "temperature": payload.get("temperature").and_then(|v| v.as_f64()),
+        "top_p": payload.get("top_p").and_then(|v| v.as_f64()),
+    });
+    if let Some(s) = system {
+        body["system"] = Value::String(s);
+    }
+    // prune nulls
+    if let Some(obj) = body.as_object_mut() {
+        obj.retain(|_, v| !v.is_null());
+    }
+
+    let url = format!("{base}/v1/messages");
+    let client = reqwest::Client::new();
+    let req = client
+        .post(&url)
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&body);
+    let res = req.send().await.map_err(map_reqwest_error)?;
+
+    if stream {
+        return forward_streaming_response(res).map_err(AppError::from);
+    }
+
+    let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let data: Value = res.json().await.map_err(map_reqwest_error)?;
+    let text = data
+        .get("content")
+        .and_then(|c| c.get(0))
+        .and_then(|p| p.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+
+    let id = data
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("anthropic-{}", Uuid::new_v4()));
+    let model_label = data
+        .get("model")
+        .and_then(|m| m.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| model.clone());
+
+    let resp_body = json!({
+        "id": id,
+        "object": "chat.completion",
+        "model": format!("anthropic:{}", model_label),
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": text},
+            "finish_reason": "stop"
+        }],
+    });
+
+    Response::builder()
+        .status(status)
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .body(Body::from(resp_body.to_string()))
+        .map_err(|e| AppError::from(RouterError::Http(e.to_string())))
+}
+
 async fn proxy_openai_cloud_post(
     target_path: &str,
     model: &str,
     stream: bool,
     payload: Value,
 ) -> Result<Response, AppError> {
-    if stream {
-        return Err(validation_error(
-            "stream=true is not supported for cloud-prefixed models yet",
-        ));
-    }
-
-    let (provider, _rest) = parse_cloud_model(model)
+    let (provider, model_name) = parse_cloud_model(model)
         .ok_or_else(|| validation_error("cloud model prefix is invalid"))?;
 
     match provider.as_str() {
-        "openai" => {
-            let api_key = std::env::var("OPENAI_API_KEY")
-                .map_err(|_| validation_error("OPENAI_API_KEY is required for openai: models"))?;
-
-            let client = reqwest::Client::new();
-            let url = format!("https://api.openai.com{target_path}");
-            let res = client
-                .post(&url)
-                .bearer_auth(api_key)
-                .json(&payload)
-                .send()
-                .await
-                .map_err(map_reqwest_error)?;
-
-            let status =
-                StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            let ct = res.headers().get(reqwest::header::CONTENT_TYPE).cloned();
-            let bytes = res.bytes().await.map_err(map_reqwest_error)?;
-            let mut resp = Response::builder().status(status);
-            if let Some(ct) = ct {
-                if let Ok(hv) = HeaderValue::from_str(ct.to_str().unwrap_or("")) {
-                    resp = resp.header(CONTENT_TYPE, hv);
-                }
-            }
-            Ok(resp.body(Body::from(bytes)).unwrap())
-        }
-        "google" | "anthropic" => Err(validation_error(
-            "google:/anthropic: prefixes are reserved; direct API mapping not yet implemented",
-        )),
+        "openai" => proxy_openai_provider(target_path, payload, stream).await,
+        "google" => proxy_google_provider(model_name, payload, stream).await,
+        "anthropic" => proxy_anthropic_provider(model_name, payload, stream).await,
         _ => Err(validation_error("unsupported cloud provider prefix")),
     }
 }
@@ -586,7 +796,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn google_prefix_returns_not_implemented() {
+    async fn google_prefix_requires_api_key() {
         let payload = json!({"model":"google:gemini-pro","messages":[]});
         let err =
             proxy_openai_cloud_post("/v1/chat/completions", "google:gemini-pro", false, payload)
@@ -594,8 +804,37 @@ mod tests {
                 .unwrap_err();
         let msg = format!("{:?}", err);
         assert!(
-            msg.contains("not yet implemented") || msg.contains("reserved"),
-            "expected not implemented error, got {}",
+            msg.contains("GOOGLE_API_KEY"),
+            "expected GOOGLE_API_KEY error, got {}",
+            msg
+        );
+    }
+
+    #[tokio::test]
+    async fn anthropic_prefix_requires_api_key() {
+        let payload = json!({"model":"anthropic:claude-3","messages":[]});
+        let err =
+            proxy_openai_cloud_post("/v1/chat/completions", "anthropic:claude-3", false, payload)
+                .await
+                .unwrap_err();
+        let msg = format!("{:?}", err);
+        assert!(
+            msg.contains("ANTHROPIC_API_KEY"),
+            "expected ANTHROPIC_API_KEY error, got {}",
+            msg
+        );
+    }
+
+    #[tokio::test]
+    async fn streaming_allowed_for_cloud_prefix() {
+        let payload = json!({"model":"openai:gpt-4o","messages":[],"stream":true});
+        let err = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", true, payload)
+            .await
+            .unwrap_err();
+        let msg = format!("{:?}", err);
+        assert!(
+            msg.contains("OPENAI_API_KEY"),
+            "expected API key error (stream path), got {}",
             msg
         );
     }
