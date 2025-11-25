@@ -226,12 +226,16 @@ fn map_openai_messages_to_anthropic(messages: &[Value]) -> (Option<String>, Vec<
 
 async fn proxy_openai_provider(
     target_path: &str,
-    payload: Value,
+    mut payload: Value,
     stream: bool,
+    model: String,
 ) -> Result<Response, AppError> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| validation_error("OPENAI_API_KEY is required for openai: models"))?;
     let base = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com".into());
+
+    // strip provider prefix before forwarding
+    payload["model"] = Value::String(model);
 
     let client = reqwest::Client::new();
     let url = format!("{base}{target_path}");
@@ -432,7 +436,7 @@ async fn proxy_openai_cloud_post(
         .ok_or_else(|| validation_error("cloud model prefix is invalid"))?;
 
     match provider.as_str() {
-        "openai" => proxy_openai_provider(target_path, payload, stream).await,
+        "openai" => proxy_openai_provider(target_path, payload, stream, model_name).await,
         "google" => proxy_google_provider(model_name, payload, stream).await,
         "anthropic" => proxy_anthropic_provider(model_name, payload, stream).await,
         _ => Err(validation_error("unsupported cloud provider prefix")),
