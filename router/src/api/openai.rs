@@ -15,7 +15,7 @@ use ollama_router_common::{
 use reqwest;
 use serde_json::{json, Value};
 use std::time::Instant;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -29,6 +29,23 @@ use crate::{
 
 fn map_reqwest_error(err: reqwest::Error) -> AppError {
     AppError::from(RouterError::Http(err.to_string()))
+}
+
+fn auth_error(msg: &str) -> AppError {
+    AppError::from(RouterError::Authentication(msg.to_string()))
+}
+
+fn get_required_key(provider: &str, env_key: &str, err_msg: &str) -> Result<String, AppError> {
+    match std::env::var(env_key) {
+        Ok(v) => {
+            info!(provider = provider, key = env_key, "cloud api key present");
+            Ok(v)
+        }
+        Err(_) => {
+            warn!(provider = provider, key = env_key, "cloud api key missing");
+            Err(auth_error(err_msg))
+        }
+    }
 }
 
 /// POST /v1/chat/completions - OpenAI互換チャットAPI
@@ -233,8 +250,11 @@ async fn proxy_openai_provider(
 ) -> Result<Response, AppError> {
     let req_id = Uuid::new_v4();
     let started = Instant::now();
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .map_err(|_| validation_error("OPENAI_API_KEY is required for openai: models"))?;
+    let api_key = get_required_key(
+        "openai",
+        "OPENAI_API_KEY",
+        "OPENAI_API_KEY is required for openai: models",
+    )?;
     let base = std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com".into());
 
     // strip provider prefix before forwarding
@@ -306,8 +326,11 @@ async fn proxy_google_provider(
 ) -> Result<Response, AppError> {
     let req_id = Uuid::new_v4();
     let started = Instant::now();
-    let api_key = std::env::var("GOOGLE_API_KEY")
-        .map_err(|_| validation_error("GOOGLE_API_KEY is required for google: models"))?;
+    let api_key = get_required_key(
+        "google",
+        "GOOGLE_API_KEY",
+        "GOOGLE_API_KEY is required for google: models",
+    )?;
     let base = std::env::var("GOOGLE_API_BASE_URL")
         .unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1beta".into());
     let messages = payload
@@ -405,8 +428,11 @@ async fn proxy_anthropic_provider(
 ) -> Result<Response, AppError> {
     let req_id = Uuid::new_v4();
     let started = Instant::now();
-    let api_key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|_| validation_error("ANTHROPIC_API_KEY is required for anthropic: models"))?;
+    let api_key = get_required_key(
+        "anthropic",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_API_KEY is required for anthropic: models",
+    )?;
     let base = std::env::var("ANTHROPIC_API_BASE_URL")
         .unwrap_or_else(|_| "https://api.anthropic.com".into());
     let messages = payload
@@ -1077,6 +1103,7 @@ mod tests {
             msg
         );
     }
+    #[tokio::test]
     async fn streaming_allowed_for_cloud_prefix() {
         let payload = json!({"model":"openai:gpt-4o","messages":[],"stream":true});
         let err = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", true, payload)
