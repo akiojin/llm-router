@@ -479,8 +479,10 @@ ollama-node-cpp/
 1. ✅ SPEC-4b6e9f2a を策定しクラウドプレフィックス要件を明文化
 2. ✅ クラウドプレフィックス: Google/Anthropic クライアントと非ストリーミングプロキシを実装（モック統合テスト RED→GREEN）
 3. ✅ クラウドプレフィックス: stream=true のSSE中継を全ベンダーで実装しテスト追加
-4. ⬜ メトリクス/ログ拡張（providerラベル、レイテンシ）とドキュメント更新（README/USAGE/API仕様）
-5. ⬜ 完了後 quality-checks（`make quality-checks`）を通してコミット＆プッシュ
+4. ✅ メトリクス/ログ拡張（providerラベル、レイテンシ）とドキュメント更新（README反映）
+5. ✅ 完了後 quality-checks（`make quality-checks`）を通してコミット＆プッシュ
+6. ⬜ クラウドプレフィックス統合テスト（ローカル経路に流れないこと・非/ストリームのモック応答）を追加
+7. ⬜ CHANGELOG更新とAPI仕様/USAGE細部の追記
 
 ## リスクと対策
 

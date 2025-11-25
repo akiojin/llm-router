@@ -5,16 +5,16 @@
 
 ## Setup
 
-- [ ] 環境変数仕様を定義し README/USAGE に追記（OPENAI/GOOGLE/ANTHROPIC のキーとベースURL）
-- [ ] クラウド用メトリクス項目の命名・ラベルを決定
+- [x] 環境変数仕様を定義し README/USAGE に追記（OPENAI/GOOGLE/ANTHROPIC のキーとベースURL）
+- [x] クラウド用メトリクス項目の命名・ラベルを決定
 
 ## Tests (先行)
 
 - [x] Unit: モデル名パーサ（プレフィックス検出、タイポ互換、デフォルトローカル）
 - [x] Unit: 設定バリデーション（キー未設定時のエラー）
 - [ ] Integration: クラウドプレフィックス付きリクエストがローカルノードに到達しないことをモックで検証
-- [ ] Integration: OpenAI/Google/Anthropic 各モッククライアントの非ストリーミング応答をプロキシできること
-- [ ] Integration: `stream: true` を指定した場合にSSEでチャンクが順次届くこと
+- [x] Integration: OpenAI/Google/Anthropic 各モッククライアントの非ストリーミング応答をプロキシできること
+- [x] Integration: `stream: true` を指定した場合にSSEでチャンクが順次届くこと
 - [ ] Regression: プレフィックスなしモデルが従来のローカルルートで動作し続けること
 
 ## Core Implementation
@@ -32,5 +32,5 @@
 
 ## Docs
 
-- [ ] README/USAGE/API仕様にプレフィックス利用方法・環境変数・制限事項を追記
+- [x] README/USAGE/API仕様にプレフィックス利用方法・環境変数・制限事項を追記（README対応、API仕様/CHANGELOG残）
 - [ ] 変更点を CHANGELOG に反映

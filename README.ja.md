@@ -581,3 +581,13 @@ MIT License
 Issue、Pull Requestをお待ちしています。
 
 詳細な開発ガイドラインは[CLAUDE.md](./CLAUDE.md)を参照してください。
+### クラウドモデルプレフィックス（OpenAI互換API）
+
+- 対応プレフィックス: `openai:`, `google:`, `anthropic:`（`ahtnorpic:` タイポ互換）
+- 使い方: `model` を `openai:gpt-4o` / `google:gemini-1.5-pro` / `anthropic:claude-3-opus` のように指定
+- 環境変数:
+  - `OPENAI_API_KEY`（必須）、`OPENAI_BASE_URL`（任意、既定 `https://api.openai.com`）
+  - `GOOGLE_API_KEY`（必須）、`GOOGLE_API_BASE_URL`（任意、既定 `https://generativelanguage.googleapis.com/v1beta`）
+  - `ANTHROPIC_API_KEY`（必須）、`ANTHROPIC_API_BASE_URL`（任意、既定 `https://api.anthropic.com`）
+- 動作: プレフィックスは転送前に除去し、レスポンスはOpenAI互換のまま返却。`stream: true` はクラウド側のSSEをそのままパススルー。
+- メトリクス: `/metrics/cloud` で Prometheus 形式のメトリクスを公開（`cloud_requests_total{provider,status}` / `cloud_request_latency_seconds{provider}`）。
