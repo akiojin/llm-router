@@ -37,6 +37,8 @@
 
 ## エラーハンドリングの方針
 
-- APIキー未設定: 400（`*_API_KEY is required`）
-- 不明・未実装プレフィックス: 400
-- クラウド側での4xx/5xx: クラウドレスポンスのステータスとボディをそのまま返却（JSON/SSEヘッダも維持）
+| ケース | ステータス | ボディ概要 |
+| --- | --- | --- |
+| APIキー未設定 | 401 Unauthorized | `error: "<PROVIDER>_API_KEY is required for ..."` |
+| 不明/未実装プレフィックス | 400 Bad Request | `error: "unsupported cloud provider prefix"` |
+| クラウド側4xx/5xx | クラウドと同じ | クラウドレスポンスをそのまま返却（JSON/SSEヘッダ維持） |
