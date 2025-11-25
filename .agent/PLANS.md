@@ -341,7 +341,7 @@ ollama-node-cpp/
 #### パッケージマネージャー
 - [x] Debian/Ubuntuパッケージ（.deb）
 - [x] RedHat/CentOSパッケージ（.rpm）
-- [ ] macOS Homebrew Formula
+- [x] macOS Homebrew Formula
 - [ ] Windows MSIインストーラー
 
 #### インストールスクリプト
