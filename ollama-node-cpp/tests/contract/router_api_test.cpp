@@ -36,7 +36,14 @@ protected:
 
 TEST_F(RouterContractFixture, RegisterNodeReturnsId) {
     RouterClient client("http://127.0.0.1:18091");
-    NodeInfo info{"host", "127.0.0.1", 11434, 4ull * 1024 * 1024 * 1024, 2.5, {}, false};
+    NodeInfo info;
+    info.machine_name = "test-host";
+    info.ip_address = "127.0.0.1";
+    info.ollama_version = "1.0.0";
+    info.ollama_port = 11434;
+    info.gpu_available = true;
+    info.gpu_devices = {{.model = "Test GPU", .count = 1, .memory = 4ull * 1024 * 1024 * 1024}};
+
     auto result = client.registerNode(info);
     EXPECT_TRUE(result.success);
     EXPECT_EQ(result.node_id, "node-123");
