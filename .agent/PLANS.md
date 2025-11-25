@@ -391,7 +391,7 @@ ollama-node-cpp/
 ### Phase 10: 運用・監視
 
 #### メトリクス収集
-- [ ] Prometheusエクスポーター
+- [x] Prometheusエクスポーター
 - [ ] Grafanaダッシュボード
 - [ ] アラート設定
 
