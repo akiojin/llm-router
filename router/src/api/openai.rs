@@ -853,7 +853,11 @@ fn validation_error(message: impl Into<String>) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{parse_cloud_model, proxy_openai_cloud_post};
+    use axum::body::to_bytes;
     use serde_json::json;
+    use serial_test::serial;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn parse_cloud_prefixes() {
@@ -918,6 +922,106 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
+    async fn openai_prefix_streams_via_cloud() {
+        let server = MockServer::start().await;
+        let tmpl = ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_raw(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n",
+                "text/event-stream",
+            );
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(tmpl)
+            .mount(&server)
+            .await;
+
+        std::env::set_var("OPENAI_API_KEY", "testkey");
+        std::env::set_var("OPENAI_BASE_URL", server.uri());
+
+        let payload = json!({"model":"openai:gpt-4o","messages":[],"stream":true});
+        let resp = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", true, payload)
+            .await
+            .expect("cloud stream response");
+        let body = to_bytes(resp.into_body(), 1_000_000).await.unwrap();
+        let body_str = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_str.contains("delta"));
+        assert!(body_str.contains("hi"));
+
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("OPENAI_BASE_URL");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn google_prefix_proxies_and_maps_response() {
+        let server = MockServer::start().await;
+        let tmpl = ResponseTemplate::new(200).set_body_json(json!({
+            "candidates": [{"content": {"parts": [{"text": "hello from gemini"}]}}]
+        }));
+        Mock::given(method("POST"))
+            .and(path("/models/gemini-pro:generateContent"))
+            .respond_with(tmpl)
+            .mount(&server)
+            .await;
+
+        std::env::set_var("GOOGLE_API_KEY", "gkey");
+        std::env::set_var("GOOGLE_API_BASE_URL", server.uri());
+
+        let payload =
+            json!({"model":"google:gemini-pro","messages":[{"role":"user","content":"hi"}]});
+        let resp =
+            proxy_openai_cloud_post("/v1/chat/completions", "google:gemini-pro", false, payload)
+                .await
+                .expect("google mapped response");
+        let bytes = to_bytes(resp.into_body(), 1_000_000).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["model"].as_str().unwrap(), "google:gemini-pro");
+        assert_eq!(
+            v["choices"][0]["message"]["content"].as_str().unwrap(),
+            "hello from gemini"
+        );
+
+        std::env::remove_var("GOOGLE_API_KEY");
+        std::env::remove_var("GOOGLE_API_BASE_URL");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn anthropic_prefix_proxies_and_maps_response() {
+        let server = MockServer::start().await;
+        let tmpl = ResponseTemplate::new(200).set_body_json(json!({
+            "id": "abc123",
+            "model": "claude-3",
+            "content": [{"text": "anthropic says hi"}]
+        }));
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(tmpl)
+            .mount(&server)
+            .await;
+
+        std::env::set_var("ANTHROPIC_API_KEY", "akey");
+        std::env::set_var("ANTHROPIC_API_BASE_URL", server.uri());
+
+        let payload =
+            json!({"model":"anthropic:claude-3","messages":[{"role":"user","content":"hi"}]});
+        let resp =
+            proxy_openai_cloud_post("/v1/chat/completions", "anthropic:claude-3", false, payload)
+                .await
+                .expect("anthropic mapped response");
+        let bytes = to_bytes(resp.into_body(), 1_000_000).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["model"].as_str().unwrap(), "anthropic:claude-3");
+        assert_eq!(
+            v["choices"][0]["message"]["content"].as_str().unwrap(),
+            "anthropic says hi"
+        );
+
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("ANTHROPIC_API_BASE_URL");
+    }
     async fn streaming_allowed_for_cloud_prefix() {
         let payload = json!({"model":"openai:gpt-4o","messages":[],"stream":true});
         let err = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", true, payload)
