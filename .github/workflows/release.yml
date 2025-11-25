@@ -75,6 +75,17 @@ jobs:
           cp ollama-node-cpp/build-win/ollama-node.exe dist/win/
           (cd dist && zip -r ollama-node-windows-x64.zip win)
 
+      - name: Build C++ binary (Linux CUDA)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev
+          cmake -S ollama-node-cpp -B ollama-node-cpp/build-cuda \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_WITH_CUDA=ON
+          cmake --build ollama-node-cpp/build-cuda --config Release
+          mkdir -p dist
+          tar -czf dist/ollama-node-linux-cuda.tar.gz -C ollama-node-cpp/build-cuda ollama-node
+
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -28,6 +28,10 @@
           {
             "path": "dist/ollama-node-windows-x64.zip",
             "label": "ollama-node-windows-x64"
+          },
+          {
+            "path": "dist/ollama-node-linux-cuda.tar.gz",
+            "label": "ollama-node-linux-cuda"
           }
         ]
       }
