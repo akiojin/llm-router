@@ -291,7 +291,7 @@ ollama-node-cpp/
 
 #### メインプログラム更新
 - [x] **TEST FIRST**: tests/integration/main_test.cpp
-- [ ] main.cpp の完全実装
+- [x] main.cpp の完全実装
   - [x] 設定読み込み（環境変数/設定ファイル）
   - [x] 初期化フロー（順序保証）
   - [x] グレースフルシャットダウン（ランタイムフラグ＋ハートビート停止）
