@@ -26,6 +26,10 @@
             "label": "ollama-node-macos-arm64"
           },
           {
+            "path": "dist/ollama-node-macos-x64.tar.gz",
+            "label": "ollama-node-macos-x64"
+          },
+          {
             "path": "dist/ollama-node-windows-x64.zip",
             "label": "ollama-node-windows-x64"
           },

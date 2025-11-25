@@ -49,7 +49,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm lld cmake libssl-dev gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y clang llvm lld cmake libssl-dev gcc-aarch64-linux-gnu g++-aarch64-linux-gnu gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
           cmake -S ollama-node-cpp -B ollama-node-cpp/build-macos \
             -DCMAKE_SYSTEM_NAME=Darwin \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
@@ -58,6 +58,18 @@ jobs:
             -DBUILD_TESTS=OFF
           cmake --build ollama-node-cpp/build-macos --config Release
           tar -czf dist/ollama-node-macos-arm64.tar.gz -C ollama-node-cpp/build-macos ollama-node
+
+      - name: Build C++ binary (macOS x64) [cross]
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S ollama-node-cpp -B ollama-node-cpp/build-macos-x64 \
+            -DCMAKE_SYSTEM_NAME=Darwin \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DBUILD_TESTS=OFF
+          cmake --build ollama-node-cpp/build-macos-x64 --config Release
+          tar -czf dist/ollama-node-macos-x64.tar.gz -C ollama-node-cpp/build-macos-x64 ollama-node
 
       - name: Build C++ binary (Windows x64) [cross]
         if: runner.os == 'Linux'

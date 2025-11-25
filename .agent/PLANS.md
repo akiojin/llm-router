@@ -310,9 +310,9 @@ ollama-node-cpp/
 
 - [x] .github/workflows/release.yml
   - [x] semantic-release統合
-  - [ ] バイナリビルド（各プラットフォーム）※Linux amd64 / Linux CUDA / macOS arm64 / Windows x64 実装済み
+  - [ ] バイナリビルド（各プラットフォーム）※Linux amd64 / Linux CUDA / macOS arm64 / macOS x64 / Windows x64 実装済み
   - [x] リリースノート自動生成
-  - [x] アセット自動アップロード（Linux amd64 / Linux CUDA / macOS arm64 / Windows x64）
+  - [x] アセット自動アップロード（Linux amd64 / Linux CUDA / macOS arm64 / macOS x64 / Windows x64）
 
 #### commitlint設定
 - [x] .commitlintrc.json
