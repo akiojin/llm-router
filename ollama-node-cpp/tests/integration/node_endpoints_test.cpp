@@ -31,6 +31,27 @@ TEST(NodeEndpointsTest, PullAndHealth) {
     server.stop();
 }
 
+TEST(NodeEndpointsTest, LogLevelGetAndSet) {
+    ModelRegistry registry;
+    InferenceEngine engine;
+    OpenAIEndpoints openai(registry, engine);
+    NodeEndpoints node;
+    HttpServer server(18087, openai, node);
+    server.start();
+
+    httplib::Client cli("127.0.0.1", 18087);
+    auto get1 = cli.Get("/log/level");
+    ASSERT_TRUE(get1);
+    EXPECT_EQ(get1->status, 200);
+
+    auto set = cli.Post("/log/level", R"({"level":"debug"})", "application/json");
+    ASSERT_TRUE(set);
+    EXPECT_EQ(set->status, 200);
+    EXPECT_NE(set->body.find("debug"), std::string::npos);
+
+    server.stop();
+}
+
 TEST(NodeEndpointsTest, MetricsReportsUptimeAndCounts) {
     ModelRegistry registry;
     InferenceEngine engine;

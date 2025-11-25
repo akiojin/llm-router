@@ -17,6 +17,7 @@
 #include "api/http_server.h"
 #include "utils/config.h"
 #include "runtime/state.h"
+#include "utils/logger.h"
 
 int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
     ollama_node::g_running_flag.store(true);
@@ -25,6 +26,7 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
     std::thread heartbeat_thread;
 
     try {
+        ollama_node::logger::init_from_env();
         std::string router_url = cfg.router_url;
         int node_port = cfg.node_port;
 

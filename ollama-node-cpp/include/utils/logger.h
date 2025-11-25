@@ -17,4 +17,10 @@ void init(const std::string& level = "info",
           const std::string& file_path = "",
           std::vector<spdlog::sink_ptr> additional_sinks = {});
 
+// Initialize using environment variables:
+// LOG_LEVEL (trace|debug|info|warn|error|critical|off)
+// LOG_FILE (optional file path)
+// LOG_FORMAT ("json" -> JSON lines, otherwise text pattern)
+void init_from_env();
+
 }  // namespace ollama_node::logger

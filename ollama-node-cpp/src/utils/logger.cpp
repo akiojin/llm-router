@@ -40,4 +40,26 @@ void init(const std::string& level,
     spdlog::flush_on(spdlog::level::info);
 }
 
+void init_from_env() {
+    std::string level = "info";
+    if (const char* env = std::getenv("LOG_LEVEL")) level = env;
+
+    std::string file_path;
+    if (const char* env = std::getenv("LOG_FILE")) file_path = env;
+
+    bool json = false;
+    if (const char* env = std::getenv("LOG_FORMAT")) {
+        std::string fmt = env;
+        std::transform(fmt.begin(), fmt.end(), fmt.begin(), ::tolower);
+        if (fmt == "json") json = true;
+    }
+
+    std::string pattern = "[%Y-%m-%d %T.%e] [%l] %v";
+    if (json) {
+        pattern = R"({"ts":"%Y-%m-%dT%H:%M:%S.%e","level":"%l","msg":"%v"})";
+    }
+
+    init(level, pattern, file_path);
+}
+
 }  // namespace ollama_node::logger
