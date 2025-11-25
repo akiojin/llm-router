@@ -63,6 +63,23 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         char hostname_buf[256] = "localhost";
         gethostname(hostname_buf, sizeof(hostname_buf));
 
+        std::string bind_address = cfg.bind_address.empty() ? std::string("0.0.0.0") : cfg.bind_address;
+
+        // Initialize model registry (empty for now, will sync after registration)
+        ollama_node::ModelRegistry registry;
+
+        // Initialize inference engine
+        ollama_node::InferenceEngine engine;
+
+        // Start HTTP server BEFORE registration (router checks /v1/models endpoint)
+        ollama_node::OpenAIEndpoints openai(registry, engine);
+        ollama_node::NodeEndpoints node_endpoints;
+        node_endpoints.setGpuInfo(gpus.size(), total_mem, capability);
+        ollama_node::HttpServer server(node_port, openai, node_endpoints, bind_address);
+        std::cout << "Starting HTTP server on port " << node_port << "..." << std::endl;
+        server.start();
+        server_started = true;
+
         // Register with router (retry)
         std::cout << "Registering with router..." << std::endl;
         ollama_node::RouterClient router(router_url);
@@ -87,6 +104,7 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         }
         if (!reg.success) {
             std::cerr << "Router registration failed after retries: " << reg.error << std::endl;
+            server.stop();
             return 1;
         }
 
@@ -102,23 +120,9 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             sync_result = model_sync.sync();
         }
-        ollama_node::ModelRegistry registry;
-        // For now, combine remote list; local deletes not performed here
+        // Update registry with synced models
         registry.setModels(model_sync.fetchRemoteModels());
 
-        std::string bind_address = cfg.bind_address.empty() ? std::string("0.0.0.0") : cfg.bind_address;
-
-        // Initialize inference engine
-        ollama_node::InferenceEngine engine;
-
-        // Start HTTP server
-        ollama_node::OpenAIEndpoints openai(registry, engine);
-        ollama_node::NodeEndpoints node_endpoints;
-        node_endpoints.setGpuInfo(gpus.size(), total_mem, capability);
-        ollama_node::HttpServer server(node_port, openai, node_endpoints, bind_address);
-        std::cout << "Starting HTTP server on port " << node_port << "..." << std::endl;
-        server.start();
-        server_started = true;
         ollama_node::set_ready(true);
 
         // Heartbeat thread
