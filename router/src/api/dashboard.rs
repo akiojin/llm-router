@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 /// ノードのダッシュボード表示用サマリー
 #[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct DashboardAgent {
+pub struct DashboardNode {
     /// ノードID
     pub id: Uuid,
     /// マシン名
@@ -102,11 +102,11 @@ pub struct DashboardAgent {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct DashboardStats {
     /// 登録ノード総数
-    pub total_agents: usize,
+    pub total_nodes: usize,
     /// オンラインノード数
-    pub online_agents: usize,
+    pub online_nodes: usize,
     /// オフラインノード数
-    pub offline_agents: usize,
+    pub offline_nodes: usize,
     /// 累積リクエスト数
     pub total_requests: u64,
     /// 成功リクエスト数
@@ -139,7 +139,7 @@ pub struct DashboardStats {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct DashboardOverview {
     /// ノード一覧
-    pub nodes: Vec<DashboardAgent>,
+    pub nodes: Vec<DashboardNode>,
     /// システム統計
     pub stats: DashboardStats,
     /// リクエスト履歴
@@ -151,8 +151,8 @@ pub struct DashboardOverview {
 }
 
 /// GET /api/dashboard/nodes
-pub async fn get_agents(State(state): State<AppState>) -> Json<Vec<DashboardAgent>> {
-    Json(collect_agents(&state).await)
+pub async fn get_nodes(State(state): State<AppState>) -> Json<Vec<DashboardNode>> {
+    Json(collect_nodes(&state).await)
 }
 
 /// GET /api/dashboard/stats
@@ -168,7 +168,7 @@ pub async fn get_request_history(State(state): State<AppState>) -> Json<Vec<Requ
 /// GET /api/dashboard/overview
 pub async fn get_overview(State(state): State<AppState>) -> Json<DashboardOverview> {
     let started = Instant::now();
-    let nodes = collect_agents(&state).await;
+    let nodes = collect_nodes(&state).await;
     let stats = collect_stats(&state).await;
     let history = collect_history(&state).await;
     let generation_time_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
@@ -183,7 +183,7 @@ pub async fn get_overview(State(state): State<AppState>) -> Json<DashboardOvervi
 }
 
 /// GET /api/dashboard/metrics/:node_id
-pub async fn get_agent_metrics(
+pub async fn get_node_metrics(
     Path(node_id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<HealthMetrics>>, AppError> {
@@ -191,7 +191,7 @@ pub async fn get_agent_metrics(
     Ok(Json(history))
 }
 
-async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
+async fn collect_nodes(state: &AppState) -> Vec<DashboardNode> {
     let registry = state.registry.clone();
     let load_manager = state.load_manager.clone();
 
@@ -264,7 +264,7 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 )
             };
 
-            DashboardAgent {
+            DashboardNode {
                 id: agent.id,
                 machine_name: agent.machine_name,
                 ip_address: agent.ip_address.to_string(),
@@ -298,7 +298,7 @@ async fn collect_agents(state: &AppState) -> Vec<DashboardAgent> {
                 gpu_count: agent.gpu_count,
             }
         })
-        .collect::<Vec<DashboardAgent>>()
+        .collect::<Vec<DashboardNode>>()
 }
 
 async fn collect_stats(state: &AppState) -> DashboardStats {
@@ -316,9 +316,9 @@ async fn collect_stats(state: &AppState) -> DashboardStats {
     let anthropic_key_present = std::env::var("ANTHROPIC_API_KEY").is_ok();
 
     DashboardStats {
-        total_agents: summary.total_agents,
-        online_agents: summary.online_agents,
-        offline_agents: summary.offline_agents,
+        total_nodes: summary.total_agents,
+        online_nodes: summary.online_agents,
+        offline_nodes: summary.offline_agents,
         total_requests: summary.total_requests,
         successful_requests: summary.successful_requests,
         failed_requests: summary.failed_requests,
@@ -486,7 +486,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_agents_returns_joined_state() {
+    async fn test_get_nodes_returns_joined_state() {
         let state = create_state().await;
 
         // ノードを登録
@@ -531,7 +531,7 @@ mod tests {
             .await
             .unwrap();
 
-        let response = get_agents(State(state.clone())).await;
+        let response = get_nodes(State(state.clone())).await;
         let body = response.0;
 
         assert_eq!(body.len(), 1);
@@ -619,8 +619,8 @@ mod tests {
             .unwrap();
 
         let stats = get_stats(State(state)).await.0;
-        assert_eq!(stats.total_agents, 2);
-        assert_eq!(stats.online_agents, 2);
+        assert_eq!(stats.total_nodes, 2);
+        assert_eq!(stats.online_nodes, 2);
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.failed_requests, 1);
         assert_eq!(stats.successful_requests, 0);
@@ -700,12 +700,12 @@ mod tests {
 
         let overview = get_overview(State(state)).await.0;
         assert_eq!(overview.nodes.len(), 1);
-        assert_eq!(overview.stats.total_agents, 1);
+        assert_eq!(overview.stats.total_nodes, 1);
         assert_eq!(overview.history.len(), 60);
     }
 
     #[tokio::test]
-    async fn test_get_agent_metrics_returns_history() {
+    async fn test_get_node_metrics_returns_history() {
         let state = create_state().await;
 
         let response = state
@@ -768,7 +768,7 @@ mod tests {
             .await
             .unwrap();
 
-        let metrics = get_agent_metrics(Path(node_id), State(state))
+        let metrics = get_node_metrics(Path(node_id), State(state))
             .await
             .unwrap()
             .0;

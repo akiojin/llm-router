@@ -98,7 +98,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/nodes/:node_id/metrics", post(metrics::update_metrics))
         .route("/api/nodes/metrics", get(agent::list_agent_metrics))
         .route("/api/metrics/summary", get(agent::metrics_summary))
-        .route("/api/dashboard/nodes", get(dashboard::get_agents))
+        .route("/api/dashboard/nodes", get(dashboard::get_nodes))
         .route("/api/dashboard/stats", get(dashboard::get_stats))
         .route(
             "/api/dashboard/request-history",
@@ -107,7 +107,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/dashboard/overview", get(dashboard::get_overview))
         .route(
             "/api/dashboard/metrics/:node_id",
-            get(dashboard::get_agent_metrics),
+            get(dashboard::get_node_metrics),
         )
         .route(
             "/api/dashboard/request-responses",

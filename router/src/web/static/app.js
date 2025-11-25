@@ -402,7 +402,7 @@ async function refreshData({ manual = false } = {}) {
 }
 
 async function applyOverviewData(overview) {
-  state.agents = Array.isArray(overview.agents) ? overview.agents : [];
+  state.agents = Array.isArray(overview.nodes) ? overview.nodes : [];
   state.stats = overview.stats ?? null;
   state.history = Array.isArray(overview.history) ? overview.history : [];
   const generatedAt =
@@ -526,9 +526,9 @@ function renderStats() {
   }
 
   const statsMap = {
-    "total-agents": state.stats.total_agents,
-    "online-agents": state.stats.online_agents,
-    "offline-agents": state.stats.offline_agents,
+    "total-agents": state.stats.total_nodes,
+    "online-agents": state.stats.online_nodes,
+    "offline-agents": state.stats.offline_nodes,
     "total-requests": state.stats.total_requests,
     "successful-requests": state.stats.successful_requests,
     "failed-requests": state.stats.failed_requests,
