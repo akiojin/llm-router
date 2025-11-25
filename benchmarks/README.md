@@ -75,6 +75,12 @@ scripts/benchmarks/summarize_csv.py benchmarks/results/*.csv
 ```
 列: label / rps / p95_ms / p99_ms / non2xx / socket_errors / requests / duration_s / source
 
+### グラフ化（p95/p99 + RPS）
+```bash
+python3 scripts/benchmarks/plot_csv.py -o benchmarks/results/plot.png benchmarks/results/*.csv
+```
+依存: `pip install matplotlib`
+
 ### 環境変数チートシート
 - `WRK_TARGET` (default `http://localhost:8080`)
 - `WRK_ENDPOINT` (default `/v1/chat/completions`)
