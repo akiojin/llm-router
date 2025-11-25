@@ -316,8 +316,8 @@ ollama-node-cpp/
   - [ ] アセット自動アップロード
 
 #### commitlint設定
-- [ ] .commitlintrc.json
-- [ ] husky設定（pre-commit）
+- [x] .commitlintrc.json
+- [x] husky設定（commit-msg）
 - [ ] conventional commits準拠
 
 #### semantic-release設定

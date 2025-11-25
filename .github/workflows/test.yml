@@ -74,3 +74,27 @@ jobs:
         run: |
           echo "🤖 Running OpenAI-compatible API tests..."
           make openai-tests
+
+  cpp-tests:
+    # C++ノードのビルドとテスト
+    name: C++ Tests (Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install C++ dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev
+
+      - name: Configure C++ project
+        run: cmake -S ollama-node-cpp -B ollama-node-cpp/build -DBUILD_TESTS=ON
+
+      - name: Build C++ project
+        run: cmake --build ollama-node-cpp/build --config Release
+
+      - name: Run C++ tests
+        run: ctest --output-on-failure
+        working-directory: ollama-node-cpp/build
