@@ -23,8 +23,10 @@ tags: [project]
 
 ## 使い方
 
+GitHub CLIで直接ワークフローを実行します：
+
 ```bash
-scripts/prepare-release.sh
+gh workflow run prepare-release.yml
 ```
 
 ## 注意
