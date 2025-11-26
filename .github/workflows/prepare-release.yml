@@ -1,0 +1,72 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-and-merge:
+    name: Validate and merge to main
+    runs-on: ubuntu-latest
+    # PRイベントの場合のみ実行
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check source branch
+        if: github.head_ref != 'develop'
+        run: |
+          echo "::error::Only PRs from 'develop' branch are allowed to main"
+          echo "Source branch: ${{ github.head_ref }}"
+          exit 1
+
+      - name: Auto-merge PR from develop
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --merge \
+            --admin
+
+  create-release-pr:
+    name: Create PR from develop to main
+    runs-on: ubuntu-latest
+    # workflow_dispatchの場合のみ実行
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Create PR develop -> main
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # 既存のPRがあるか確認
+          existing_pr=$(gh pr list --base main --head develop --json number --jq '.[0].number' || echo "")
+
+          if [ -n "$existing_pr" ]; then
+            echo "PR #$existing_pr already exists"
+            echo "PR_NUMBER=$existing_pr" >> $GITHUB_ENV
+          else
+            # 新しいPRを作成
+            pr_url=$(gh pr create \
+              --base main \
+              --head develop \
+              --title "chore(release): merge develop to main" \
+              --body "Automated release PR from develop to main")
+            pr_number=$(echo "$pr_url" | grep -oE '[0-9]+$')
+            echo "Created PR #$pr_number"
+            echo "PR_NUMBER=$pr_number" >> $GITHUB_ENV
+          fi

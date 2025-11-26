@@ -309,23 +309,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  backmerge-develop:
-    name: Backmerge main -> develop
-    needs: publish-binaries
-    runs-on: ubuntu-latest
-    if: ${{ github.ref_type == 'tag' }}
-    steps:
-      - name: Checkout develop
-        uses: actions/checkout@v4
-        with:
-          ref: develop
-          fetch-depth: 0
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Merge main into develop
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git merge --no-ff origin/main -m "chore(release): sync main into develop"
-          git push origin develop
