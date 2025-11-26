@@ -1,6 +1,6 @@
 {
   "name": "ollama-router-release",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Centralized management system for routing Ollama instances across multiple machines.",
   "private": true,
   "packageManager": "pnpm@10.20.0",
