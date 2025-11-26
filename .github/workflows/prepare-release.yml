@@ -18,16 +18,9 @@ jobs:
   validate-and-merge:
     name: Validate and merge to main
     runs-on: ubuntu-latest
-    # PRイベントの場合のみ実行
-    if: github.event_name == 'pull_request'
+    # developブランチからのPRのみ実行（release-pleaseのPRは除外）
+    if: github.event_name == 'pull_request' && github.head_ref == 'develop'
     steps:
-      - name: Check source branch
-        if: github.head_ref != 'develop'
-        run: |
-          echo "::error::Only PRs from 'develop' branch are allowed to main"
-          echo "Source branch: ${{ github.head_ref }}"
-          exit 1
-
       - name: Auto-merge PR from develop
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
