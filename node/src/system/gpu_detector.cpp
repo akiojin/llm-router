@@ -117,6 +117,8 @@ double GpuDetector::getCapabilityScore() const {
             }
         } else if (dev.vendor == "amd") {
             cc_factor = 1.2;  // AMD GPUs
+        } else if (dev.vendor == "apple") {
+            cc_factor = 1.5;  // Apple Silicon
         }
 
         score += mem_score * cc_factor;
