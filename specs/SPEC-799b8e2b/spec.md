@@ -3,7 +3,7 @@
 ## 概要
 
 Router（Rust）とNode（C++）で統一された構造化ログシステムを提供する。
-すべてのログをファイルに出力し、標準出力には一切出力しない。
+ログは標準出力（人間が読みやすい形式）とファイル（JSONL形式）の両方に出力する。
 
 ## ビジネス価値
 
@@ -20,10 +20,10 @@ RouterとNodeの動作状況を把握できる。
 
 **受け入れ条件**:
 
-- Routerのログは`llm-router.jsonl.YYYY-MM-DD`形式で出力される
-- Nodeのログは`llm-node.jsonl.YYYY-MM-DD`形式で出力される
-- 標準出力には一切ログが出力されない
-- ログはJSONL形式で構造化されている
+- Routerのログは`llm-router.jsonl.YYYY-MM-DD`形式でファイル出力される
+- Nodeのログは`llm-node.jsonl.YYYY-MM-DD`形式でファイル出力される
+- 標準出力にも人間が読みやすい形式でログが出力される
+- ファイル出力はJSONL形式で構造化されている
 
 ### US-2: 運用者として古いログが自動削除されることを期待する
 
@@ -49,10 +49,10 @@ RouterとNodeの動作状況を把握できる。
 
 ### FR-1: ログ出力先
 
-- 出力ディレクトリ: `~/.llm-router/logs/`
+- ファイル出力ディレクトリ: `~/.llm-router/logs/`
 - Routerファイル名: `llm-router.jsonl.YYYY-MM-DD`
 - Nodeファイル名: `llm-node.jsonl.YYYY-MM-DD`
-- 標準出力への出力: なし
+- 標準出力: 人間が読みやすいテキスト形式で出力
 
 ### FR-2: ログ形式
 

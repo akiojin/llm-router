@@ -24,6 +24,7 @@
 - [x] 7日超の古いファイル削除実装
 - [x] 新環境変数サポート（LLM_LOG_DIR, LLM_LOG_LEVEL, LLM_LOG_RETENTION_DAYS）
 - [x] categoryフィールド出力対応
+- [x] [P] stdout出力追加（人間が読みやすい形式）
 
 ## Node側
 
@@ -38,7 +39,7 @@
 
 - [x] [P] ログディレクトリを`~/.llm-router/logs/`に変更
 - [x] [P] ファイル名を`llm-node.jsonl.YYYY-MM-DD`に変更
-- [x] [P] stdout出力削除
+- [x] [P] stdout出力追加（人間が読みやすい形式）
 - [x] 日付ベースローテーション実装（daily_file_sink）
 - [x] 7日超の古いファイル削除実装
 - [x] 新環境変数サポート
