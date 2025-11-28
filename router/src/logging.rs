@@ -1,7 +1,9 @@
 //! ロギング初期化ユーティリティ
 //!
-//! `tracing` による構造化ロギングを標準出力とJSONライン形式ファイルへ出力する。
+//! `tracing` による構造化ロギングをJSONライン形式ファイルへ出力する。
+//! 標準出力には出力せず、ファイルのみに出力する。
 
+use chrono::Local;
 use std::{
     env,
     fs::{self, OpenOptions},
@@ -12,11 +14,19 @@ use std::{
 use tracing_appender::{non_blocking, non_blocking::WorkerGuard};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-/// ログファイル名（JSON Lines）
-pub const LOG_FILE_NAME: &str = "coordinator.log.jsonl";
+/// ログファイルベース名（JSON Lines）
+pub const LOG_FILE_BASE: &str = "llm-router.jsonl";
 
 const LOG_SUBDIR: &str = "logs";
-const LEVEL_ENV: &str = "ROUTER_LOG_LEVEL";
+const DEFAULT_DATA_DIR: &str = ".llm-router";
+const DEFAULT_RETENTION_DAYS: u32 = 7;
+
+// 環境変数名
+const LLM_LOG_DIR_ENV: &str = "LLM_LOG_DIR";
+const LLM_LOG_LEVEL_ENV: &str = "LLM_LOG_LEVEL";
+const LLM_LOG_RETENTION_DAYS_ENV: &str = "LLM_LOG_RETENTION_DAYS";
+const LEGACY_DATA_DIR_ENV: &str = "LLM_ROUTER_DATA_DIR";
+const LEGACY_LEVEL_ENV: &str = "ROUTER_LOG_LEVEL";
 const ALT_LEVEL_ENV: &str = "RUST_LOG";
 
 static LOGGER_GUARD: OnceLock<Result<LoggerGuard, io::Error>> = OnceLock::new();
@@ -33,36 +43,85 @@ pub fn init() -> io::Result<()> {
     }
 }
 
-/// ログファイルのパスを返す。
-pub fn log_file_path() -> io::Result<PathBuf> {
-    Ok(resolve_data_dir()?.join(LOG_SUBDIR).join(LOG_FILE_NAME))
-}
-
-fn resolve_data_dir() -> io::Result<PathBuf> {
-    if let Ok(dir) = env::var("LLM_ROUTER_DATA_DIR") {
+/// ログディレクトリのパスを返す。
+pub fn log_dir() -> io::Result<PathBuf> {
+    // LLM_LOG_DIR が設定されている場合はそれを使用
+    if let Ok(dir) = env::var(LLM_LOG_DIR_ENV) {
         return Ok(PathBuf::from(dir));
     }
 
+    // レガシー環境変数をチェック
+    if let Ok(dir) = env::var(LEGACY_DATA_DIR_ENV) {
+        return Ok(PathBuf::from(dir).join(LOG_SUBDIR));
+    }
+
+    // デフォルト: ~/.llm-router/logs
     let home = env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
         .map_err(|_| Error::new(ErrorKind::NotFound, "Failed to resolve home directory"))?;
 
-    Ok(PathBuf::from(home).join(".or"))
+    Ok(PathBuf::from(home).join(DEFAULT_DATA_DIR).join(LOG_SUBDIR))
+}
+
+/// 今日のログファイルのパスを返す。
+pub fn log_file_path() -> io::Result<PathBuf> {
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    let filename = format!("{}.{}", LOG_FILE_BASE, today);
+    Ok(log_dir()?.join(filename))
+}
+
+/// 保持日数を取得する。
+fn get_retention_days() -> u32 {
+    env::var(LLM_LOG_RETENTION_DAYS_ENV)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_RETENTION_DAYS)
+}
+
+/// 古いログファイルを削除する。
+fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> io::Result<()> {
+    if !log_dir.exists() {
+        return Ok(());
+    }
+
+    let cutoff = Local::now() - chrono::Duration::days(retention_days as i64);
+    let cutoff_str = cutoff.format("%Y-%m-%d").to_string();
+
+    for entry in fs::read_dir(log_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            // llm-router.jsonl.YYYY-MM-DD 形式をチェック
+            if filename.starts_with(LOG_FILE_BASE) {
+                if let Some(date_part) = filename.strip_prefix(&format!("{}.", LOG_FILE_BASE)) {
+                    if date_part < cutoff_str.as_str() {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn configure_logger() -> io::Result<LoggerGuard> {
-    let log_path = log_file_path()?;
-    if let Some(parent) = log_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    let log_directory = log_dir()?;
+    fs::create_dir_all(&log_directory)?;
 
+    // 古いログを削除
+    let retention_days = get_retention_days();
+    cleanup_old_logs(&log_directory, retention_days)?;
+
+    let log_path = log_file_path()?;
     let file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)?;
     let (file_writer, file_guard) = non_blocking(file);
 
-    let env_filter = EnvFilter::try_from_env(LEVEL_ENV)
+    // 環境変数からログレベルを取得（優先順位: LLM_LOG_LEVEL > ROUTER_LOG_LEVEL > RUST_LOG）
+    let env_filter = EnvFilter::try_from_env(LLM_LOG_LEVEL_ENV)
+        .or_else(|_| EnvFilter::try_from_env(LEGACY_LEVEL_ENV))
         .or_else(|_| EnvFilter::try_from_env(ALT_LEVEL_ENV))
         .unwrap_or_else(|_| EnvFilter::new("info"));
 
@@ -81,7 +140,11 @@ fn configure_logger() -> io::Result<LoggerGuard> {
         .try_init()
         .map_err(Error::other)?;
 
-    tracing::info!("Coordinator logs will be written to {}", log_path.display());
+    tracing::info!(
+        category = "system",
+        "Router logs initialized: {}",
+        log_path.display()
+    );
 
     Ok(LoggerGuard {
         _file_guard: file_guard,
@@ -91,26 +154,88 @@ fn configure_logger() -> io::Result<LoggerGuard> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
-    fn test_resolve_data_dir_uses_env_override() {
+    #[serial]
+    fn test_log_dir_uses_llm_log_dir_env() {
         let temp_dir = tempfile::tempdir().unwrap();
-        env::set_var("LLM_ROUTER_DATA_DIR", temp_dir.path());
-        let dir = resolve_data_dir().unwrap();
+        env::remove_var(LEGACY_DATA_DIR_ENV);
+        env::set_var(LLM_LOG_DIR_ENV, temp_dir.path());
+        let dir = log_dir().unwrap();
         assert_eq!(dir, temp_dir.path());
-        env::remove_var("LLM_ROUTER_DATA_DIR");
+        env::remove_var(LLM_LOG_DIR_ENV);
     }
 
     #[test]
-    fn test_log_file_path_contains_logs_dir() {
+    #[serial]
+    fn test_log_dir_uses_legacy_env() {
         let temp_dir = tempfile::tempdir().unwrap();
-        env::set_var("LLM_ROUTER_DATA_DIR", temp_dir.path());
+        env::remove_var(LLM_LOG_DIR_ENV);
+        env::set_var(LEGACY_DATA_DIR_ENV, temp_dir.path());
+        let dir = log_dir().unwrap();
+        assert_eq!(dir, temp_dir.path().join(LOG_SUBDIR));
+        env::remove_var(LEGACY_DATA_DIR_ENV);
+    }
+
+    #[test]
+    #[serial]
+    fn test_log_file_path_contains_date() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        env::remove_var(LEGACY_DATA_DIR_ENV);
+        env::set_var(LLM_LOG_DIR_ENV, temp_dir.path());
         let path = log_file_path().unwrap();
+        let filename = path.file_name().unwrap().to_str().unwrap();
         assert!(
-            path.ends_with(std::path::Path::new("logs").join(LOG_FILE_NAME)),
-            "unexpected log path: {:?}",
-            path
+            filename.starts_with(LOG_FILE_BASE),
+            "filename should start with {}: got {}",
+            LOG_FILE_BASE,
+            filename
         );
-        env::remove_var("LLM_ROUTER_DATA_DIR");
+        // 日付形式をチェック (llm-router.jsonl.YYYY-MM-DD)
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        assert!(
+            filename.ends_with(&today),
+            "filename should end with today's date: got {}",
+            filename
+        );
+        env::remove_var(LLM_LOG_DIR_ENV);
+    }
+
+    #[test]
+    fn test_cleanup_old_logs() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let log_path = temp_dir.path();
+
+        // 古いログファイルを作成
+        let old_file = log_path.join(format!("{}.2020-01-01", LOG_FILE_BASE));
+        fs::write(&old_file, "old log").unwrap();
+
+        // 新しいログファイルを作成
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        let new_file = log_path.join(format!("{}.{}", LOG_FILE_BASE, today));
+        fs::write(&new_file, "new log").unwrap();
+
+        // クリーンアップ実行
+        cleanup_old_logs(&log_path.to_path_buf(), 7).unwrap();
+
+        // 古いファイルは削除され、新しいファイルは残る
+        assert!(!old_file.exists(), "old log file should be deleted");
+        assert!(new_file.exists(), "new log file should remain");
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_retention_days_default() {
+        env::remove_var(LLM_LOG_RETENTION_DAYS_ENV);
+        assert_eq!(get_retention_days(), DEFAULT_RETENTION_DAYS);
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_retention_days_from_env() {
+        env::set_var(LLM_LOG_RETENTION_DAYS_ENV, "14");
+        assert_eq!(get_retention_days(), 14);
+        env::remove_var(LLM_LOG_RETENTION_DAYS_ENV);
     }
 }
