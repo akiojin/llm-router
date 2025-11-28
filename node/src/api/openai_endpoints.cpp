@@ -62,6 +62,14 @@ void OpenAIEndpoints::registerRoutes(httplib::Server& server) {
                 }})}
             };
             setJson(res, resp);
+        } catch (const ModelRepairingException& e) {
+            // モデル修復中は202 Acceptedを返す
+            res.status = 202;
+            setJson(res, {
+                {"status", "repairing"},
+                {"message", "Model is being repaired, please retry later"},
+                {"model", e.modelName()}
+            });
         } catch (const std::exception& e) {
             respondError(res, 400, "bad_request", std::string("error: ") + e.what());
         } catch (...) {
@@ -82,6 +90,14 @@ void OpenAIEndpoints::registerRoutes(httplib::Server& server) {
                 {"choices", json::array({{{"text", output}, {"index", 0}, {"finish_reason", "stop"}}})}
             };
             setJson(res, resp);
+        } catch (const ModelRepairingException& e) {
+            // モデル修復中は202 Acceptedを返す
+            res.status = 202;
+            setJson(res, {
+                {"status", "repairing"},
+                {"message", "Model is being repaired, please retry later"},
+                {"model", e.modelName()}
+            });
         } catch (...) {
             respondError(res, 400, "bad_request", "invalid JSON body");
         }

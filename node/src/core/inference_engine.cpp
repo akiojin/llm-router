@@ -1,6 +1,7 @@
 #include "core/inference_engine.h"
 #include "core/llama_manager.h"
 #include "models/ollama_compat.h"
+#include "models/model_repair.h"
 #include "include/llama.h"
 
 #include <spdlog/spdlog.h>
@@ -13,7 +14,14 @@ namespace ollama_node {
 // コンストラクタ
 InferenceEngine::InferenceEngine(LlamaManager& manager, OllamaCompat& ollama_compat)
     : manager_(&manager)
-    , ollama_compat_(&ollama_compat) {}
+    , ollama_compat_(&ollama_compat)
+    , repair_(nullptr) {}
+
+// コンストラクタ: ModelRepair を含む完全な依存関係注入
+InferenceEngine::InferenceEngine(LlamaManager& manager, OllamaCompat& ollama_compat, ModelRepair& repair)
+    : manager_(&manager)
+    , ollama_compat_(&ollama_compat)
+    , repair_(&repair) {}
 
 // チャットメッセージからプロンプトを構築
 std::string InferenceEngine::buildChatPrompt(const std::vector<ChatMessage>& messages) const {
@@ -369,6 +377,79 @@ std::vector<std::string> InferenceEngine::generateTokens(
 std::string InferenceEngine::sampleNextToken(const std::vector<std::string>& tokens) const {
     if (tokens.empty()) return "";
     return tokens.back();
+}
+
+// モデルをロードし、必要に応じて自動修復を試行
+ModelLoadResult InferenceEngine::loadModelWithRepair(const std::string& model_name) {
+    ModelLoadResult result;
+
+    if (!isInitialized()) {
+        result.error_message = "InferenceEngine not initialized";
+        return result;
+    }
+
+    // 1. モデルパス解決
+    std::string gguf_path = ollama_compat_->resolveGguf(model_name);
+    if (gguf_path.empty()) {
+        result.error_message = "Model not found: " + model_name;
+        return result;
+    }
+
+    // 2. 既にロード済みならそのまま成功
+    if (manager_->isLoaded(gguf_path)) {
+        result.success = true;
+        return result;
+    }
+
+    // 3. 自動修復が有効で、ファイルが破損している場合は修復を試みる
+    if (repair_ && repair_->needsRepair(gguf_path)) {
+        spdlog::info("Model file needs repair, triggering auto-repair: {}", model_name);
+
+        // 既に修復中の場合は待機
+        if (repair_->isRepairing(model_name)) {
+            spdlog::info("Model {} is already being repaired, waiting...", model_name);
+            result.repair_triggered = true;
+            bool completed = repair_->waitForRepair(model_name, repair_->getDefaultTimeout());
+            if (!completed) {
+                result.error_message = "Repair timeout for model: " + model_name;
+                return result;
+            }
+        } else {
+            // 新規修復を開始
+            result.repair_triggered = true;
+            auto repair_result = repair_->repair(model_name, repair_->getDefaultTimeout());
+            if (repair_result.status != RepairStatus::Success) {
+                result.error_message = "Repair failed: " + repair_result.error_message;
+                return result;
+            }
+        }
+
+        // 修復後にパスを再解決
+        gguf_path = ollama_compat_->resolveGguf(model_name);
+    }
+
+    // 4. モデルをロード
+    if (!manager_->loadModel(gguf_path)) {
+        // ロード失敗時、まだ自動修復を試みていなければ試行
+        if (repair_ && !result.repair_triggered) {
+            spdlog::warn("Model load failed, attempting auto-repair: {}", model_name);
+            result.repair_triggered = true;
+            auto repair_result = repair_->repair(model_name, repair_->getDefaultTimeout());
+            if (repair_result.status == RepairStatus::Success) {
+                // 修復成功後に再ロード
+                gguf_path = ollama_compat_->resolveGguf(model_name);
+                if (manager_->loadModel(gguf_path)) {
+                    result.success = true;
+                    return result;
+                }
+            }
+        }
+        result.error_message = "Failed to load model: " + gguf_path;
+        return result;
+    }
+
+    result.success = true;
+    return result;
 }
 
 }  // namespace ollama_node

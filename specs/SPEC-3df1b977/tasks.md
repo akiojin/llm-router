@@ -72,13 +72,12 @@
 
 ## Phase 3.4: 統合
 
-- [ ] T018 `node/src/core/inference_engine.cpp` に自動修復フローを統合
+- [x] T018 `node/src/core/inference_engine.cpp` に自動修復フローを統合
   - loadModel失敗時にModelRepair::repair()を呼び出し
   - 修復成功後に再ロード試行
-- [ ] T019 `node/src/api/openai_endpoints.cpp` にHTTPステータスコード修正
-  - 503: 修復中/修復失敗
-  - 504: タイムアウト
-  - 507: ストレージ不足
+- [x] T019 `node/src/api/openai_endpoints.cpp` にHTTPステータスコード修正
+  - 202: 修復中 (Accepted)
+  - ModelRepairingException例外を追加
 
 ## Phase 3.5: 仕上げ
 

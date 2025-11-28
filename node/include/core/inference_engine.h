@@ -4,12 +4,14 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 
 namespace ollama_node {
 
 // 前方宣言
 class LlamaManager;
 class OllamaCompat;
+class ModelRepair;
 
 struct ChatMessage {
     std::string role;
@@ -26,10 +28,33 @@ struct InferenceParams {
     uint32_t seed{0};  // 0 = ランダム
 };
 
+/// モデルロード結果
+struct ModelLoadResult {
+    bool success{false};
+    bool repair_triggered{false};
+    std::string error_message;
+};
+
+/// モデル修復中例外
+class ModelRepairingException : public std::runtime_error {
+public:
+    explicit ModelRepairingException(const std::string& model_name)
+        : std::runtime_error("Model is being repaired: " + model_name)
+        , model_name_(model_name) {}
+
+    const std::string& modelName() const { return model_name_; }
+
+private:
+    std::string model_name_;
+};
+
 class InferenceEngine {
 public:
     /// コンストラクタ: LlamaManager と OllamaCompat への参照を注入
     InferenceEngine(LlamaManager& manager, OllamaCompat& ollama_compat);
+
+    /// コンストラクタ: ModelRepair を含む完全な依存関係注入
+    InferenceEngine(LlamaManager& manager, OllamaCompat& ollama_compat, ModelRepair& repair);
 
     /// デフォルトコンストラクタ（互換性維持、スタブモード）
     InferenceEngine() = default;
@@ -74,9 +99,17 @@ public:
     /// 依存関係が注入されているか確認
     bool isInitialized() const { return manager_ != nullptr && ollama_compat_ != nullptr; }
 
+    /// モデルをロードし、必要に応じて自動修復を試行
+    /// @return ロード結果（成功/失敗、修復トリガー有無）
+    ModelLoadResult loadModelWithRepair(const std::string& model_name);
+
+    /// 自動修復が有効かどうか
+    bool isAutoRepairEnabled() const { return repair_ != nullptr; }
+
 private:
     LlamaManager* manager_{nullptr};
     OllamaCompat* ollama_compat_{nullptr};
+    ModelRepair* repair_{nullptr};
 
     /// チャットメッセージからプロンプト文字列を構築
     std::string buildChatPrompt(const std::vector<ChatMessage>& messages) const;
