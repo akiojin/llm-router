@@ -2094,7 +2094,10 @@ void llama_model::load_hparams(llama_model_loader & ml) {
         case LLM_ARCH_OPENAI_MOE:
             {
                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
-                ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH,  hparams.n_ff_exp);
+                // expert_feed_forward_length is optional, fallback to feed_forward_length
+                if (!ml.get_key(LLM_KV_EXPERT_FEED_FORWARD_LENGTH, hparams.n_ff_exp, false)) {
+                    hparams.n_ff_exp = hparams.n_ff();
+                }
                 ml.get_key(LLM_KV_ATTENTION_SLIDING_WINDOW,    hparams.n_swa);
 
                 hparams.swa_type = LLAMA_SWA_TYPE_STANDARD;

@@ -11,6 +11,7 @@
 - [x] llama-arch.cppのllm_arch_from_string関数にgptossエイリアス追加
 - [x] LLM_ARCH_NAMESを"gptoss"に変更（ハイパーパラメータキー名対応）
 - [x] gpt-ossエイリアスの後方互換性対応
+- [x] expert_feed_forward_lengthをオプショナル化（feed_forward_lengthへフォールバック）
 
 ## Polish
 
