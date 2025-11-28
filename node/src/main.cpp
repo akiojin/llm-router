@@ -11,8 +11,10 @@
 #include "system/gpu_detector.h"
 #include "api/router_client.h"
 #include "models/model_sync.h"
+#include "models/model_downloader.h"
 #include "models/model_registry.h"
 #include "models/ollama_compat.h"
+#include "models/model_repair.h"
 #include "core/llama_manager.h"
 #include "core/inference_engine.h"
 #include "api/openai_endpoints.h"
@@ -92,9 +94,26 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
             spdlog::info("GPU offloading enabled with {} layers", 99);
         }
 
+        // Initialize auto-repair (if enabled)
+        std::unique_ptr<ollama_node::ModelSync> model_sync_ptr;
+        std::unique_ptr<ollama_node::ModelDownloader> model_downloader_ptr;
+        std::unique_ptr<ollama_node::ModelRepair> model_repair_ptr;
+
+        if (cfg.auto_repair) {
+            spdlog::info("Auto-repair enabled, initializing ModelRepair...");
+            model_sync_ptr = std::make_unique<ollama_node::ModelSync>(router_url, models_dir);
+            model_downloader_ptr = std::make_unique<ollama_node::ModelDownloader>(router_url, models_dir);
+            model_repair_ptr = std::make_unique<ollama_node::ModelRepair>(
+                *model_sync_ptr, *model_downloader_ptr, ollama_compat);
+            model_repair_ptr->setDefaultTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::seconds(cfg.repair_timeout_secs)));
+        }
+
         // Initialize inference engine with dependencies
-        ollama_node::InferenceEngine engine(llama_manager, ollama_compat);
-        spdlog::info("InferenceEngine initialized with llama.cpp support");
+        ollama_node::InferenceEngine engine = cfg.auto_repair && model_repair_ptr
+            ? ollama_node::InferenceEngine(llama_manager, ollama_compat, *model_repair_ptr)
+            : ollama_node::InferenceEngine(llama_manager, ollama_compat);
+        spdlog::info("InferenceEngine initialized with llama.cpp support{}", cfg.auto_repair ? " (auto-repair enabled)" : "");
 
         // Start HTTP server BEFORE registration (router checks /v1/models endpoint)
         ollama_node::OpenAIEndpoints openai(registry, engine);

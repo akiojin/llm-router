@@ -62,11 +62,25 @@ std::string InferenceEngine::generateChat(
         throw std::runtime_error("Model not found: " + model_name);
     }
 
-    // 2. モデルロード（未ロードの場合）
+    // 2. モデルロード（自動修復機能を使用）
     if (!manager_->isLoaded(gguf_path)) {
         spdlog::info("Loading model on demand: {}", gguf_path);
-        if (!manager_->loadModel(gguf_path)) {
-            throw std::runtime_error("Failed to load model: " + gguf_path);
+
+        // 自動修復が有効な場合は loadModelWithRepair を使用
+        if (repair_) {
+            auto load_result = const_cast<InferenceEngine*>(this)->loadModelWithRepair(model_name);
+            if (!load_result.success) {
+                if (load_result.repair_triggered) {
+                    // 修復中の場合は例外をスロー
+                    throw ModelRepairingException(model_name);
+                }
+                throw std::runtime_error(load_result.error_message);
+            }
+        } else {
+            // 自動修復が無効な場合は従来の方法でロード
+            if (!manager_->loadModel(gguf_path)) {
+                throw std::runtime_error("Failed to load model: " + gguf_path);
+            }
         }
     }
 
@@ -221,15 +235,31 @@ std::vector<std::string> InferenceEngine::generateChatStream(
         return tokens;
     }
 
-    // 1. モデルパス解決とロード
+    // 1. モデルパス解決
     std::string gguf_path = ollama_compat_->resolveGguf(model_name);
     if (gguf_path.empty()) {
         throw std::runtime_error("Model not found: " + model_name);
     }
 
+    // 2. モデルロード（自動修復機能を使用）
     if (!manager_->isLoaded(gguf_path)) {
-        if (!manager_->loadModel(gguf_path)) {
-            throw std::runtime_error("Failed to load model: " + gguf_path);
+        spdlog::info("Loading model on demand for streaming: {}", gguf_path);
+
+        // 自動修復が有効な場合は loadModelWithRepair を使用
+        if (repair_) {
+            auto load_result = const_cast<InferenceEngine*>(this)->loadModelWithRepair(model_name);
+            if (!load_result.success) {
+                if (load_result.repair_triggered) {
+                    // 修復中の場合は例外をスロー
+                    throw ModelRepairingException(model_name);
+                }
+                throw std::runtime_error(load_result.error_message);
+            }
+        } else {
+            // 自動修復が無効な場合は従来の方法でロード
+            if (!manager_->loadModel(gguf_path)) {
+                throw std::runtime_error("Failed to load model: " + gguf_path);
+            }
         }
     }
 
@@ -240,7 +270,7 @@ std::vector<std::string> InferenceEngine::generateChatStream(
         throw std::runtime_error("Failed to get context/model");
     }
 
-    // 2. vocab取得とプロンプト処理
+    // 3. vocab取得とプロンプト処理
     const llama_vocab* vocab = llama_model_get_vocab(model);
     std::string prompt = buildChatPrompt(messages);
 
@@ -258,13 +288,13 @@ std::vector<std::string> InferenceEngine::generateChatStream(
 
     tokens.resize(static_cast<size_t>(n_tokens));
 
-    // 3. プロンプトをデコード
+    // 4. プロンプトをデコード
     llama_batch batch = llama_batch_get_one(tokens.data(), n_tokens);
     if (llama_decode(ctx, batch) != 0) {
         throw std::runtime_error("llama_decode failed for prompt");
     }
 
-    // 4. サンプラー初期化
+    // 5. サンプラー初期化
     llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
     llama_sampler* sampler = llama_sampler_chain_init(sparams);
 
@@ -279,7 +309,7 @@ std::vector<std::string> InferenceEngine::generateChatStream(
     }
     llama_sampler_chain_add(sampler, llama_sampler_init_dist(seed));
 
-    // 5. ストリーミング生成ループ
+    // 6. ストリーミング生成ループ
     for (size_t i = 0; i < params.max_tokens; i++) {
         llama_token new_token = llama_sampler_sample(sampler, ctx, -1);
 

@@ -234,6 +234,24 @@ std::pair<NodeConfig, std::string> loadNodeConfigWithLog() {
         used_env = true;
     }
 
+    if (auto v = getenv_str("LLM_AUTO_REPAIR")) {
+        std::string s = *v;
+        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        if (s == "1" || s == "true" || s == "yes") {
+            cfg.auto_repair = true;
+            log << "env:AUTO_REPAIR=1 ";
+            used_env = true;
+        }
+    }
+
+    if (auto v = getenv_str("LLM_REPAIR_TIMEOUT_SECS")) {
+        try {
+            cfg.repair_timeout_secs = std::stoi(*v);
+            log << "env:REPAIR_TIMEOUT_SECS=" << cfg.repair_timeout_secs << " ";
+            used_env = true;
+        } catch (...) {}
+    }
+
     if (log.tellp() > 0) log << "|";
     log << "sources=";
     if (used_env) log << "env";
