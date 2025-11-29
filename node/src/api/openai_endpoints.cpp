@@ -41,9 +41,10 @@ void OpenAIEndpoints::registerRoutes(httplib::Server& server) {
                 res.set_chunked_content_provider("text/event-stream",
                     [output](size_t offset, httplib::DataSink& sink) {
                         if (offset == 0) {
-                            std::string chunk = "data: {\\\"content\\\":\\\"" + output + "\\\"}\\n\\n";
+                            json event_data = {{"content", output}};
+                            std::string chunk = "data: " + event_data.dump() + "\n\n";
                             sink.write(chunk.data(), chunk.size());
-                            std::string done = "data: [DONE]\\n\\n";
+                            std::string done = "data: [DONE]\n\n";
                             sink.write(done.data(), done.size());
                             sink.done();
                         }
