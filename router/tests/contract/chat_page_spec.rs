@@ -1,7 +1,9 @@
 //! Contract test: /chat static page contains required UI elements
 
 use axum::{body::to_bytes, http::Request, Router};
-use llm_router::{api, balancer::LoadManager, registry::NodeRegistry, tasks::DownloadTaskManager, AppState};
+use llm_router::{
+    api, balancer::LoadManager, registry::NodeRegistry, tasks::DownloadTaskManager, AppState,
+};
 use tower::ServiceExt;
 
 async fn build_router() -> Router {
@@ -47,11 +49,25 @@ async fn chat_page_contains_sidebar_and_filters() {
     let bytes = to_bytes(response.into_body(), 512 * 1024).await.unwrap();
     let html = String::from_utf8(bytes.to_vec()).expect("chat html should be utf-8");
 
-    assert!(html.contains("id=\"session-list\""), "session list is missing");
-    assert!(html.contains("id=\"provider-toggle\""), "provider toggle is missing");
-    assert!(html.contains("data-provider=\"local\""), "local provider button missing");
-    assert!(html.contains("data-provider=\"cloud\""), "cloud provider button missing");
-    assert!(html.contains("data-provider=\"all\""), "all provider button missing");
+    assert!(
+        html.contains("id=\"session-list\""),
+        "session list is missing"
+    );
+    assert!(
+        html.contains("id=\"provider-toggle\""),
+        "provider toggle is missing"
+    );
+    assert!(
+        html.contains("data-provider=\"local\""),
+        "local provider button missing"
+    );
+    assert!(
+        html.contains("data-provider=\"cloud\""),
+        "cloud provider button missing"
+    );
+    assert!(
+        html.contains("data-provider=\"all\""),
+        "all provider button missing"
+    );
     assert!(html.contains("id=\"chat-input\""), "chat input is missing");
 }
-

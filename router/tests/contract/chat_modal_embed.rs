@@ -1,7 +1,9 @@
 //! Contract test: dashboard embeds chat console as fullscreen modal (no new tab)
 
 use axum::{body::to_bytes, http::Request, Router};
-use llm_router::{api, balancer::LoadManager, registry::NodeRegistry, tasks::DownloadTaskManager, AppState};
+use llm_router::{
+    api, balancer::LoadManager, registry::NodeRegistry, tasks::DownloadTaskManager, AppState,
+};
 use tower::ServiceExt;
 
 async fn build_router() -> Router {
@@ -47,8 +49,17 @@ async fn dashboard_contains_chat_modal() {
     let bytes = to_bytes(response.into_body(), 512 * 1024).await.unwrap();
     let html = String::from_utf8(bytes.to_vec()).expect("dashboard html should be utf-8");
 
-    assert!(html.contains("id=\"chat-open\""), "chat open button not found");
-    assert!(html.contains("id=\"chat-modal\""), "chat modal container not found");
+    assert!(
+        html.contains("id=\"chat-open\""),
+        "chat open button not found"
+    );
+    assert!(
+        html.contains("id=\"chat-modal\""),
+        "chat modal container not found"
+    );
     assert!(html.contains("id=\"chat-iframe\""), "chat iframe not found");
-    assert!(html.contains("src=\"/chat\""), "chat iframe src should point to /chat");
+    assert!(
+        html.contains("src=\"/chat\""),
+        "chat iframe src should point to /chat"
+    );
 }
