@@ -21,6 +21,8 @@
 #include "api/node_endpoints.h"
 #include "api/http_server.h"
 #include "utils/config.h"
+#include "utils/cli.h"
+#include "utils/version.h"
 #include "runtime/state.h"
 #include "utils/logger.h"
 
@@ -92,6 +94,29 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
             // Use 99 layers for GPU offloading (most models have fewer layers)
             llama_manager.setGpuLayerSplit(99);
             spdlog::info("GPU offloading enabled with {} layers", 99);
+        }
+
+        // Configure on-demand model loading settings from environment variables
+        if (const char* idle_timeout_env = std::getenv("LLM_MODEL_IDLE_TIMEOUT")) {
+            int timeout_secs = std::atoi(idle_timeout_env);
+            if (timeout_secs > 0) {
+                llama_manager.setIdleTimeout(std::chrono::seconds(timeout_secs));
+                spdlog::info("Model idle timeout set to {} seconds", timeout_secs);
+            }
+        }
+        if (const char* max_models_env = std::getenv("LLM_MAX_LOADED_MODELS")) {
+            int max_models = std::atoi(max_models_env);
+            if (max_models > 0) {
+                llama_manager.setMaxLoadedModels(static_cast<size_t>(max_models));
+                spdlog::info("Max loaded models set to {}", max_models);
+            }
+        }
+        if (const char* max_memory_env = std::getenv("LLM_MAX_MEMORY_BYTES")) {
+            long long max_memory = std::atoll(max_memory_env);
+            if (max_memory > 0) {
+                llama_manager.setMaxMemoryBytes(static_cast<size_t>(max_memory));
+                spdlog::info("Max memory limit set to {} bytes", max_memory);
+            }
         }
 
         // Initialize auto-repair (if enabled)
@@ -251,11 +276,18 @@ void signalHandler(int signal) {
 
 #ifndef LLM_NODE_TESTING
 int main(int argc, char* argv[]) {
+    // Parse CLI arguments first
+    auto cli_result = ollama_node::parseCliArgs(argc, argv);
+    if (cli_result.should_exit) {
+        std::cout << cli_result.output;
+        return cli_result.exit_code;
+    }
+
     // Set up signal handlers
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
 
-    std::cout << "llm-node v1.0.0 starting..." << std::endl;
+    std::cout << "llm-node v" << LLM_NODE_VERSION << " starting..." << std::endl;
 
     auto cfg = ollama_node::loadNodeConfig();
     return run_node(cfg, /*single_iteration=*/false);

@@ -1,7 +1,7 @@
 # 実装計画: 統一APIプロキシ
 
 **機能ID**: `SPEC-63acef08` | **日付**: 2025-10-30（実装完了日） | **仕様**: [spec.md](./spec.md)
-**入力**: `/ollama-router/specs/SPEC-63acef08/spec.md`の機能仕様
+**入力**: `/llm-router/specs/SPEC-63acef08/spec.md`の機能仕様
 **ステータス**: ✅ **実装済み** (PR #1でマージ済み)
 
 ## 概要

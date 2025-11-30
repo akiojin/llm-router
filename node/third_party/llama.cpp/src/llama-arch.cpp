@@ -96,7 +96,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
     { LLM_ARCH_HUNYUAN_MOE,      "hunyuan-moe"      },
     { LLM_ARCH_HUNYUAN_DENSE,    "hunyuan-dense"    },
     { LLM_ARCH_SMOLLM3,          "smollm3"          },
-    { LLM_ARCH_OPENAI_MOE,       "gpt-oss"          },
+    { LLM_ARCH_OPENAI_MOE,       "gptoss"           },
     { LLM_ARCH_LFM2,             "lfm2"             },
     { LLM_ARCH_LFM2MOE,          "lfm2moe"          },
     { LLM_ARCH_DREAM,            "dream"            },
@@ -2194,12 +2194,12 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
             { LLM_TENSOR_OUTPUT_NORM,        "output_norm" },
             { LLM_TENSOR_OUTPUT,             "output" },
             { LLM_TENSOR_ATTN_NORM,          "blk.%d.attn_norm" },
-            { LLM_TENSOR_ATTN_POST_NORM,     "blk.%d.post_attention_norm" },
             { LLM_TENSOR_ATTN_Q,             "blk.%d.attn_q" },
             { LLM_TENSOR_ATTN_K,             "blk.%d.attn_k" },
             { LLM_TENSOR_ATTN_V,             "blk.%d.attn_v" },
-            { LLM_TENSOR_ATTN_OUT,           "blk.%d.attn_output" },
+            { LLM_TENSOR_ATTN_OUT,           "blk.%d.attn_out" },
             { LLM_TENSOR_ATTN_SINKS,         "blk.%d.attn_sinks" },
+            { LLM_TENSOR_FFN_NORM,           "blk.%d.ffn_norm" },
             { LLM_TENSOR_FFN_GATE_INP,       "blk.%d.ffn_gate_inp" },
             { LLM_TENSOR_FFN_GATE_EXPS,      "blk.%d.ffn_gate_exps" },
             { LLM_TENSOR_FFN_DOWN_EXPS,      "blk.%d.ffn_down_exps" },
@@ -2675,6 +2675,11 @@ const char * llm_arch_name(llm_arch arch) {
 }
 
 llm_arch llm_arch_from_string(const std::string & name) {
+    // gpt-oss -> gptoss alias (backward compatibility)
+    if (name == "gpt-oss") {
+        return LLM_ARCH_OPENAI_MOE;
+    }
+
     for (const auto & kv : LLM_ARCH_NAMES) { // NOLINT
         if (kv.second == name) {
             return kv.first;

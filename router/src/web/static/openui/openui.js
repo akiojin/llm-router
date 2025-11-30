@@ -82,9 +82,9 @@
 
   function buildModelHint() {
     if (state.models.length) {
-      return `${state.models.length}件のモデル`;
+      return `${state.models.length} models`;
     }
-    return "モデルはデフォルトを使用します";
+    return "Using default model";
   }
 
   function renderModels(models) {
@@ -101,7 +101,7 @@
   }
 
   async function loadModels() {
-    setStatus("モデルを取得中…", "connecting");
+    setStatus("Fetching models...", "connecting");
     try {
       const res = await fetch("/v1/models");
       if (!res.ok) {
@@ -110,16 +110,16 @@
       const body = await res.json();
       const models = (body?.data || []).map((item) => item.id).filter(Boolean);
       if (!models.length) {
-        throw new Error("モデル一覧が空です");
+        throw new Error("Model list is empty");
       }
       state.models = models;
       renderModels(models);
-      setStatus("ルーターに接続", "online");
+      setStatus("Connected to router", "online");
     } catch (err) {
       state.models = [...fallbackModels];
       renderModels(state.models);
-      setStatus("モデル一覧を取得できませんでした", "error");
-      showError(`モデル一覧の取得に失敗しました: ${err.message ?? err}`);
+      setStatus("Failed to fetch model list", "error");
+      showError(`Failed to fetch model list: ${err.message ?? err}`);
     }
   }
 
@@ -127,18 +127,18 @@
     state.history = [];
     if (dom.chatLog) {
       dom.chatLog.innerHTML =
-        '<div class="chat-empty">まだメッセージがありません。下部の入力欄から送信してください。</div>';
+        '<div class="chat-empty">No messages yet. Send a message using the input below.</div>';
     }
   }
 
   function messageLabel(role) {
     switch (role) {
       case "assistant":
-        return "アシスタント";
+        return "Assistant";
       case "system":
-        return "システム";
+        return "System";
       default:
-        return "ユーザー";
+        return "User";
     }
   }
 
@@ -267,7 +267,7 @@
 
     const reader = res.body?.getReader();
     if (!reader) {
-      throw new Error("ストリーミング応答を読み込めませんでした");
+      throw new Error("Failed to read streaming response");
     }
 
     const decoder = new TextDecoder();
@@ -334,21 +334,21 @@
         state.pendingAssistant = assistantEntry;
         assistantContent = await streamChat(payload, assistantEntry);
         if (!assistantContent) {
-          updateMessage(assistantEntry, "(空のレスポンス)");
+          updateMessage(assistantEntry, "(Empty response)");
         }
       } else {
         const body = await postChat(payload);
-        assistantContent = body?.message?.content ?? "(空のレスポンス)";
+        assistantContent = body?.message?.content ?? "(Empty response)";
         addMessage("assistant", assistantContent);
       }
-      setStatus(`モデル ${payload.model} から応答`, "online");
+      setStatus(`Response from model ${payload.model}`, "online");
     } catch (err) {
-      const message = err?.name === "AbortError" ? "リクエストを中断しました" : err?.message || String(err);
+      const message = err?.name === "AbortError" ? "Request aborted" : err?.message || String(err);
       if (payload.stream && state.pendingAssistant) {
-        updateMessage(state.pendingAssistant, `エラー: ${message}`);
+        updateMessage(state.pendingAssistant, `Error: ${message}`);
       }
       showError(message);
-      setStatus("エラーが発生しました", "error");
+      setStatus("An error occurred", "error");
     } finally {
       state.pendingAssistant = null;
       setLoading(false);
@@ -374,7 +374,7 @@
     messages.push(
       lastUser || {
         role: "user",
-        content: "こんにちは。ルーター経由で応答をテストしています。",
+        content: "Hello. Testing response through the router.",
       },
     );
     return { model, messages, stream: dom.streamToggle?.checked ?? false };
@@ -388,13 +388,13 @@
       await navigator.clipboard.writeText(curl);
       if (dom.modelCount) {
         const original = buildModelHint();
-        dom.modelCount.textContent = "cURL をコピーしました";
+        dom.modelCount.textContent = "cURL copied";
         setTimeout(() => {
           dom.modelCount.textContent = original;
         }, 1500);
       }
     } catch (err) {
-      showError(`クリップボードにコピーできませんでした: ${err.message ?? err}`);
+      showError(`Failed to copy to clipboard: ${err.message ?? err}`);
     }
   }
 
@@ -420,6 +420,6 @@
     initEvents();
     clearHistory();
     loadModels();
-    dom.systemPrompt.value = "あなたはOllama Routerに接続されたチャットアシスタントです。簡潔に日本語で回答してください。";
+    dom.systemPrompt.value = "You are a chat assistant connected to LLM Router. Answer concisely.";
   });
 })();

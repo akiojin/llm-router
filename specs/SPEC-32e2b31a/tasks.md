@@ -1,4 +1,4 @@
-# タスク: Ollama Router System
+# タスク: LLM Router System
 
 ⚠️ **このSPECはアーカイブ済みです**
 
@@ -284,7 +284,7 @@ E2Eテスト (T075-T080)
 
 ```bash
 # すべて並列実行可能
-cargo init --name ollama-router
+cargo init --name llm-router
 mkdir -p common coordinator agent tests/e2e
 ```
 

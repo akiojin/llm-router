@@ -1,6 +1,7 @@
 #include "models.h"
 
-llm_build_openai_moe_iswa::llm_build_openai_moe_iswa(const llama_model & model, const llm_graph_params & params) : llm_graph_context(params) {
+template <bool iswa>
+llm_build_openai_moe<iswa>::llm_build_openai_moe(const llama_model & model, const llm_graph_params & params) : llm_graph_context(params) {
     ggml_tensor * cur;
     ggml_tensor * inpL;
 
@@ -9,7 +10,14 @@ llm_build_openai_moe_iswa::llm_build_openai_moe_iswa(const llama_model & model, 
     // inp_pos - contains the positions
     ggml_tensor * inp_pos = build_inp_pos();
 
-    auto * inp_attn = build_attn_inp_kv_iswa();
+    using inp_attn_type = std::conditional_t<iswa, llm_graph_input_attn_kv_iswa, llm_graph_input_attn_kv>;
+    inp_attn_type * inp_attn = nullptr;
+
+    if constexpr (iswa) {
+        inp_attn = build_attn_inp_kv_iswa();
+    } else {
+        inp_attn = build_attn_inp_kv();
+    }
 
     ggml_tensor * inp_out_ids = build_inp_out_ids();
 
@@ -79,9 +87,9 @@ llm_build_openai_moe_iswa::llm_build_openai_moe_iswa(const llama_model & model, 
 
         cur = ffn_inp;
         cur = build_norm(cur,
-                model.layers[il].attn_post_norm, nullptr,
+                model.layers[il].ffn_norm, nullptr,
                 LLM_NORM_RMS, il);
-        cb(cur, "attn_post_norm", il);
+        cb(cur, "ffn_norm", il);
 
         // MoE branch
         cur = build_moe_ffn(cur,
@@ -122,3 +130,7 @@ llm_build_openai_moe_iswa::llm_build_openai_moe_iswa(const llama_model & model, 
 
     ggml_build_forward_expand(gf, cur);
 }
+
+// Explicit template instantiations
+template struct llm_build_openai_moe<false>;
+template struct llm_build_openai_moe<true>;

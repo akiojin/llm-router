@@ -14,8 +14,8 @@ GitHub Release に添付される配布物が、プラットフォームごと�
 | ID | 観点 | 詳細 | テスト方法 |
 | --- | --- | --- | --- |
 | RD-01 | アーカイブ形式 | Linux/macOS 向けは `.tar.gz`、Windows 向けは `.zip` で生成される | ワークフロー内で拡張子パターンを `test` コマンドで検証 |
-| RD-02 | 同梱ファイル | 各アーカイブに `ollama-router-coordinator*`、`ollama-router-agent*`、`README.md`、`README.ja.md`、`LICENSE` が含まれる | `tar -tzf` / `unzip -Z1` でファイル一覧を確認 |
-| RD-03 | 命名規則 | アーカイブ名は `ollama-router-<platform>` で始まる | ワークフロー内で `[[ $archive == ollama-router-* ]]` を確認 |
+| RD-02 | 同梱ファイル | 各アーカイブに `llm-router-coordinator*`、`llm-router-agent*`、`README.md`、`README.ja.md`、`LICENSE` が含まれる | `tar -tzf` / `unzip -Z1` でファイル一覧を確認 |
+| RD-03 | 命名規則 | アーカイブ名は `llm-router-<platform>` で始まる | ワークフロー内で `[[ $archive == llm-router-* ]]` を確認 |
 | RD-04 | リリースタイミング | リリースビルドは `main` ブランチにマージ済みのコミットのみを対象とする | ワークフロー先頭で `target_commitish == "main"` を検証 |
 | RD-05 | インストーラー構成 | macOS `.pkg` / Windows `.msi` は Router インストーラーを生成し、`or-router-*` の命名規則に従う（Node は C++ 実装 `node/` ディレクトリに配置） | `.github/workflows/publish.yml` の installer ステップが Router 成果物をビルド・アップロードするか確認 |
 

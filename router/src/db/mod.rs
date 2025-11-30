@@ -46,7 +46,7 @@ fn get_data_file_path() -> RouterResult<PathBuf> {
             .or_else(|_| std::env::var("USERPROFILE"))
             .map_err(|_| RouterError::Database("Failed to get home directory".to_string()))?;
 
-        PathBuf::from(home).join(".or")
+        PathBuf::from(home).join(".llm-router")
     };
 
     Ok(data_dir.join("nodes.json"))

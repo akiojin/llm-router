@@ -5,7 +5,7 @@
 
 ## 前提条件
 
-- ollama-coordinator v1.6.0+ がインストール済み
+- llm-router v1.6.0+ がインストール済み
 - ポート 8080 が利用可能
 
 ## 1. 初回起動と管理者作成
@@ -282,10 +282,10 @@ curl -X PUT http://localhost:8080/api/users/{user_id} \
 
 ```bash
 # データベースをバックアップ
-cp ~/.ollama-coordinator/coordinator.db ~/.ollama-coordinator/coordinator.db.backup
+cp ~/.llm-router/coordinator.db ~/.llm-router/coordinator.db.backup
 
 # データベースを削除して再初期化
-rm ~/.ollama-coordinator/coordinator.db
+rm ~/.llm-router/coordinator.db
 
 # コーディネーター再起動（新しい管理者作成）
 cargo run --bin coordinator

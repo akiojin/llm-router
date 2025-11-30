@@ -11,7 +11,7 @@
 ## 前提条件
 
 - Rust 1.75+ がインストールされていること
-- Ollama Router が起動していること
+- LLM Router が起動していること
 - 1つ以上のノードが登録されていること
 
 ## 5分で試す
@@ -81,7 +81,7 @@ curl "http://localhost:8080/api/dashboard/request-responses/export?format=csv" \
 ### 5. 保存ファイルを確認
 
 ```bash
-cat ~/.ollama-router/request_history.json | jq
+cat ~/.llm-router/request_history.json | jq
 ```
 
 レコードがJSON配列形式で保存されていることを確認できます。
@@ -208,10 +208,10 @@ head history.csv
 **確認方法**:
 ```bash
 # ファイルの存在確認
-ls -lh ~/.ollama-router/request_history.json
+ls -lh ~/.llm-router/request_history.json
 
 # ファイルの内容確認
-cat ~/.ollama-router/request_history.json | jq
+cat ~/.llm-router/request_history.json | jq
 ```
 
 **対処方法**:
@@ -243,7 +243,7 @@ curl -v "http://localhost:8080/api/dashboard/request-responses/export?format=inv
 **確認方法**:
 ```bash
 # ファイルサイズ確認
-du -h ~/.ollama-router/request_history.json
+du -h ~/.llm-router/request_history.json
 ```
 
 **対処方法**:

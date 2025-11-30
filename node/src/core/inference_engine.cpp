@@ -62,7 +62,8 @@ std::string InferenceEngine::generateChat(
         throw std::runtime_error("Model not found: " + model_name);
     }
 
-    // 2. モデルロード（自動修復機能を使用）
+    // 2. モデルロード（オンデマンドロード + 自動修復機能）
+    // loadModelIfNeeded() はアクセス時刻追跡とLRU管理を行う
     if (!manager_->isLoaded(gguf_path)) {
         spdlog::info("Loading model on demand: {}", gguf_path);
 
@@ -77,11 +78,14 @@ std::string InferenceEngine::generateChat(
                 throw std::runtime_error(load_result.error_message);
             }
         } else {
-            // 自動修復が無効な場合は従来の方法でロード
-            if (!manager_->loadModel(gguf_path)) {
+            // 自動修復が無効な場合はオンデマンドロードを使用
+            if (!manager_->loadModelIfNeeded(gguf_path)) {
                 throw std::runtime_error("Failed to load model: " + gguf_path);
             }
         }
+    } else {
+        // 既にロード済みの場合もアクセス時刻を更新
+        manager_->loadModelIfNeeded(gguf_path);
     }
 
     // 3. コンテキストとモデル取得
@@ -179,6 +183,14 @@ std::string InferenceEngine::generateChat(
         char buf[256];
         int32_t len = llama_token_to_piece(vocab, new_token, buf, sizeof(buf), 0, false);
         if (len > 0) {
+            // Debug: log token ID and raw bytes
+            std::string hex_bytes;
+            for (int32_t j = 0; j < len; j++) {
+                char hex[8];
+                snprintf(hex, sizeof(hex), "%02X ", static_cast<unsigned char>(buf[j]));
+                hex_bytes += hex;
+            }
+            spdlog::debug("Token {}: id={}, len={}, bytes=[{}]", i, new_token, len, hex_bytes);
             output.append(buf, static_cast<size_t>(len));
         }
 
@@ -199,7 +211,14 @@ std::string InferenceEngine::generateChat(
     // 10. クリーンアップ
     llama_sampler_free(sampler);
 
-    spdlog::info("Generated {} tokens for model {}", output.size(), model_name);
+    // Debug: log final output hex dump (first 100 bytes)
+    std::string hex_output;
+    for (size_t j = 0; j < std::min(output.size(), size_t(100)); j++) {
+        char hex[8];
+        snprintf(hex, sizeof(hex), "%02X ", static_cast<unsigned char>(output[j]));
+        hex_output += hex;
+    }
+    spdlog::info("Generated {} bytes for model {}, first 100 bytes: [{}]", output.size(), model_name, hex_output);
     return output;
 }
 
@@ -241,7 +260,7 @@ std::vector<std::string> InferenceEngine::generateChatStream(
         throw std::runtime_error("Model not found: " + model_name);
     }
 
-    // 2. モデルロード（自動修復機能を使用）
+    // 2. モデルロード（オンデマンドロード + 自動修復機能）
     if (!manager_->isLoaded(gguf_path)) {
         spdlog::info("Loading model on demand for streaming: {}", gguf_path);
 
@@ -256,11 +275,14 @@ std::vector<std::string> InferenceEngine::generateChatStream(
                 throw std::runtime_error(load_result.error_message);
             }
         } else {
-            // 自動修復が無効な場合は従来の方法でロード
-            if (!manager_->loadModel(gguf_path)) {
+            // 自動修復が無効な場合はオンデマンドロードを使用
+            if (!manager_->loadModelIfNeeded(gguf_path)) {
                 throw std::runtime_error("Failed to load model: " + gguf_path);
             }
         }
+    } else {
+        // 既にロード済みの場合もアクセス時刻を更新
+        manager_->loadModelIfNeeded(gguf_path);
     }
 
     llama_context* ctx = manager_->getContext(gguf_path);
@@ -458,8 +480,8 @@ ModelLoadResult InferenceEngine::loadModelWithRepair(const std::string& model_na
         gguf_path = ollama_compat_->resolveGguf(model_name);
     }
 
-    // 4. モデルをロード
-    if (!manager_->loadModel(gguf_path)) {
+    // 4. モデルをロード（オンデマンドロード使用）
+    if (!manager_->loadModelIfNeeded(gguf_path)) {
         // ロード失敗時、まだ自動修復を試みていなければ試行
         if (repair_ && !result.repair_triggered) {
             spdlog::warn("Model load failed, attempting auto-repair: {}", model_name);
@@ -468,7 +490,7 @@ ModelLoadResult InferenceEngine::loadModelWithRepair(const std::string& model_na
             if (repair_result.status == RepairStatus::Success) {
                 // 修復成功後に再ロード
                 gguf_path = ollama_compat_->resolveGguf(model_name);
-                if (manager_->loadModel(gguf_path)) {
+                if (manager_->loadModelIfNeeded(gguf_path)) {
                     result.success = true;
                     return result;
                 }

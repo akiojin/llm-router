@@ -38,7 +38,7 @@ impl TrayOptions {
     pub fn new(base_url: &str, dashboard_url: &str) -> Self {
         Self {
             dashboard_url: dashboard_url.to_string(),
-            tooltip: format!("Ollama Router\n{}", base_url),
+            tooltip: format!("LLM Router\n{}", base_url),
         }
     }
 

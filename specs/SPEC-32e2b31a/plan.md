@@ -1,4 +1,4 @@
-# 実装計画: Ollama Router System
+# 実装計画: LLM Router System
 
 **機能ID**: `SPEC-32e2b31a` | **日付**: 2025-10-30 | **仕様**: [spec.md](./spec.md)
 **入力**: `/specs/SPEC-32e2b31a/spec.md`の機能仕様
@@ -100,7 +100,7 @@ specs/SPEC-32e2b31a/
 ### ソースコード (リポジトリルート)
 
 ```
-ollama-router/
+llm-router/
 ├── Cargo.toml                    # Workspace定義
 ├── Cargo.lock
 ├── .cargo/
@@ -307,7 +307,7 @@ pub struct AgentConfig {
 ```yaml
 openapi: 3.0.3
 info:
-  title: Ollama Router API
+  title: LLM Router API
   version: 0.1.0
   description: 複数Ollamaインスタンスを管理する中央集権型システム
 

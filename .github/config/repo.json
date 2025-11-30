@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/twelvelabs/gh-repo-config/main/schema/repo.json",
-  "name": "ollama-router",
-  "description": "Distributed Ollama router with load balancing and automatic model distribution",
+  "name": "llm-router",
+  "description": "Distributed LLM router with load balancing and automatic model distribution",
   "homepage": null,
   "private": false,
   "has_issues": true,

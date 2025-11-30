@@ -252,7 +252,7 @@
     - ブランチ保護設定完了（GitHub API経由）:
       - ✅ PR必須（required_pull_request_reviews）
       - ✅ quality-checksステータスチェック必須
-      - ✅ 確認: `gh api repos/akiojin/ollama-router/branches/develop`
+      - ✅ 確認: `gh api repos/akiojin/llm-router/branches/develop`
 
 - [x] **T023** feature → develop フロー確認
   - パス: N/A（統合テスト）

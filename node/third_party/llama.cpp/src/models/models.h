@@ -353,9 +353,13 @@ struct llm_build_olmo : public llm_graph_context {
     llm_build_olmo(const llama_model & model, const llm_graph_params & params);
 };
 
-struct llm_build_openai_moe_iswa : public llm_graph_context {
-    llm_build_openai_moe_iswa(const llama_model & model, const llm_graph_params & params);
+template <bool iswa>
+struct llm_build_openai_moe : public llm_graph_context {
+    llm_build_openai_moe(const llama_model & model, const llm_graph_params & params);
 };
+
+// Alias for backward compatibility
+using llm_build_openai_moe_iswa = llm_build_openai_moe<true>;
 
 struct llm_build_openelm : public llm_graph_context {
     llm_build_openelm(const llama_model & model, const llm_graph_params & params);

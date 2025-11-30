@@ -162,7 +162,7 @@ Agent (1) ----< (N) RequestResponseRecord
 ### ファイルパス
 
 ```
-~/.ollama-router/request_history.json
+~/.llm-router/request_history.json
 ```
 
 環境変数 `OLLAMA_ROUTER_DATA_DIR` で変更可能。

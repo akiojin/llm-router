@@ -125,6 +125,7 @@ add_library(utils_lib STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/system_info.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/request_id.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/cli.cpp
 )
 target_include_directories(utils_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(utils_lib PUBLIC spdlog::spdlog_header_only)

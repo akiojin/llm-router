@@ -10,8 +10,11 @@ set(UNIT_TEST_SOURCES
     llama_manager_test.cpp
     model_pool_test.cpp
     model_repair_test.cpp
+    model_loader_test.cpp
     utils_config_test.cpp
     utils_misc_test.cpp
+    cli_test.cpp
+    ../../src/utils/cli.cpp
     ../../src/api/router_client.cpp
     ../../src/models/model_sync.cpp
     ../../src/models/model_downloader.cpp

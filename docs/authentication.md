@@ -1,6 +1,6 @@
 # Authentication Guide
 
-This document provides comprehensive information about Ollama Coordinator's
+This document provides comprehensive information about LLM Router's
 authentication and authorization system.
 
 ## Table of Contents
@@ -17,7 +17,7 @@ authentication and authorization system.
 
 ## Overview
 
-Ollama Coordinator implements a multi-layered authentication system designed
+LLM Router implements a multi-layered authentication system designed
 to secure access to the coordinator, protect agent communication, and enable
 external application integration.
 
@@ -221,7 +221,35 @@ CREATE TABLE agent_tokens (
 
 ### Initial Setup
 
-On first startup, the coordinator prompts for admin account creation:
+#### Option 1: Environment Variable (Recommended for automation)
+
+Set the admin password via environment variable:
+
+```bash
+export LLM_ROUTER_ADMIN_PASSWORD="your-secure-password"
+export LLM_ROUTER_ADMIN_USERNAME="admin"  # optional, default: admin
+./target/release/llm-router
+```
+
+#### Option 2: CLI User Management
+
+Use the CLI to manage users:
+
+```bash
+# List users
+./target/release/llm-router user list
+
+# Add a user (password must be 8+ characters)
+./target/release/llm-router user add developer --password secure-password
+
+# Delete a user
+./target/release/llm-router user delete developer
+```
+
+#### Option 3: Interactive Prompt (deprecated)
+
+On first startup without environment variables, the coordinator prompts
+for admin account creation:
 
 ```bash
 $ ./target/release/llm-router
@@ -564,7 +592,8 @@ curl -X POST http://localhost:8080/api/agents \
    - Recommended: nginx, Caddy, or Traefik
 
 2. **Set Strong JWT Secret**
-   - Override default with `JWT_SECRET` environment variable
+   - Override default with `LLM_ROUTER_JWT_SECRET` environment variable
+   - Auto-generated and persisted to `~/.llm-router/jwt_secret` if not set
    - Use at least 256 bits of entropy
 
 3. **Enable Rate Limiting**
@@ -724,7 +753,7 @@ Look for authentication-related logs:
 
 ```bash
 # Connect to SQLite database
-sqlite3 ~/.or/router.db
+sqlite3 ~/.llm-router/router.db
 
 -- List users
 SELECT id, username, role, created_at FROM users;
@@ -767,7 +796,7 @@ echo -n "new-password" | cargo run -p llm-router-common --bin hash-password
 # Output: $2b$12$...
 
 # 2. Update database
-sqlite3 ~/.or/router.db
+sqlite3 ~/.llm-router/router.db
 UPDATE users SET password_hash = '$2b$12$...' WHERE username = 'admin';
 ```
 
@@ -775,7 +804,7 @@ UPDATE users SET password_hash = '$2b$12$...' WHERE username = 'admin';
 
 ```bash
 # Delete existing JWT secret
-rm ~/.or/jwt_secret
+rm ~/.llm-router/jwt_secret
 
 # Restart coordinator (generates new secret)
 ./llm-router
@@ -789,7 +818,7 @@ rm ~/.or/jwt_secret
 #### Clear All API Keys
 
 ```bash
-sqlite3 ~/.or/router.db
+sqlite3 ~/.llm-router/router.db
 DELETE FROM api_keys;
 ```
 

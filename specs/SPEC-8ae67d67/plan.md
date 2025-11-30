@@ -62,8 +62,8 @@
   - `coordinator::api`: REST APIハンドラー
   - `agent::ollama`: Ollama通信
 - ライブラリごとのCLI:
-  - `ollama-router --help/--version`
-  - `ollama-agent --help/--version`
+  - `llm-router --help/--version`
+  - `llm-node --help/--version`
 - ライブラリドキュメント: 既存のREADME.mdに追記予定
 
 **テスト (妥協不可)**:
@@ -374,14 +374,14 @@ agent/
 # クイックスタート: モデル自動配布機能
 
 ## 前提条件
-- ollama-routerが起動している
+- llm-routerが起動している
 - 少なくとも1つのノードが登録されている
 
 ## シナリオ1: ノード登録時の自動配布
 
 1. 新しいノードを起動:
    \`\`\`bash
-   ollama-agent --coordinator-url http://localhost:8080
+   llm-node --coordinator-url http://localhost:8080
    \`\`\`
 
 2. ルーターログで自動配布を確認:

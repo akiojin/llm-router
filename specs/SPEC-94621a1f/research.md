@@ -8,7 +8,7 @@
 
 ### 決定1: JSONファイルストレージ
 
-**選択**: `~/.ollama-router/agents.json` にノード情報を保存
+**選択**: `~/.llm-router/agents.json` にノード情報を保存
 
 **理由**:
 - シンプル: データベースサーバー不要
@@ -23,7 +23,7 @@
 
 **実装詳細**:
 ```rust
-// ~/.ollama-router/agents.json
+// ~/.llm-router/agents.json
 [
   {
     "id": "uuid",

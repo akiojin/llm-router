@@ -6,6 +6,7 @@ set(INTEGRATION_TEST_SOURCES
     main_test.cpp
     model_sync_download_test.cpp
     auto_repair_test.cpp
+    model_lifecycle_test.cpp
     ../../src/main.cpp
     ../../src/runtime/state.cpp
     ../../src/api/http_server.cpp

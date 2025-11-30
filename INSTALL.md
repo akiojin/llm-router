@@ -38,16 +38,41 @@ cmake --build build --config Release
 生成物: `node/build/llm-node`
 
 ## 4) 基本設定
-- ルーター（Rust）
-  - `ROUTER_HOST` (default `0.0.0.0`)
-  - `ROUTER_PORT` (default `8080`)
-  - `DATABASE_URL` (default `sqlite:$HOME/.or/router.db`)
-  - クラウドキー: `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`
-- ノード（C++）
-  - `LLM_ROUTER_URL` (例: `http://localhost:8080`)
-  - `LLM_NODE_PORT` (default `11434`)
-  - `LLM_BIND_ADDRESS` (default `0.0.0.0`)
-  - `LLM_ALLOW_NO_GPU` を `true` にするとGPU必須を無効化（デフォルトは禁止）
+
+### ルーター（Rust）環境変数
+
+| 環境変数 | デフォルト | 説明 |
+|---------|-----------|------|
+| `LLM_ROUTER_HOST` | `0.0.0.0` | バインドアドレス |
+| `LLM_ROUTER_PORT` | `8080` | リッスンポート |
+| `LLM_ROUTER_DATABASE_URL` | `sqlite:~/.llm-router/router.db` | データベースURL |
+| `LLM_ROUTER_JWT_SECRET` | 自動生成 | JWT署名シークレット |
+| `LLM_ROUTER_ADMIN_USERNAME` | `admin` | 初期管理者ユーザー名 |
+| `LLM_ROUTER_ADMIN_PASSWORD` | - | 初期管理者パスワード |
+| `LLM_ROUTER_LOG_LEVEL` | `info` | ログレベル |
+| `LLM_ROUTER_HEALTH_CHECK_INTERVAL` | `30` | ヘルスチェック間隔（秒） |
+| `LLM_ROUTER_NODE_TIMEOUT` | `60` | ノードタイムアウト（秒） |
+| `LLM_ROUTER_LOAD_BALANCER_MODE` | `auto` | ロードバランサーモード |
+
+クラウドAPI:
+
+- `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`
+
+### ノード（C++）環境変数
+
+| 環境変数 | デフォルト | 説明 |
+|---------|-----------|------|
+| `LLM_ROUTER_URL` | `http://127.0.0.1:11434` | ルーターURL |
+| `LLM_NODE_PORT` | `11435` | HTTPサーバーポート |
+| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | モデルディレクトリ |
+| `LLM_NODE_BIND_ADDRESS` | `0.0.0.0` | バインドアドレス |
+| `LLM_NODE_HEARTBEAT_SECS` | `10` | ハートビート間隔（秒） |
+| `LLM_NODE_ALLOW_NO_GPU` | `false` | GPU必須を無効化 |
+| `LLM_NODE_LOG_LEVEL` | `info` | ログレベル |
+| `LLM_NODE_LOG_DIR` | `~/.llm-router/logs` | ログディレクトリ |
+
+**注意**: 旧環境変数名（`ROUTER_HOST`, `LLM_MODELS_DIR`等）は非推奨です。
+新しい環境変数名を使用してください。
 
 ## 5) 起動例
 ```bash

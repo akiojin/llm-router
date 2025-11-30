@@ -49,7 +49,10 @@ pub fn create_router(state: AppState) -> Router {
             "/api/api-keys",
             get(api_keys::list_api_keys).post(api_keys::create_api_key),
         )
-        .route("/api/api-keys/:id", delete(api_keys::delete_api_key))
+        .route(
+            "/api/api-keys/:id",
+            put(api_keys::update_api_key).delete(api_keys::delete_api_key),
+        )
         .layer(middleware::from_fn_with_state(
             state.jwt_secret.clone(),
             crate::auth::middleware::jwt_auth_middleware,

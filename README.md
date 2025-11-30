@@ -122,7 +122,7 @@ Selects agents based on real-time metrics (CPU usage, memory usage, active reque
 **Configuration:**
 ```bash
 # Enable metrics-based load balancing
-LOAD_BALANCER_MODE=metrics cargo run -p ollama-router-coordinator
+LOAD_BALANCER_MODE=metrics cargo run -p llm-router
 ```
 
 **Load Score Calculation:**
@@ -143,7 +143,7 @@ Combines multiple factors including response time, active requests, and CPU usag
 **Configuration:**
 ```bash
 # Use default advanced load balancing (or omit LOAD_BALANCER_MODE)
-LOAD_BALANCER_MODE=auto cargo run -p ollama-router-coordinator
+LOAD_BALANCER_MODE=auto cargo run -p llm-router
 ```
 
 ### Metrics API
@@ -202,7 +202,7 @@ Machine 1          Machine 2          Machine 3
 
 ### Communication Flow (Proxy Pattern)
 
-Ollama Router uses a **Proxy Pattern** - clients only need to know the Coordinator URL.
+LLM Router uses a **Proxy Pattern** - clients only need to know the Router URL.
 
 #### Traditional Method (Without Coordinator)
 ```bash
@@ -326,7 +326,7 @@ The dashboard ships with the coordinator process. Once the server is running you
 
 1. Start the coordinator (inside Docker or on the host):
    ```bash
-   cargo run -p ollama-router-coordinator
+   cargo run -p llm-router
    ```
 2. Open the dashboard in your browser:
    ```
@@ -362,15 +362,15 @@ For a deeper walkthrough, including API references and customisation tips, see [
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/ollama-router.git
-cd ollama-router
+git clone https://github.com/your-org/llm-router.git
+cd llm-router
 
 # Build Coordinator
 cd coordinator
 cargo build --release
 
 # Start Coordinator
-./target/release/ollama-router-coordinator
+./target/release/llm-router
 # Default: http://0.0.0.0:8080
 ```
 
@@ -382,10 +382,10 @@ cd agent
 cargo build --release
 
 # Start Agent (環境変数で上書き)
-ROUTER_URL=http://coordinator-host:8080 ./target/release/ollama-router-agent
+ROUTER_URL=http://coordinator-host:8080 ./target/release/llm-node
 
 # 環境変数を指定しない場合はローカル設定パネルで保存した値、なければ http://localhost:8080
-./target/release/ollama-router-agent
+./target/release/llm-node
 ```
 
 **Note**: Ollama is automatically downloaded and installed on first startup if not already present. The agent will:
@@ -449,7 +449,7 @@ If automatic detection fails, set environment variables:
 LLM_GPU_AVAILABLE=true \
 LLM_GPU_MODEL="Your GPU Model" \
 LLM_GPU_COUNT=1 \
-./target/release/ollama-router-agent
+./target/release/llm-node
 ```
 
 ## Usage
@@ -465,13 +465,13 @@ LLM_GPU_COUNT=1 \
 2. **Start Agents on Multiple Machines**
    ```bash
    # Machine 1
-   ROUTER_URL=http://coordinator:8080 cargo run --release --bin ollama-router-agent
+   ROUTER_URL=http://coordinator:8080 cargo run --release --bin llm-node
 
    # Machine 2
-   ROUTER_URL=http://coordinator:8080 cargo run --release --bin ollama-router-agent
+   ROUTER_URL=http://coordinator:8080 cargo run --release --bin llm-node
 
    # Machine 3
-   ROUTER_URL=http://coordinator:8080 cargo run --release --bin ollama-router-agent
+   ROUTER_URL=http://coordinator:8080 cargo run --release --bin llm-node
    ```
 
 3. **Use Ollama API Through Coordinator**
@@ -502,23 +502,50 @@ LLM_GPU_COUNT=1 \
 
 ### Environment Variables
 
-#### Coordinator
-- `ROUTER_HOST`: Bind address (default: `0.0.0.0`)
-- `ROUTER_PORT`: Port number (default: `8080`)
-- `DATABASE_URL`: Database URL (default: `sqlite://coordinator.db`)
-- `HEALTH_CHECK_INTERVAL`: Health check interval in seconds (default: `30`)
-- `AGENT_TIMEOUT`: Agent timeout in seconds (default: `60`)
-- `LOAD_BALANCER_MODE`: Load balancing strategy - `metrics` for metrics-based or `auto` for advanced (default: `auto`)
+#### Router (llm-router)
 
-#### Agent
-- `ROUTER_URL`: Coordinator URL (default: `http://localhost:8080`)
-- `LLM_PORT`: Ollama port number (default: `11434`)
-- `LLM_GPU_AVAILABLE`: Manual GPU availability flag (optional, auto-detected)
-- `LLM_GPU_MODEL`: Manual GPU model name (optional, auto-detected)
-- `LLM_GPU_COUNT`: Manual GPU count (optional, auto-detected)
-- `LLM_DEFAULT_MODEL`: Default LLM model to download (optional, auto-selected based on memory)
-- `LLM_PULL_TIMEOUT_SECS`: Timeout for model download in seconds (optional)
-- `LLM_API_BASE`: Custom Ollama API base URL (optional, default: `http://127.0.0.1:11434`)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_ROUTER_HOST` | `0.0.0.0` | Bind address |
+| `LLM_ROUTER_PORT` | `8080` | Listen port |
+| `LLM_ROUTER_DATABASE_URL` | `sqlite://~/.llm-router/router.db` | Database URL |
+| `LLM_ROUTER_LOG_LEVEL` | `info` | Log level |
+| `LLM_ROUTER_HEALTH_CHECK_INTERVAL` | `30` | Health check interval (seconds) |
+| `LLM_ROUTER_NODE_TIMEOUT` | `60` | Node timeout (seconds) |
+| `LLM_ROUTER_LOAD_BALANCER_MODE` | `auto` | Load balancer mode (`metrics` or `auto`) |
+| `LLM_ROUTER_JWT_SECRET` | (auto-generated) | JWT signing key (overridable via env var) |
+| `LLM_ROUTER_ADMIN_USERNAME` | `admin` | Initial admin username |
+| `LLM_ROUTER_ADMIN_PASSWORD` | (required) | Initial admin password (first run only) |
+| `LLM_ROUTER_OPENAI_API_KEY` | - | OpenAI API key |
+| `LLM_ROUTER_ANTHROPIC_API_KEY` | - | Anthropic API key |
+| `LLM_ROUTER_GOOGLE_API_KEY` | - | Google API key |
+
+**Backward Compatibility**: Legacy variable names (`ROUTER_PORT`, etc.) are still
+supported but deprecated. A warning is logged when used.
+
+#### Node (llm-node)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_ROUTER_URL` | `http://127.0.0.1:8080` | Router URL to register with |
+| `LLM_NODE_PORT` | `11435` | Node listen port |
+| `LLM_NODE_IP` | (auto-detected) | Node IP address |
+| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | Model storage directory |
+| `LLM_NODE_LOG_LEVEL` | `info` | Log level |
+| `LLM_NODE_LOG_DIR` | `~/.llm-node/logs` | Log directory |
+| `LLM_NODE_LOG_RETENTION_DAYS` | `7` | Log retention days |
+| `LLM_NODE_HEARTBEAT_SECS` | `10` | Heartbeat interval (seconds) |
+| `LLM_NODE_ALLOW_NO_GPU` | `false` | Allow running without GPU |
+| `LLM_NODE_BIND_ADDRESS` | `0.0.0.0` | Bind address |
+| `LLM_NODE_MODEL_IDLE_TIMEOUT` | `300` | Model idle timeout (seconds) |
+| `LLM_NODE_MAX_LOADED_MODELS` | `1` | Max loaded models |
+| `LLM_NODE_MAX_MEMORY_BYTES` | (auto) | Max memory usage |
+| `LLM_NODE_AUTO_REPAIR` | `true` | Auto repair |
+| `LLM_NODE_REPAIR_TIMEOUT_SECS` | `60` | Repair timeout (seconds) |
+| `LLM_NODE_CONFIG` | - | Config file path |
+
+**Backward Compatibility**: Legacy variable names (`LLM_MODELS_DIR`, etc.) are
+still supported but deprecated. A warning is logged when used.
 
 ## Development
 

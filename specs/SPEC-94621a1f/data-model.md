@@ -138,7 +138,7 @@ pub struct HeartbeatRequest {
 
 ## ストレージスキーマ
 
-**ファイル**: `~/.ollama-router/agents.json`
+**ファイル**: `~/.llm-router/agents.json`
 
 ```json
 [

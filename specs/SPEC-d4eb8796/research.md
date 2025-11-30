@@ -34,7 +34,7 @@ pub async fn init_database() -> Result<SqlitePool> {
 ```
 
 **JSONインポート戦略**:
-1. 起動時に `~/.ollama-coordinator/agents.json` の存在確認
+1. 起動時に `~/.llm-router/agents.json` の存在確認
 2. 存在する場合、SQLiteにデータが未移行かチェック
 3. トランザクション内でJSONをパース→SQLiteに挿入
 4. 成功後、`agents.json.migrated` にリネーム（バックアップ）
@@ -50,7 +50,7 @@ pub async fn init_database() -> Result<SqlitePool> {
 - パフォーマンス: cost=12で約200-300ms（許容範囲）
 
 **検討した代替案**:
-- **argon2**: より新しいが、ollama-coordinatorの規模ではオーバースペック
+- **argon2**: より新しいが、llm-routerの規模ではオーバースペック
 - **scrypt**: 標準化が不十分
 - **SHA-256**: ハッシュアルゴリズムであり、パスワードハッシュ専用ではない（不適切）
 
@@ -241,7 +241,7 @@ pub fn verify_agent_token(token: &str, stored_hash: &str) -> bool {
 - プレフィックスでAPIキーと区別
 
 **エージェント側の実装**:
-- トークンを `~/.ollama-agent/token` に保存
+- トークンを `~/.llm-node/token` に保存
 - 全HTTPリクエストに `X-Agent-Token: agt_...` ヘッダーを追加
 
 ## まとめ

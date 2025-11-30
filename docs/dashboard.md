@@ -1,6 +1,6 @@
 # Dashboard Guide
 
-This document describes the Ollama Router dashboard, included in the `feature/new-feature` branch. It explains how to run the dashboard, what data is displayed, and how to customize the behaviour for integrators.
+This document describes the LLM Router dashboard, included in the `feature/new-feature` branch. It explains how to run the dashboard, what data is displayed, and how to customize the behaviour for integrators.
 
 ---
 
@@ -24,7 +24,7 @@ The dashboard is implemented with vanilla JavaScript and Chart.js to keep depend
 1. Build and start the coordinator (inside the Docker container or on the host):
 
    ```bash
-   cargo run -p ollama-router-coordinator
+   cargo run -p llm-router
    ```
 
 2. The coordinator listens on `0.0.0.0:8080` by default. Visit the dashboard in a browser:
@@ -41,7 +41,7 @@ If you use the provided compose file:
 
 ```bash
 docker compose up --build -d
-docker compose exec ollama-router cargo run -p ollama-router-coordinator
+docker compose exec llm-router cargo run -p llm-router
 ```
 
 Expose the port as configured (`-p 8080:8080`) and open the dashboard from the host browser.
@@ -104,7 +104,7 @@ To customise:
 
 1. Modify the HTML and CSS as desired (no bundler required).
 2. Add new endpoints to `coordinator/src/api` and update `app.js` to consume them.
-3. Remember to run `cargo fmt` and `cargo test -p ollama-router-coordinator` before committing.
+3. Remember to run `cargo fmt` and `cargo test -p llm-router` before committing.
 ---
 
 ## 6. Troubleshooting

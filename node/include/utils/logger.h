@@ -10,6 +10,18 @@ namespace ollama_node::logger {
 // Convert textual level to spdlog level (case-insensitive). Unknown -> info.
 spdlog::level::level_enum parse_level(const std::string& level_text);
 
+// Get the log directory path (~/.llm-router/logs by default).
+std::string get_log_dir();
+
+// Get today's log file path (llm-node.jsonl.YYYY-MM-DD).
+std::string get_log_file_path();
+
+// Get retention days from environment (default: 7).
+int get_retention_days();
+
+// Cleanup old log files older than retention_days.
+void cleanup_old_logs(const std::string& log_dir, int retention_days);
+
 // Initialize default logger with optional pattern and file sink.
 // additional_sinks is mainly for testing (e.g., ostream sink injection).
 void init(const std::string& level = "info",
@@ -18,11 +30,10 @@ void init(const std::string& level = "info",
           std::vector<spdlog::sink_ptr> additional_sinks = {});
 
 // Initialize using environment variables:
-// LOG_LEVEL (trace|debug|info|warn|error|critical|off)
-// LOG_FILE (optional file path)
-// LOG_FORMAT ("json" -> JSON lines, otherwise text pattern)
-// LOG_MAX_SIZE_MB (rotation threshold, default 10)
-// LOG_MAX_FILES (rotation files, default 3)
+// LLM_LOG_DIR (log directory, default: ~/.llm-router/logs)
+// LLM_LOG_LEVEL (trace|debug|info|warn|error|critical|off)
+// LLM_LOG_RETENTION_DAYS (retention days, default: 7)
+// Legacy: LOG_LEVEL, LOG_FILE are still supported for backward compatibility.
 void init_from_env();
 
 }  // namespace ollama_node::logger

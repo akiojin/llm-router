@@ -24,7 +24,7 @@
 ## 本日のToDo (2025-10-31)
 
 - [x] **T601** `coordinator/src/api/mod.rs` のルーター結線スモークテストを修正し、静的配信・API経路の確認を通す
-- [x] **T602** `cargo test -p ollama-router-coordinator` でダッシュボードAPI関連テストを実行し、失敗時は原因を特定して修正
+- [x] **T602** `cargo test -p llm-router-coordinator` でダッシュボードAPI関連テストを実行し、失敗時は原因を特定して修正
 - [x] **T603** 本ファイルを含む関連Specドキュメントのステータス更新と変更点のコミット準備
 - [x] **T604** `coordinator/tests/dashboard_smoke.rs` を追加し、ダッシュボードAPIと静的ファイルのE2Eスモークテストを実装
 - [x] **T605** ダッシュボードSpecのタスク進捗（ページネーション等）を現状に合わせて更新
@@ -345,7 +345,7 @@
 - **推定時間**: 2時間
 - **ステータス**: ✅ 完了
 - **検証ログ (2025-11-02)**:
-  - `make openai-tests`（内部で `cargo test -p ollama-router-coordinator --test openai_proxy` を実行）により、`/api/chat`・`/api/generate` の正常系／未登録ノード／404エラーがOpenAI互換レスポンスで返ることを確認
+  - `make openai-tests`（内部で `cargo test -p llm-router-coordinator --test openai_proxy` を実行）により、`/api/chat`・`/api/generate` の正常系／未登録ノード／404エラーがOpenAI互換レスポンスで返ることを確認
   - `curl http://127.0.0.1:8080/api/chat` でノードを経由した疎通を手動確認済み（`gpt-oss:20b` 応答およびメモリ不足エラーの両ケースを取得）
   - `make openai-tests` のストリーミングケースを追加し、`stream: true` 指定時にSSEレスポンスがそのまま転送されることを確認（2025-11-03）
 

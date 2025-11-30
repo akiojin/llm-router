@@ -79,14 +79,30 @@ std::string LlamaManager::canonicalizePath(const std::string& path) const {
     return fs::weakly_canonical(p).string();
 }
 
+// Ollamaのblobファイル名かどうかを判定
+static bool isOllamaBlobFile(const std::string& filename) {
+    // Ollama blob format: sha256-<64 hex chars>
+    if (filename.length() < 7) return false;
+    if (filename.substr(0, 7) != "sha256-") return false;
+    // 残りが16進数文字のみかチェック
+    for (size_t i = 7; i < filename.length(); ++i) {
+        char c = filename[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // モデルロード（llama.cpp API使用）
 bool LlamaManager::loadModel(const std::string& model_path) {
     std::string canonical = canonicalizePath(model_path);
 
-    // 拡張子チェック
+    // 拡張子チェック（.ggufまたはOllama blobファイル形式を許可）
     fs::path p(canonical);
-    if (p.extension() != ".gguf") {
-        spdlog::error("Invalid model file extension (expected .gguf): {}", canonical);
+    std::string filename = p.filename().string();
+    if (p.extension() != ".gguf" && !isOllamaBlobFile(filename)) {
+        spdlog::error("Invalid model file (expected .gguf or Ollama blob): {}", canonical);
         return false;
     }
 
@@ -239,6 +255,162 @@ std::vector<std::string> LlamaManager::getLoadedModels() const {
         models.push_back(pair.first);
     }
     return models;
+}
+
+// アクセス時刻を更新
+void LlamaManager::updateAccessTime(const std::string& model_path) {
+    last_access_[model_path] = std::chrono::steady_clock::now();
+}
+
+// オンデマンドロード: モデルが未ロードなら自動ロード
+bool LlamaManager::loadModelIfNeeded(const std::string& model_path) {
+    std::string canonical = canonicalizePath(model_path);
+
+    // 既にロード済みならアクセス時刻を更新して返す
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (loaded_models_.count(canonical) > 0) {
+            updateAccessTime(canonical);
+            return true;
+        }
+    }
+
+    // ロード数制限チェック
+    if (!canLoadMore()) {
+        // LRUモデルをアンロードしてスペースを確保
+        auto lru = getLeastRecentlyUsedModel();
+        if (lru.has_value()) {
+            spdlog::info("Unloading LRU model to make room: {}", lru.value());
+            unloadModel(lru.value());
+        }
+    }
+
+    // モデルをロード
+    bool result = loadModel(model_path);
+    if (result) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        updateAccessTime(canonical);
+    }
+    return result;
+}
+
+// アイドルタイムアウト設定
+void LlamaManager::setIdleTimeout(std::chrono::milliseconds timeout) {
+    idle_timeout_ = timeout;
+}
+
+std::chrono::milliseconds LlamaManager::getIdleTimeout() const {
+    return idle_timeout_;
+}
+
+// アイドルモデルのアンロード
+size_t LlamaManager::unloadIdleModels() {
+    auto now = std::chrono::steady_clock::now();
+    std::vector<std::string> to_unload;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& pair : loaded_models_) {
+            auto it = last_access_.find(pair.first);
+            if (it != last_access_.end()) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now - it->second);
+                if (elapsed >= idle_timeout_) {
+                    to_unload.push_back(pair.first);
+                }
+            }
+        }
+    }
+
+    for (const auto& model : to_unload) {
+        spdlog::info("Unloading idle model: {}", model);
+        unloadModel(model);
+    }
+
+    // アクセス時刻情報もクリーンアップ
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& model : to_unload) {
+            last_access_.erase(model);
+        }
+    }
+
+    return to_unload.size();
+}
+
+// 最大ロード数設定
+void LlamaManager::setMaxLoadedModels(size_t max_models) {
+    max_loaded_models_ = max_models;
+}
+
+size_t LlamaManager::getMaxLoadedModels() const {
+    return max_loaded_models_;
+}
+
+// ロード可能かチェック
+bool LlamaManager::canLoadMore() const {
+    if (max_loaded_models_ == 0) {
+        return true;  // 制限なし
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    return loaded_models_.size() < max_loaded_models_;
+}
+
+// メモリ制限設定
+void LlamaManager::setMaxMemoryBytes(size_t max_bytes) {
+    max_memory_bytes_ = max_bytes;
+}
+
+size_t LlamaManager::getMaxMemoryBytes() const {
+    return max_memory_bytes_;
+}
+
+// 最終アクセス時刻取得
+std::optional<std::chrono::steady_clock::time_point> LlamaManager::getLastAccessTime(
+    const std::string& model_path) const {
+    std::string canonical = canonicalizePath(model_path);
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // モデルがロードされていなければnullopt
+    if (loaded_models_.count(canonical) == 0) {
+        return std::nullopt;
+    }
+
+    auto it = last_access_.find(canonical);
+    if (it == last_access_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+// LRU: 最も古くアクセスされたモデルを取得
+std::optional<std::string> LlamaManager::getLeastRecentlyUsedModel() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (loaded_models_.empty()) {
+        return std::nullopt;
+    }
+
+    std::string oldest_model;
+    std::chrono::steady_clock::time_point oldest_time = std::chrono::steady_clock::time_point::max();
+
+    for (const auto& pair : loaded_models_) {
+        auto it = last_access_.find(pair.first);
+        if (it != last_access_.end()) {
+            if (it->second < oldest_time) {
+                oldest_time = it->second;
+                oldest_model = pair.first;
+            }
+        } else {
+            // アクセス時刻がないモデルは最も古いとみなす
+            return pair.first;
+        }
+    }
+
+    if (oldest_model.empty()) {
+        return std::nullopt;
+    }
+    return oldest_model;
 }
 
 }  // namespace ollama_node

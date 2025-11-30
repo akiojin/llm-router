@@ -81,7 +81,7 @@
 - **ステータス**: ✅ 完了
 
 ### D003: JSONファイルストレージ実装 (GREEN) ✅
-- **説明**: `~/.ollama-router/agents.json`に保存/読み込み
+- **説明**: `~/.llm-router/agents.json`に保存/読み込み
 - **詳細**:
   - save_agents(): Vec<Agent>をJSONで保存
   - load_agents(): ファイルから読み込み

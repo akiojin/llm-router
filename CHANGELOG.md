@@ -221,7 +221,7 @@
 
 1. データ移行:
    * 旧: ~/.ollama-coordinator/
-   * 新: ~/.or/
+   * 新: ~/.llm-router/
 
 2. 環境変数更新:
    * `COORDINATOR_*`→`ROUTER_*`

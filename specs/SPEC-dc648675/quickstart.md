@@ -141,7 +141,7 @@ npx bats tests/hooks/test-block-git-branch-ops.bats tests/hooks/test-block-cd-co
 # ok 9 cd src is allowed (within worktree)
 # ok 10 cd / is blocked
 # ok 11 cd ~ is blocked
-# ok 12 cd /ollama-router is blocked (outside worktree)
+# ok 12 cd /llm-router is blocked (outside worktree)
 # ok 13 cd ../.. is blocked (parent directory)
 ```
 
@@ -306,4 +306,4 @@ time echo '{"tool_name":"Bash","tool_input":{"command":"cd ."}}' | \
 
 - [SPEC-dc648675/spec.md](spec.md): 機能仕様書
 - [SPEC-dc648675/plan.md](plan.md): 実装計画
-- [GitHub Issues](https://github.com/akiojin/ollama-router/issues): 既知の問題
+- [GitHub Issues](https://github.com/akiojin/llm-router/issues): 既知の問題

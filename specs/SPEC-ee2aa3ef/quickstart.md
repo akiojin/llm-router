@@ -729,10 +729,10 @@ gh release view --json assets -q '.assets[].name'
 **期待される出力**:
 
 ```
-ollama-router-v1.0.1-x86_64-unknown-linux-gnu.tar.gz
-ollama-router-v1.0.1-x86_64-pc-windows-msvc.zip
-ollama-router-v1.0.1-x86_64-apple-darwin.tar.gz
-ollama-router-v1.0.1-aarch64-apple-darwin.tar.gz
+llm-router-v1.0.1-x86_64-unknown-linux-gnu.tar.gz
+llm-router-v1.0.1-x86_64-pc-windows-msvc.zip
+llm-router-v1.0.1-x86_64-apple-darwin.tar.gz
+llm-router-v1.0.1-aarch64-apple-darwin.tar.gz
 ```
 
 #### 8. ブランチ削除

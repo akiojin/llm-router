@@ -1,5 +1,10 @@
 //! Ollama Router Server Entry Point
 
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+use clap::Parser;
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+use llm_router::cli::{Cli, Commands};
+use llm_router::config::{get_env_with_fallback_or, get_env_with_fallback_parse};
 use llm_router::{api, auth, balancer, health, logging, registry, tasks, AppState};
 use sqlx::sqlite::SqliteConnectOptions;
 use std::net::SocketAddr;
@@ -14,11 +19,8 @@ struct ServerConfig {
 
 impl ServerConfig {
     fn from_env() -> Self {
-        let host = std::env::var("ROUTER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-        let port = std::env::var("ROUTER_PORT")
-            .unwrap_or_else(|_| "8080".to_string())
-            .parse()
-            .unwrap_or(8080);
+        let host = get_env_with_fallback_or("LLM_ROUTER_HOST", "ROUTER_HOST", "0.0.0.0");
+        let port = get_env_with_fallback_parse("LLM_ROUTER_PORT", "ROUTER_PORT", 8080);
         Self { host, port }
     }
 
@@ -71,8 +73,127 @@ fn main() {
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 #[tokio::main]
 async fn main() {
-    logging::init().expect("failed to initialize logging");
-    run_server(ServerConfig::from_env()).await;
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::User { command }) => {
+            // User commands don't need full logging
+            handle_user_command(command).await;
+        }
+        None => {
+            // No command = start server
+            logging::init().expect("failed to initialize logging");
+            run_server(ServerConfig::from_env()).await;
+        }
+    }
+}
+
+/// Handle user management CLI commands
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+async fn handle_user_command(command: llm_router::cli::user::UserCommand) {
+    use llm_router::cli::user::UserCommand;
+    use llm_router::db;
+    use llm_router_common::auth::UserRole;
+
+    // Initialize database
+    let database_url = std::env::var("LLM_ROUTER_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .expect("Failed to get home directory");
+            format!("sqlite:{}/.llm-router/router.db", home)
+        });
+
+    let db_pool = match init_db_pool(&database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            eprintln!("Error: Failed to connect to database: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Run migrations
+    if let Err(e) = sqlx::migrate!("./migrations").run(&db_pool).await {
+        eprintln!("Error: Failed to run database migrations: {}", e);
+        std::process::exit(1);
+    }
+
+    match command {
+        UserCommand::List => match db::users::list(&db_pool).await {
+            Ok(users) => {
+                if users.is_empty() {
+                    println!("No users registered.");
+                } else {
+                    println!("{:<20} {:<10}", "USERNAME", "ROLE");
+                    println!("{}", "-".repeat(30));
+                    for user in users {
+                        let role_str = match user.role {
+                            UserRole::Admin => "admin",
+                            UserRole::Viewer => "viewer",
+                        };
+                        println!("{:<20} {:<10}", user.username, role_str);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Error: Failed to list users: {}", e);
+                std::process::exit(1);
+            }
+        },
+        UserCommand::Add(add) => {
+            // Validate password length
+            if add.password.len() < 8 {
+                eprintln!("Error: Password must be at least 8 characters.");
+                std::process::exit(1);
+            }
+
+            // Hash password
+            let password_hash = match auth::password::hash_password(&add.password) {
+                Ok(hash) => hash,
+                Err(e) => {
+                    eprintln!("Error: Failed to hash password: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            match db::users::create(&db_pool, &add.username, &password_hash, UserRole::Viewer).await
+            {
+                Ok(_) => {
+                    println!("User '{}' created successfully.", add.username);
+                }
+                Err(e) => {
+                    eprintln!("Error: Failed to create user: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        UserCommand::Delete(delete) => {
+            // Find user by username first
+            match db::users::find_by_username(&db_pool, &delete.username).await {
+                Ok(Some(user)) => {
+                    // Delete by ID
+                    match db::users::delete(&db_pool, user.id).await {
+                        Ok(()) => {
+                            println!("User '{}' deleted successfully.", delete.username);
+                        }
+                        Err(e) => {
+                            eprintln!("Error: Failed to delete user: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Ok(None) => {
+                    eprintln!("Error: User '{}' not found.", delete.username);
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("Error: Failed to find user: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
 }
 
 async fn init_db_pool(database_url: &str) -> sqlx::Result<sqlx::SqlitePool> {
@@ -102,9 +223,9 @@ async fn init_db_pool(database_url: &str) -> sqlx::Result<sqlx::SqlitePool> {
 }
 
 async fn run_server(config: ServerConfig) {
-    info!("Ollama Router v{}", env!("CARGO_PKG_VERSION"));
+    info!("LLM Router v{}", env!("CARGO_PKG_VERSION"));
 
-    info!("Initializing storage at ~/.or/");
+    info!("Initializing storage at ~/.llm-router/");
     let registry = registry::NodeRegistry::with_storage()
         .await
         .expect("Failed to initialize node registry");
@@ -112,14 +233,13 @@ async fn run_server(config: ServerConfig) {
     let load_manager = balancer::LoadManager::new(registry.clone());
     info!("Storage initialized successfully");
 
-    let health_check_interval_secs: u64 = std::env::var("HEALTH_CHECK_INTERVAL")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(30);
-    let node_timeout_secs: u64 = std::env::var("NODE_TIMEOUT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(60);
+    let health_check_interval_secs: u64 = get_env_with_fallback_parse(
+        "LLM_ROUTER_HEALTH_CHECK_INTERVAL",
+        "HEALTH_CHECK_INTERVAL",
+        30,
+    );
+    let node_timeout_secs: u64 =
+        get_env_with_fallback_parse("LLM_ROUTER_NODE_TIMEOUT", "NODE_TIMEOUT", 60);
 
     let health_monitor = health::HealthMonitor::new(
         registry.clone(),
@@ -128,8 +248,11 @@ async fn run_server(config: ServerConfig) {
     );
     health_monitor.start();
 
-    let load_balancer_mode =
-        std::env::var("LOAD_BALANCER_MODE").unwrap_or_else(|_| "auto".to_string());
+    let load_balancer_mode = get_env_with_fallback_or(
+        "LLM_ROUTER_LOAD_BALANCER_MODE",
+        "LOAD_BALANCER_MODE",
+        "auto",
+    );
     info!("Load balancer mode: {}", load_balancer_mode);
 
     let request_history = std::sync::Arc::new(
@@ -142,12 +265,14 @@ async fn run_server(config: ServerConfig) {
 
     // 認証システムを初期化
     // データベース接続プールを作成
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .expect("Failed to get home directory");
-        format!("sqlite:{}/.or/router.db", home)
-    });
+    let database_url =
+        llm_router::config::get_env_with_fallback("LLM_ROUTER_DATABASE_URL", "DATABASE_URL")
+            .unwrap_or_else(|| {
+                let home = std::env::var("HOME")
+                    .or_else(|_| std::env::var("USERPROFILE"))
+                    .expect("Failed to get home directory");
+                format!("sqlite:{}/.llm-router/router.db", home)
+            });
 
     let db_pool = init_db_pool(&database_url)
         .await
@@ -164,11 +289,9 @@ async fn run_server(config: ServerConfig) {
         .await
         .expect("Failed to ensure admin exists");
 
-    // JWT秘密鍵を取得または生成
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-        tracing::warn!("JWT_SECRET not set, using default (not recommended for production)");
-        "default-jwt-secret-change-in-production".to_string()
-    });
+    // JWT秘密鍵を取得または生成（ファイル永続化対応）
+    let jwt_secret = llm_router::jwt_secret::get_or_create_jwt_secret()
+        .expect("Failed to get or create JWT secret");
 
     info!("Authentication system initialized");
 

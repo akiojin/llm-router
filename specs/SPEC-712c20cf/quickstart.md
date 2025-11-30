@@ -31,7 +31,7 @@
 
 3. 期待される結果:
    - ダッシュボードページが表示される
-   - ヘッダーに「Ollama Router Dashboard」が表示される
+   - ヘッダーに「LLM Router Dashboard」が表示される
    - システム統計カードが表示される（Total Agents, Online Agents, etc.）
    - ノード一覧テーブルが表示される
 

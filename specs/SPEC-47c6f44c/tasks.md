@@ -1,6 +1,6 @@
 # タスク: 自動マージ機能の実装
 
-**機能ID**: `SPEC-47c6f44c` | **入力**: `/ollama-router/specs/SPEC-47c6f44c/`の設計ドキュメント
+**機能ID**: `SPEC-47c6f44c` | **入力**: `/llm-router/specs/SPEC-47c6f44c/`の設計ドキュメント
 **ステータス**: ✅ **実装完了** (2025-10-30 完了)
 **前提条件**: plan.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
 
@@ -14,12 +14,12 @@
 **目的**: プロジェクト初期化、設定ファイル作成
 
 - [x] **T001** [P] `.commitlintrc.json`を作成（Conventional Commits準拠設定）
-  - **ファイル**: `/ollama-router/.commitlintrc.json`
+  - **ファイル**: `/llm-router/.commitlintrc.json`
   - **参照**: `contracts/quality-checks.contract.yml` の commitlint ジョブ、`research.md` の commitlint設定
   - **内容**: `@commitlint/config-conventional` を拡張、日本語サポート、カスタムルール
 
 - [x] **T002** [P] 既存`ci.yml`をバックアップ
-  - **ファイル**: `/ollama-router/.github/workflows/ci.yml`
+  - **ファイル**: `/llm-router/.github/workflows/ci.yml`
   - **コマンド**: `cp .github/workflows/ci.yml .github/workflows/ci.yml.backup`
   - **理由**: 段階的移行、ロールバック可能性
 
@@ -30,13 +30,13 @@
 ### Contract Tests (並列実行可能)
 
 - [x] **T003** [P] `test-quality-checks.yml`を作成（品質チェックワークフローのテスト）
-  - **ファイル**: `/ollama-router/.github/workflows/test-quality-checks.yml`
+  - **ファイル**: `/llm-router/.github/workflows/test-quality-checks.yml`
   - **参照**: `contracts/quality-checks.contract.yml`
   - **目的**: 各ジョブ（tasks-check、rust-test、rust-lint、commitlint、markdownlint）が独立して実行可能かテスト
   - **期待**: 実装前なので失敗する（RED）
 
 - [x] **T004** [P] `test-auto-merge.yml`を作成（自動マージワークフローのテスト）
-  - **ファイル**: `/ollama-router/.github/workflows/test-auto-merge.yml`
+  - **ファイル**: `/llm-router/.github/workflows/test-auto-merge.yml`
   - **参照**: `contracts/auto-merge.contract.yml`
   - **目的**: workflow_runトリガー、条件判定、GraphQL APIマージをテスト
   - **期待**: 実装前なので失敗する（RED）
@@ -51,7 +51,7 @@
 **前提条件**: Phase 3.2完了、テストが失敗していることを確認
 
 - [x] **T006** `quality-checks.yml`を作成（品質チェック統合ワークフロー）
-  - **ファイル**: `/ollama-router/.github/workflows/quality-checks.yml`
+  - **ファイル**: `/llm-router/.github/workflows/quality-checks.yml`
   - **参照**: `contracts/quality-checks.contract.yml`
   - **内容**:
     - Job 1: `tasks-check` - `.specify/scripts/checks/check-tasks.sh`呼び出し
@@ -63,7 +63,7 @@
   - **コミット**: `feat(workflow): quality-checksワークフロー実装`
 
 - [x] **T007** `auto-merge.yml`を作成（自動マージワークフロー）
-  - **ファイル**: `/ollama-router/.github/workflows/auto-merge.yml`
+  - **ファイル**: `/llm-router/.github/workflows/auto-merge.yml`
   - **参照**: `contracts/auto-merge.contract.yml`, `research.md` のGraphQL API実装
   - **内容**:
     - トリガー: `workflow_run` on "Quality Checks" completion
@@ -135,7 +135,7 @@
 **前提条件**: Phase 3.4完了、統合テストがすべて合格
 
 - [x] **T013** [P] `finish-feature.sh`のPRボディを更新
-  - **ファイル**: `/ollama-router/.specify/scripts/bash/finish-feature.sh`
+  - **ファイル**: `/llm-router/.specify/scripts/bash/finish-feature.sh`
   - **更新内容**:
     - PRボディの「GitHub Actionsが品質チェックを実行する」説明を実際のワークフロー名（"Quality Checks"、"Auto Merge"）に更新
     - 自動実行される処理の詳細を追加（tasks-check、rust-test、rust-lint、commitlint、markdownlint）
@@ -143,7 +143,7 @@
   - **コミット**: `docs(scripts): finish-feature.shのPRボディを更新`
 
 - [x] **T014** [P] `CLAUDE.md`の自動マージセクションを更新
-  - **ファイル**: `/ollama-router/CLAUDE.md`
+  - **ファイル**: `/llm-router/CLAUDE.md`
   - **更新内容**:
     - 「Worktree＆ブランチ運用」セクションに自動マージフローの詳細を追加
     - 「作業完了フロー」セクションの「自動実行される処理」を実際のワークフロー内容に更新
@@ -152,7 +152,7 @@
   - **コミット**: `docs: CLAUDE.mdに自動マージセクション追加`
 
 - [x] **T015** 既存`ci.yml`の統合または削除
-  - **ファイル**: `/ollama-router/.github/workflows/ci.yml`
+  - **ファイル**: `/llm-router/.github/workflows/ci.yml`
   - **選択肢**:
     - **オプション1**: `quality-checks.yml`に統合（coverageジョブ追加）してから`ci.yml`削除
     - **オプション2**: 並行実行期間（1-2週間）後に削除

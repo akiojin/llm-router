@@ -3,7 +3,7 @@
 //! T007-T010: request_history.rs のストレージ機能をテスト
 
 use chrono::{Duration, Utc};
-use ollama_router_common::protocol::{RecordStatus, RequestResponseRecord, RequestType};
+use llm_router_common::protocol::{RecordStatus, RequestResponseRecord, RequestType};
 use std::net::IpAddr;
 use uuid::Uuid;
 

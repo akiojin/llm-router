@@ -255,7 +255,7 @@ APIキー削除機能を実装（DELETE /api/api-keys/:id）
 - [x] **T088** `agent/src/main.rs` に
 エージェント登録レスポンスからトークン抽出を実装
 - [x] **T089** `agent/src/main.rs` に
-トークン保存機能を実装（`~/.ollama-agent/token` ファイルに保存）
+トークン保存機能を実装（`~/.llm-node/token` ファイルに保存）
 - [x] **T090** `agent/src/main.rs` に
 全HTTPリクエストにX-Agent-Tokenヘッダー付与を実装
 

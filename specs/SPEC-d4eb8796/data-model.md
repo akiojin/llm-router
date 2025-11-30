@@ -275,8 +275,8 @@ CREATE INDEX idx_agent_tokens_hash ON agent_tokens(token_hash);
 ## JSONからSQLiteへのマイグレーション
 
 **既存データ**:
-- `~/.ollama-coordinator/agents.json` → `agents` テーブル
-- `~/.ollama-coordinator/request_history.json` → `request_history` テーブル（新規作成）
+- `~/.llm-router/agents.json` → `agents` テーブル
+- `~/.llm-router/request_history.json` → `request_history` テーブル（新規作成）
 
 **マイグレーション手順**:
 1. 既存のJSONファイルをパース

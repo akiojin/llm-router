@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Ollama Coordinator - Request History API",
+    "title": "LLM Router - Request History API",
     "version": "1.0.0",
     "description": "API契約: リクエスト/レスポンス履歴の取得、検索、エクスポート"
   },

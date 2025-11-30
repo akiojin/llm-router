@@ -45,8 +45,14 @@ cargo build --release -p llm-router
 
 | 変数 | デフォルト | 説明 |
 |-----|-----------|------|
-| `ROUTER_HOST` | `0.0.0.0` | バインドアドレス |
-| `ROUTER_PORT` | `8080` | リッスンポート |
+| `LLM_ROUTER_HOST` | `0.0.0.0` | バインドアドレス |
+| `LLM_ROUTER_PORT` | `8080` | リッスンポート |
+| `LLM_ROUTER_LOG_LEVEL` | `info` | ログレベル |
+| `LLM_ROUTER_JWT_SECRET` | (自動生成) | JWT署名キー |
+| `LLM_ROUTER_ADMIN_USERNAME` | `admin` | 初期管理者ユーザー名 |
+| `LLM_ROUTER_ADMIN_PASSWORD` | (必須) | 初期管理者パスワード |
+
+**後方互換性:** 旧環境変数名（`ROUTER_PORT`等）も使用可能ですが非推奨です。
 
 **システムトレイ（Windows/macOSのみ）:**
 
@@ -86,11 +92,14 @@ npm run start:node
 
 | 変数 | デフォルト | 説明 |
 |-----|-----------|------|
-| `LLM_ROUTER_URL` | `http://127.0.0.1:11434` | 登録先ルーターのURL |
+| `LLM_ROUTER_URL` | `http://127.0.0.1:8080` | 登録先ルーターのURL |
 | `LLM_NODE_PORT` | `11435` | ノードのリッスンポート |
-| `LLM_MODELS_DIR` | `~/.ollama/models` | モデル保存ディレクトリ |
-| `LLM_ALLOW_NO_GPU` | `false` | GPU無しでの起動を許可 |
-| `LLM_HEARTBEAT_SECS` | `10` | ハートビート間隔（秒） |
+| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | モデル保存ディレクトリ |
+| `LLM_NODE_ALLOW_NO_GPU` | `false` | GPU無しでの起動を許可 |
+| `LLM_NODE_HEARTBEAT_SECS` | `10` | ハートビート間隔（秒） |
+| `LLM_NODE_LOG_LEVEL` | `info` | ログレベル |
+
+**後方互換性:** 旧環境変数名（`LLM_MODELS_DIR`等）も使用可能ですが非推奨です。
 
 **Docker:**
 

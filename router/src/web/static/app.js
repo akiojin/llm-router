@@ -303,8 +303,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!state.currentNodeId) return;
     const nodeId = state.currentNodeId;
     const node = state.nodes.find((item) => item.id === nodeId);
-    const name = node ? getDisplayName(node) : "対象";
-    if (!window.confirm(`${name} を削除しますか？`)) {
+    const name = node ? getDisplayName(node) : "target";
+    if (!window.confirm(`Delete ${name}?`)) {
       return;
     }
 
@@ -437,7 +437,7 @@ async function fetchOverview() {
 
 function handleRefreshFailure(error) {
   console.error("Dashboard refresh failed:", error);
-  showError(`ダッシュボードデータの取得に失敗しました: ${error?.message ?? error}`);
+  showError(`Failed to fetch dashboard data: ${error?.message ?? error}`);
   setConnectionStatus("offline");
 }
 
@@ -456,9 +456,9 @@ function updatePerformanceIndicator() {
 
   const { fetchMs, renderMs, backendMs, usedLegacy, severity } = state.metrics;
   const segments = [
-    `取得: ${fetchMs == null ? "-" : `${fetchMs} ms`}`,
-    `描画: ${renderMs == null ? "-" : `${renderMs} ms`}`,
-    `サーバー集計: ${backendMs == null ? "-" : `${backendMs} ms`}`,
+    `Fetch: ${fetchMs == null ? "-" : `${fetchMs} ms`}`,
+    `Render: ${renderMs == null ? "-" : `${renderMs} ms`}`,
+    `Server: ${backendMs == null ? "-" : `${backendMs} ms`}`,
   ];
   const suffix = usedLegacy ? " (legacy)" : "";
 
@@ -572,7 +572,7 @@ function renderNodes() {
     if (state.selectAllCheckbox) {
       state.selectAllCheckbox.checked = false;
     }
-    tbody.replaceChildren(buildPlaceholderRow("ノードはまだ登録されていません"));
+    tbody.replaceChildren(buildPlaceholderRow("No nodes registered yet"));
     updatePagination(0);
     return;
   }
@@ -585,7 +585,7 @@ function renderNodes() {
     if (state.selectAllCheckbox) {
       state.selectAllCheckbox.checked = false;
     }
-    tbody.replaceChildren(buildPlaceholderRow("条件に一致するノードはありません"));
+    tbody.replaceChildren(buildPlaceholderRow("No nodes match the filter criteria"));
     updatePagination(0);
     return;
   }
@@ -692,7 +692,7 @@ function updateHistoryChart(canvas, labels, success, failures) {
         labels,
         datasets: [
           {
-            label: "成功リクエスト",
+            label: "Success Requests",
             data: success,
             tension: 0.3,
             borderColor: "rgba(59, 130, 246, 0.9)",
@@ -701,7 +701,7 @@ function updateHistoryChart(canvas, labels, success, failures) {
             pointRadius: 0,
           },
           {
-            label: "失敗リクエスト",
+            label: "Failed Requests",
             data: failures,
             tension: 0.3,
             borderColor: "rgba(248, 113, 113, 0.9)",
@@ -821,13 +821,13 @@ function buildNodeRow(node, row = document.createElement("tr")) {
   const gpuSummary = summarizeGpu(node);
   const gpuModelDisplay = gpuSummary.primaryModel
     ? `${escapeHtml(gpuSummary.primaryModel)}${
-        gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount}枚)` : ''
+        gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount} GPUs)` : ''
       }`
-    : 'GPU情報取得中';
-  // GPU性能スコア表示
+    : 'Fetching GPU info';
+  // GPU capability score display
   const gpuScoreText =
     typeof node.gpu_capability_score === "number"
-      ? ` / スコア ${node.gpu_capability_score}`
+      ? ` / Score ${node.gpu_capability_score}`
       : "";
   const cpuGpuSub =
     typeof node.gpu_usage === "number"
@@ -849,7 +849,7 @@ function buildNodeRow(node, row = document.createElement("tr")) {
         type="checkbox"
         data-node-id="${node.id}"
         ${state.selection.has(node.id) ? "checked" : ""}
-        aria-label="${escapeHtml(node.machine_name)} を選択"
+        aria-label="Select ${escapeHtml(node.machine_name)}"
       />
     </td>
     <td>
@@ -875,7 +875,7 @@ function buildNodeRow(node, row = document.createElement("tr")) {
     <td>
       <div class="cell-title">${node.total_requests}</div>
       <div class="cell-sub">
-        成功 ${node.successful_requests} / 失敗 ${node.failed_requests}
+        Success ${node.successful_requests} / Failed ${node.failed_requests}
       </div>
     </td>
     <td>${formatAverage(node.average_response_time_ms)}</td>
@@ -884,7 +884,7 @@ function buildNodeRow(node, row = document.createElement("tr")) {
       <div class="cell-sub">${metricsDetail}</div>
     </td>
     <td>
-      <button type="button" data-node-id="${node.id}">詳細</button>
+      <button type="button" data-node-id="${node.id}">Details</button>
     </td>
   `;
   syncNodeRowSelection(row, node.id);
@@ -1063,7 +1063,7 @@ function openNodeModal(node) {
     modalRefs.loadedModels.textContent = models.length ? models.join(", ") : "-";
   }
   modalRefs.uptime.textContent = formatDuration(node.uptime_seconds);
-  modalRefs.status.textContent = node.status === "online" ? "オンライン" : "オフライン";
+  modalRefs.status.textContent = node.status === "online" ? "Online" : "Offline";
   modalRefs.lastSeen.textContent = formatTimestamp(node.last_seen);
   modalRefs.totalRequests.textContent = node.total_requests ?? 0;
   modalRefs.averageResponse.textContent = formatAverage(node.average_response_time_ms);
@@ -1072,21 +1072,21 @@ function openNodeModal(node) {
   modalRefs.notes.value = node.notes ?? "";
   if (modalRefs.gpuUsage) {
     const gpuSummary = summarizeGpu(node);
-    const gpuModel = gpuSummary.primaryModel || 'GPU情報なし';
-    const gpuCount = gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount}枚)` : '';
+    const gpuModel = gpuSummary.primaryModel || 'No GPU info';
+    const gpuCount = gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount} GPUs)` : '';
     modalRefs.gpuUsage.textContent =
       typeof node.gpu_usage === "number"
         ? formatPercentage(node.gpu_usage)
-        : `${gpuModel}${gpuCount} (メトリクス非対応)`;
+        : `${gpuModel}${gpuCount} (Metrics not supported)`;
   }
   if (modalRefs.gpuMemory) {
     const gpuSummary = summarizeGpu(node);
-    const gpuModel = gpuSummary.primaryModel || 'GPU情報なし';
-    const gpuCount = gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount}枚)` : '';
+    const gpuModel = gpuSummary.primaryModel || 'No GPU info';
+    const gpuCount = gpuSummary.totalCount > 1 ? ` (${gpuSummary.totalCount} GPUs)` : '';
     modalRefs.gpuMemory.textContent =
       typeof node.gpu_memory_usage === "number"
         ? formatPercentage(node.gpu_memory_usage)
-        : `${gpuModel}${gpuCount} (メトリクス非対応)`;
+        : `${gpuModel}${gpuCount} (Metrics not supported)`;
   }
   if (modalRefs.gpuCapabilityScore) {
     modalRefs.gpuCapabilityScore.textContent =
@@ -1136,7 +1136,7 @@ function prepareNodeMetrics(nodeId) {
   state.nodeMetricsAbortController = null;
   state.nodeMetricsSignature = "";
   destroyNodeMetricsChart();
-  setNodeMetricsStatus("メトリクスを読み込み中…");
+  setNodeMetricsStatus("Loading metrics...");
   if (modalRefs.metricsCanvas) {
     modalRefs.metricsCanvas.dataset.nodeId = nodeId;
   }
@@ -1162,7 +1162,7 @@ async function loadNodeMetrics(nodeId) {
     state.nodeMetricsAbortController = null;
     destroyNodeMetricsChart();
     setNodeMetricsStatus(
-      `メトリクスの取得に失敗しました: ${error?.message ?? error}`,
+      `Failed to fetch metrics: ${error?.message ?? error}`,
       { isError: true },
     );
   }
@@ -1176,7 +1176,7 @@ function updateNodeMetrics(metrics) {
   if (!array.length) {
     state.nodeMetricsSignature = "";
     destroyNodeMetricsChart();
-    setNodeMetricsStatus("メトリクスはまだありません");
+    setNodeMetricsStatus("No metrics yet");
     return;
   }
 
@@ -1201,7 +1201,7 @@ function updateNodeMetrics(metrics) {
   if (datasetHasValues(cpu)) {
     datasets.push({
       key: "cpu",
-      label: "CPU使用率",
+      label: "CPU Usage",
       data: cpu,
       borderColor: "rgba(59, 130, 246, 0.85)",
       backgroundColor: "rgba(59, 130, 246, 0.12)",
@@ -1210,7 +1210,7 @@ function updateNodeMetrics(metrics) {
   if (datasetHasValues(memory)) {
     datasets.push({
       key: "memory",
-      label: "メモリ使用率",
+      label: "Memory Usage",
       data: memory,
       borderColor: "rgba(168, 85, 247, 0.85)",
       backgroundColor: "rgba(168, 85, 247, 0.12)",
@@ -1219,7 +1219,7 @@ function updateNodeMetrics(metrics) {
   if (datasetHasValues(gpu)) {
     datasets.push({
       key: "gpu",
-      label: "GPU使用率",
+      label: "GPU Usage",
       data: gpu,
       borderColor: "rgba(34, 197, 94, 0.85)",
       backgroundColor: "rgba(34, 197, 94, 0.12)",
@@ -1228,7 +1228,7 @@ function updateNodeMetrics(metrics) {
   if (datasetHasValues(gpuMemory)) {
     datasets.push({
       key: "gpu-memory",
-      label: "GPUメモリ使用率",
+      label: "GPU Memory Usage",
       data: gpuMemory,
       borderColor: "rgba(248, 113, 113, 0.85)",
       backgroundColor: "rgba(248, 113, 113, 0.12)",
@@ -1237,7 +1237,7 @@ function updateNodeMetrics(metrics) {
 
   if (!datasets.length) {
     destroyNodeMetricsChart();
-    setNodeMetricsStatus("メトリクスは記録されていますが数値を取得できませんでした");
+    setNodeMetricsStatus("Metrics recorded but values unavailable");
     return;
   }
 
@@ -1345,11 +1345,11 @@ function buildNodeMetricsSummary(metrics) {
   const latestTime = formatMetricLabel(new Date(latest.timestamp));
   const parts = [
     `CPU ${formatPercentage(latest.cpu_usage)}`,
-    `メモリ ${formatPercentage(latest.memory_usage)}`,
+    `Memory ${formatPercentage(latest.memory_usage)}`,
     `GPU ${formatPercentage(latest.gpu_usage)}`,
-    `GPUメモリ ${formatPercentage(latest.gpu_memory_usage)}`,
+    `GPU Mem ${formatPercentage(latest.gpu_memory_usage)}`,
   ];
-  return `データ点: ${metrics.length} / 最新 ${latestTime} | ${parts.join(" / ")}`;
+  return `Points: ${metrics.length} / Latest ${latestTime} | ${parts.join(" / ")}`;
 }
 
 function buildNodeMetricsSignature(metrics) {
@@ -1402,7 +1402,7 @@ async function saveNodeSettings(nodeId) {
     return response.json();
   } catch (error) {
     console.error("Failed to save node settings:", error);
-    showError(`設定の保存に失敗しました: ${error.message}`);
+    showError(`Failed to save settings: ${error.message}`);
     throw error;
   }
 }
@@ -1420,7 +1420,7 @@ async function deleteNode(nodeId) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
   } catch (error) {
-    showError(`ノードの削除に失敗しました: ${error.message}`);
+    showError(`Failed to delete node: ${error.message}`);
     throw error;
   }
 }
@@ -1438,7 +1438,7 @@ async function disconnectNode(nodeId) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
   } catch (error) {
-    showError(`強制切断に失敗しました: ${error.message}`);
+    showError(`Failed to force disconnect: ${error.message}`);
     throw error;
   }
 }
@@ -1508,13 +1508,13 @@ function setConnectionStatus(mode) {
   pill.classList.remove("status-pill--online", "status-pill--offline");
 
   const labelMap = {
-    loading: "接続状態: 更新中…",
-    updating: "接続状態: 更新中…",
-    online: "接続状態: 正常",
-    offline: "接続状態: 切断",
+    loading: "Connection: Updating...",
+    updating: "Connection: Updating...",
+    online: "Connection: OK",
+    offline: "Connection: Disconnected",
   };
 
-  pill.textContent = labelMap[mode] ?? "接続状態: -";
+  pill.textContent = labelMap[mode] ?? "Connection: -";
 
   if (mode === "online") {
     pill.classList.add("status-pill--online");
@@ -1529,9 +1529,9 @@ function updateLastRefreshed(date, serverDate = null) {
   const clientText = formatDate(date);
   const serverText =
     serverDate instanceof Date && !Number.isNaN(serverDate.getTime())
-      ? ` / サーバー: ${formatDate(serverDate)}`
+      ? ` / Server: ${formatDate(serverDate)}`
       : "";
-  label.textContent = `最終更新: ${clientText}${serverText}`;
+  label.textContent = `Last updated: ${clientText}${serverText}`;
 }
 
 function showError(message) {
@@ -1559,15 +1559,15 @@ function formatDuration(seconds) {
   const minutes = Math.floor((abs % 3600) / 60);
 
   if (days > 0) {
-    return `${days}日${hours}時間`;
+    return `${days}d ${hours}h`;
   }
   if (hours > 0) {
-    return `${hours}時間${minutes}分`;
+    return `${hours}h ${minutes}m`;
   }
   if (minutes > 0) {
-    return `${minutes}分`;
+    return `${minutes}m`;
   }
-  return `${abs}秒`;
+  return `${abs}s`;
 }
 
 function formatPercentage(value) {
@@ -1686,7 +1686,7 @@ async function fetchRequestHistory() {
     console.error("Failed to fetch request history:", error);
     const tbody = document.getElementById("request-history-tbody");
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty-message">履歴の読み込みに失敗しました</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-message">Failed to load history</td></tr>`;
     }
   }
 }
@@ -1708,7 +1708,7 @@ function renderRequestHistory() {
   filtered = filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-message">履歴がありません</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-message">No history</td></tr>`;
     updateHistoryPagination(0, 0);
     return;
   }
@@ -1724,8 +1724,8 @@ function renderRequestHistory() {
     const timestamp = new Date(record.timestamp);
     const statusClass = record.status.type === "success" ? "status-success" : "status-error";
     const statusText = record.status.type === "success"
-      ? "成功"
-      : `エラー: ${escapeHtml(record.status.message || "不明")}`;
+      ? "Success"
+      : `Error: ${escapeHtml(record.status.message || "Unknown")}`;
     const clientIp = record.client_ip || "-";
 
     return `
@@ -1737,7 +1737,7 @@ function renderRequestHistory() {
         <td>${escapeHtml(clientIp)}</td>
         <td>${escapeHtml(record.duration_ms)}ms</td>
         <td><span class="${statusClass}">${statusText}</span></td>
-        <td><button class="btn btn-sm view-request-detail" data-id="${escapeHtml(record.id)}">詳細</button></td>
+        <td><button class="btn btn-sm view-request-detail" data-id="${escapeHtml(record.id)}">Details</button></td>
       </tr>
     `;
   }).join("");
@@ -1787,19 +1787,19 @@ async function showRequestDetail(id) {
     document.getElementById("request-detail-type").textContent = record.request_type;
     document.getElementById("request-detail-model").textContent = record.model;
     document.getElementById("request-detail-node").textContent = `${record.node_machine_name} (${record.node_ip})`;
-    document.getElementById("request-detail-client-ip").textContent = record.client_ip || "未取得";
+    document.getElementById("request-detail-client-ip").textContent = record.client_ip || "Not available";
     document.getElementById("request-detail-duration").textContent = `${record.duration_ms}ms`;
 
     const statusText = record.status.type === "success"
-      ? "成功"
-      : `エラー: ${record.status.message || "不明"}`;
+      ? "Success"
+      : `Error: ${record.status.message || "Unknown"}`;
     document.getElementById("request-detail-status").textContent = statusText;
 
     document.getElementById("request-detail-request-body").textContent =
       JSON.stringify(record.request_body, null, 2);
 
     document.getElementById("request-detail-response-body").textContent =
-      record.response_body ? JSON.stringify(record.response_body, null, 2) : "（レスポンスなし）";
+      record.response_body ? JSON.stringify(record.response_body, null, 2) : "(No response)";
 
     // モーダル表示
     const modal = document.getElementById("request-modal");
@@ -1808,7 +1808,7 @@ async function showRequestDetail(id) {
     }
   } catch (error) {
     console.error("Failed to fetch request detail:", error);
-    alert("リクエスト詳細の読み込みに失敗しました");
+    alert("Failed to load request details");
   }
 }
 
@@ -1954,7 +1954,7 @@ async function fetchCoordinatorLogs({ skipIfFetched = false } = {}) {
     state.logs.coordinatorPath = typeof data.path === "string" ? data.path : null;
     state.logs.coordinatorFetched = true;
   } catch (error) {
-    state.logs.coordinatorError = `ログを取得できませんでした: ${error?.message ?? error}`;
+    state.logs.coordinatorError = `Failed to fetch logs: ${error?.message ?? error}`;
   } finally {
     state.logs.loadingCoordinator = false;
     renderCoordinatorLogs();
@@ -1986,7 +1986,7 @@ async function fetchNodeLogs({ skipIfFetched = false } = {}) {
     state.logs.nodePath = typeof data.path === "string" ? data.path : null;
     state.logs.nodeFetched = true;
   } catch (error) {
-    state.logs.nodeError = `ログを取得できませんでした: ${error?.message ?? error}`;
+    state.logs.nodeError = `Failed to fetch logs: ${error?.message ?? error}`;
     state.logs.nodeFetched = false;
   } finally {
     state.logs.loadingNode = false;
@@ -1999,22 +1999,22 @@ function renderCoordinatorLogs() {
     entries: state.logs.coordinator,
     loading: state.logs.loadingCoordinator,
     error: state.logs.coordinatorError,
-    emptyMessage: "まだログがありません",
+    emptyMessage: "No logs yet",
   });
 
   if (logRefs.coordinatorPath) {
     logRefs.coordinatorPath.textContent = state.logs.coordinatorPath
-      ? `保存先: ${state.logs.coordinatorPath}`
+      ? `Path: ${state.logs.coordinatorPath}`
       : "";
   }
 
   if (logRefs.coordinatorStatus) {
     if (state.logs.loadingCoordinator) {
-      logRefs.coordinatorStatus.textContent = "読み込み中…";
+      logRefs.coordinatorStatus.textContent = "Loading...";
     } else if (state.logs.coordinatorError) {
-      logRefs.coordinatorStatus.textContent = "エラーが発生しました";
+      logRefs.coordinatorStatus.textContent = "An error occurred";
     } else {
-      logRefs.coordinatorStatus.textContent = `最新 ${state.logs.coordinator.length} 件を表示`;
+      logRefs.coordinatorStatus.textContent = `Showing latest ${state.logs.coordinator.length} entries`;
     }
   }
 }
@@ -2022,10 +2022,10 @@ function renderCoordinatorLogs() {
 function renderNodeLogs() {
   const hasNodes = state.nodes.length > 0;
   const emptyMessage = state.logs.selectedNodeId
-    ? "まだログがありません"
+    ? "No logs yet"
     : hasNodes
-      ? "ノードを選択してください"
-      : "ノードが登録されていません";
+      ? "Please select a node"
+      : "No nodes registered";
   const errorMessage = state.logs.selectedNodeId ? state.logs.nodeError : null;
 
   renderLogViewer(logRefs.nodeList, {
@@ -2037,17 +2037,17 @@ function renderNodeLogs() {
 
   if (logRefs.nodePath) {
     logRefs.nodePath.textContent = state.logs.nodePath
-      ? `保存先: ${state.logs.nodePath}`
+      ? `Path: ${state.logs.nodePath}`
       : "";
   }
 
   if (logRefs.nodeStatus) {
     if (state.logs.loadingNode) {
-      logRefs.nodeStatus.textContent = "読み込み中…";
+      logRefs.nodeStatus.textContent = "Loading...";
     } else if (errorMessage) {
       logRefs.nodeStatus.textContent = errorMessage;
     } else if (state.logs.selectedNodeId) {
-      logRefs.nodeStatus.textContent = `最新 ${state.logs.node.length} 件を表示`;
+      logRefs.nodeStatus.textContent = `Showing latest ${state.logs.node.length} entries`;
     } else {
       logRefs.nodeStatus.textContent = emptyMessage;
     }
@@ -2058,7 +2058,7 @@ function renderLogViewer(target, { entries, loading, error, emptyMessage }) {
   if (!target) return;
 
   if (loading) {
-    target.innerHTML = '<div class="log-placeholder">読み込み中…</div>';
+    target.innerHTML = '<div class="log-placeholder">Loading...</div>';
     return;
   }
 
@@ -2162,12 +2162,12 @@ function renderLogsNodeOptions() {
         node.machine_name && node.machine_name.trim().length
           ? node.machine_name
           : node.id.slice(0, 8);
-      const statusLabel = node.status === "online" ? "オンライン" : "オフライン";
+      const statusLabel = node.status === "online" ? "Online" : "Offline";
       return `<option value="${escapeHtml(node.id)}">${escapeHtml(label)} (${statusLabel})</option>`;
     })
     .join("");
 
-  select.innerHTML = `<option value="">ノードを選択</option>${options}`;
+  select.innerHTML = `<option value="">Select a node</option>${options}`;
 
   if (previousSelection && nodes.some((node) => node.id === previousSelection)) {
     select.value = previousSelection;
@@ -2226,7 +2226,7 @@ async function loadModalNodeLogs(nodeId, { force = false } = {}) {
     state.modalLog.error = null;
   } catch (error) {
     state.modalLog.entries = [];
-    state.modalLog.error = `ログを取得できませんでした: ${error?.message ?? error}`;
+    state.modalLog.error = `Failed to fetch logs: ${error?.message ?? error}`;
   } finally {
     state.modalLog.loading = false;
     renderModalNodeLogs();
@@ -2236,8 +2236,8 @@ async function loadModalNodeLogs(nodeId, { force = false } = {}) {
 function renderModalNodeLogs() {
   if (!modalRefs.logViewer) return;
   const emptyMessage = state.currentNodeId
-    ? "まだログがありません"
-    : "ノードが選択されていません";
+    ? "No logs yet"
+    : "No node selected";
 
   renderLogViewer(modalRefs.logViewer, {
     entries: state.modalLog.entries,
@@ -2248,18 +2248,18 @@ function renderModalNodeLogs() {
 
   if (modalRefs.logStatus) {
     if (state.modalLog.loading) {
-      modalRefs.logStatus.textContent = "ログを読み込み中…";
+      modalRefs.logStatus.textContent = "Loading logs...";
     } else if (state.modalLog.error) {
       modalRefs.logStatus.textContent = state.modalLog.error;
     } else if (state.modalLog.entries.length) {
-      modalRefs.logStatus.textContent = `最新 ${state.modalLog.entries.length} 件を表示`;
+      modalRefs.logStatus.textContent = `Showing latest ${state.modalLog.entries.length} entries`;
     } else {
       modalRefs.logStatus.textContent = emptyMessage;
     }
   }
 
   if (modalRefs.logPath) {
-    modalRefs.logPath.textContent = state.modalLog.path ? `保存先: ${state.modalLog.path}` : "";
+    modalRefs.logPath.textContent = state.modalLog.path ? `Path: ${state.modalLog.path}` : "";
   }
 
   if (modalRefs.logRefresh) {

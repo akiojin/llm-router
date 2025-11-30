@@ -1,7 +1,7 @@
 # 実装計画: 自動マージ機能の実装
 
 **機能ID**: `SPEC-47c6f44c` | **日付**: 2025-10-30 | **仕様**: [spec.md](./spec.md)
-**入力**: `/ollama-router/specs/SPEC-47c6f44c/spec.md`の機能仕様
+**入力**: `/llm-router/specs/SPEC-47c6f44c/spec.md`の機能仕様
 
 ## 実行フロー (/speckit.plan コマンドのスコープ)
 
@@ -54,7 +54,7 @@ GitHub Actionsを使用して、PR作成後の品質チェック（tests、lint�
 
 **シンプルさ**:
 
-- プロジェクト数: 1 (既存のollama-routerプロジェクトに追加) ✅
+- プロジェクト数: 1 (既存のllm-routerプロジェクトに追加) ✅
 - フレームワークを直接使用? Yes (GitHub Actions、既存スクリプト) ✅
 - 単一データモデル? Yes (ワークフローYAML定義のみ) ✅
 - パターン回避? Yes (既存スクリプトを直接呼び出し、ラッパーなし) ✅
@@ -245,7 +245,7 @@ Analyze "existing .github/workflows/ci.yml" for "quality-checks.ymlへの統合�
 
 ### タスク生成戦略
 
-**ベーステンプレート**: `/ollama-router/.specify/templates/tasks-template.md`
+**ベーステンプレート**: `/llm-router/.specify/templates/tasks-template.md`
 
 **タスク生成ロジック**:
 

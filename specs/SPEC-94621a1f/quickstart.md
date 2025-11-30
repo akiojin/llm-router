@@ -18,7 +18,7 @@ cargo run --manifest-path coordinator/Cargo.toml --bin coordinator
 
 **期待される出力**:
 ```
-INFO coordinator: Starting Ollama Router on 0.0.0.0:8080
+INFO coordinator: Starting LLM Router on 0.0.0.0:8080
 INFO coordinator: Agent registry initialized
 ```
 
@@ -93,7 +93,7 @@ curl -X POST http://localhost:8080/api/agents/${AGENT_ID}/heartbeat \
 | ステップ | アクション | 期待される結果 |
 |---------|-----------|--------------|
 | 1 | ノード登録 | 成功 |
-| 2 | `~/.ollama-router/agents.json` を確認 | ノード情報が保存されている |
+| 2 | `~/.llm-router/agents.json` を確認 | ノード情報が保存されている |
 | 3 | ルーター再起動 | - |
 | 4 | GET /api/agents | 登録済みノード情報が保持されている |
 
@@ -114,8 +114,8 @@ curl -X POST http://localhost:8080/api/agents/${AGENT_ID}/heartbeat \
 
 **原因と対処**:
 1. **ストレージディレクトリが作成できない**
-   - `~/.ollama-router/` の書き込み権限を確認
-   - `mkdir -p ~/.ollama-router` で手動作成
+   - `~/.llm-router/` の書き込み権限を確認
+   - `mkdir -p ~/.llm-router` で手動作成
 
 2. **JSONパース失敗**
    - リクエストボディのJSONフォーマットを確認
@@ -128,7 +128,7 @@ curl -X POST http://localhost:8080/api/agents/${AGENT_ID}/heartbeat \
 **原因と対処**:
 1. **ノードが登録されていない**
    - POST /api/agents で登録
-   - `~/.ollama-router/agents.json` の内容を確認
+   - `~/.llm-router/agents.json` の内容を確認
 
 2. **ストレージファイルが読み込めない**
    - ファイル権限を確認

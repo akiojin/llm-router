@@ -24,7 +24,7 @@
 - `uuid` - ノードID生成
 - `chrono` - タイムスタンプ管理
 
-**ストレージ**: JSONファイル (`~/.ollama-router/agents.json`)
+**ストレージ**: JSONファイル (`~/.llm-router/agents.json`)
 **テスト**: `cargo test`（単体・統合テスト）
 **対象プラットフォーム**: Linuxサーバー
 **プロジェクトタイプ**: single（バイナリクレート）
@@ -107,7 +107,7 @@ agent/
 ### 技術選択の理由
 
 #### ストレージ: JSONファイル
-**決定**: SQLiteではなくJSONファイル (`~/.ollama-router/agents.json`)
+**決定**: SQLiteではなくJSONファイル (`~/.llm-router/agents.json`)
 
 **理由**:
 1. **シンプルさの極限を追求**（CLAUDE.md準拠）

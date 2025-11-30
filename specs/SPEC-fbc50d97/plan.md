@@ -27,7 +27,7 @@ JSONファイルに保存し、Webダッシュボードで履歴を可視化す�
 **言語/バージョン**: Rust 1.75+
 **主要依存関係**: Axum (WebAPI), Tokio (非同期ランタイム), serde/serde_json
 (JSON処理), chrono (日時処理), uuid (識別子生成)
-**ストレージ**: JSONファイル (`~/.ollama-router/request_history.json`)
+**ストレージ**: JSONファイル (`~/.llm-router/request_history.json`)
 **テスト**: cargo test (unit/integration/e2e)
 **対象プラットフォーム**: Linux server (ubuntu-latest, windows-latest対応)
 **プロジェクトタイプ**: single (既存の coordinator クレート内に実装)
@@ -51,7 +51,7 @@ JSONファイルに保存し、Webダッシュボードで履歴を可視化す�
   - `coordinator::db::request_history` - ストレージ層
   - `coordinator::api::proxy` - プロキシ + キャプチャ機能
   - `coordinator::api::dashboard` - ダッシュボードAPI
-- ライブラリごとのCLI: `ollama-router --help/--version` (既存CLIを拡張) ✓
+- ライブラリごとのCLI: `llm-router --help/--version` (既存CLIを拡張) ✓
 - ライブラリドキュメント: llms.txt形式を計画? 既存パターンに従う
 
 **テスト (妥協不可)**:

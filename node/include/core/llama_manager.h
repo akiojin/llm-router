@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <chrono>
+#include <optional>
 
 // llama.cpp forward declarations
 struct llama_model;
@@ -70,6 +72,34 @@ public:
     // ロード済みモデルの一覧（フルパス）
     std::vector<std::string> getLoadedModels() const;
 
+    // オンデマンドロード: モデルが未ロードなら自動ロード
+    bool loadModelIfNeeded(const std::string& model_path);
+
+    // アイドルタイムアウト設定
+    void setIdleTimeout(std::chrono::milliseconds timeout);
+    std::chrono::milliseconds getIdleTimeout() const;
+
+    // アイドルモデルのアンロード
+    size_t unloadIdleModels();
+
+    // 最大ロード数設定
+    void setMaxLoadedModels(size_t max_models);
+    size_t getMaxLoadedModels() const;
+
+    // ロード可能かチェック（最大数未満か）
+    bool canLoadMore() const;
+
+    // メモリ制限設定
+    void setMaxMemoryBytes(size_t max_bytes);
+    size_t getMaxMemoryBytes() const;
+
+    // 最終アクセス時刻取得
+    std::optional<std::chrono::steady_clock::time_point> getLastAccessTime(
+        const std::string& model_path) const;
+
+    // LRU: 最も古くアクセスされたモデルを取得
+    std::optional<std::string> getLeastRecentlyUsedModel() const;
+
 private:
     std::string models_dir_;
     mutable std::mutex mutex_;
@@ -77,8 +107,19 @@ private:
     size_t gpu_layers_{0};
     size_t memory_bytes_{0};
 
+    // オンデマンドロード用の設定
+    std::chrono::milliseconds idle_timeout_{std::chrono::minutes(5)};
+    size_t max_loaded_models_{0};  // 0 = 無制限
+    size_t max_memory_bytes_{0};   // 0 = 無制限
+
+    // アクセス時刻追跡
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_access_;
+
     // 正規化されたパスを取得
     std::string canonicalizePath(const std::string& path) const;
+
+    // アクセス時刻を更新
+    void updateAccessTime(const std::string& model_path);
 };
 
 }  // namespace ollama_node

@@ -1429,6 +1429,140 @@ body {
   }
 }
 
+/* API Keys Modal */
+.modal__dialog--wide {
+  width: min(600px, 100%);
+}
+
+.api-key-form {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.api-key-input {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.api-key-input:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.4);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.api-key-input::placeholder {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.api-key-select {
+  padding: 10px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.api-key-select:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.4);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.new-key-display {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.new-key-warning {
+  margin: 0 0 12px;
+  color: var(--warning);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.new-key-box {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.new-key-box code {
+  flex: 1;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  color: var(--accent);
+}
+
+.api-keys-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.api-keys-table thead {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.api-keys-table th,
+.api-keys-table td {
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.api-keys-table th {
+  font-weight: 600;
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+}
+
+.api-keys-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.api-keys-table tbody tr:hover {
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.api-keys-table .empty-message {
+  text-align: center;
+  color: var(--text-subtle);
+  font-style: italic;
+  padding: 24px 14px;
+}
+
+.btn--small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.unlimited-warning {
+  cursor: help;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f0f4ff;

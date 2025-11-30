@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Ollama Router API
+  title: LLM Router API
   version: "0.1.0"
   description: >
     OpenAI-compatible endpoints with optional cloud routing by model prefix

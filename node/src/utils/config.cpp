@@ -7,9 +7,27 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <spdlog/spdlog.h>
 #include "utils/file_lock.h"
 
 namespace ollama_node {
+
+namespace {
+
+/// Get environment variable with fallback to deprecated name
+/// Logs a warning if the deprecated name is used
+std::optional<std::string> getEnvWithFallback(const char* new_name, const char* old_name) {
+    if (const char* v = std::getenv(new_name)) {
+        return std::string(v);
+    }
+    if (const char* v = std::getenv(old_name)) {
+        spdlog::warn("Environment variable '{}' is deprecated, use '{}' instead", old_name, new_name);
+        return std::string(v);
+    }
+    return std::nullopt;
+}
+
+}  // namespace
 
 DownloadConfig loadDownloadConfig() {
     DownloadConfig cfg;
@@ -182,37 +200,37 @@ std::pair<NodeConfig, std::string> loadNodeConfigWithLog() {
         }
     }
 
-    // env overrides
-    auto getenv_str = [](const char* key) -> std::optional<std::string> {
-        if (const char* v = std::getenv(key)) return std::string(v);
-        return std::nullopt;
-    };
+    // env overrides with fallback to deprecated names
+    // New names: LLM_NODE_* (or LLM_ROUTER_URL for router)
+    // Deprecated: LLM_* without NODE prefix
 
-    if (auto v = getenv_str("LLM_ROUTER_URL")) {
+    if (auto v = getEnvWithFallback("LLM_ROUTER_URL", "LLM_ROUTER_URL")) {
+        // LLM_ROUTER_URL is still the canonical name (no change needed)
         cfg.router_url = *v;
         log << "env:ROUTER_URL=" << *v << " ";
         used_env = true;
     }
-    if (auto v = getenv_str("LLM_MODELS_DIR")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_MODELS_DIR", "LLM_MODELS_DIR")) {
         cfg.models_dir = *v;
         log << "env:MODELS_DIR=" << *v << " ";
         used_env = true;
     }
-    if (auto v = getenv_str("LLM_NODE_PORT")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_PORT", "LLM_NODE_PORT")) {
+        // LLM_NODE_PORT is already the correct name
         try {
             cfg.node_port = std::stoi(*v);
             log << "env:NODE_PORT=" << cfg.node_port << " ";
             used_env = true;
         } catch (...) {}
     }
-    if (auto v = getenv_str("LLM_HEARTBEAT_SECS")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_HEARTBEAT_SECS", "LLM_HEARTBEAT_SECS")) {
         try {
             cfg.heartbeat_interval_sec = std::stoi(*v);
             log << "env:HEARTBEAT_SECS=" << cfg.heartbeat_interval_sec << " ";
             used_env = true;
         } catch (...) {}
     }
-    if (auto v = getenv_str("LLM_ALLOW_NO_GPU")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_ALLOW_NO_GPU", "LLM_ALLOW_NO_GPU")) {
         std::string s = *v;
         std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         if (s == "1" || s == "true" || s == "yes") {
@@ -222,19 +240,20 @@ std::pair<NodeConfig, std::string> loadNodeConfigWithLog() {
         }
     }
 
-    if (auto v = getenv_str("LLM_BIND_ADDRESS")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_BIND_ADDRESS", "LLM_BIND_ADDRESS")) {
         cfg.bind_address = *v;
         log << "env:BIND_ADDRESS=" << *v << " ";
         used_env = true;
     }
 
-    if (auto v = getenv_str("LLM_NODE_IP")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_IP", "LLM_NODE_IP")) {
+        // LLM_NODE_IP is already the correct name
         cfg.ip_address = *v;
         log << "env:NODE_IP=" << *v << " ";
         used_env = true;
     }
 
-    if (auto v = getenv_str("LLM_AUTO_REPAIR")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_AUTO_REPAIR", "LLM_AUTO_REPAIR")) {
         std::string s = *v;
         std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         if (s == "1" || s == "true" || s == "yes") {
@@ -244,7 +263,7 @@ std::pair<NodeConfig, std::string> loadNodeConfigWithLog() {
         }
     }
 
-    if (auto v = getenv_str("LLM_REPAIR_TIMEOUT_SECS")) {
+    if (auto v = getEnvWithFallback("LLM_NODE_REPAIR_TIMEOUT_SECS", "LLM_REPAIR_TIMEOUT_SECS")) {
         try {
             cfg.repair_timeout_secs = std::stoi(*v);
             log << "env:REPAIR_TIMEOUT_SECS=" << cfg.repair_timeout_secs << " ";

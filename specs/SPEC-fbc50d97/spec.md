@@ -179,7 +179,7 @@
 
 - 保存方式はJSONファイルベースとし、SQLiteやPostgreSQL等のRDBMSは使用しない
   （既存のノード情報保存方式と統一）
-- 保存場所は `~/.ollama-router/request_history.json` とし、環境変数
+- 保存場所は `~/.llm-router/request_history.json` とし、環境変数
   `OLLAMA_ROUTER_DATA_DIR` で変更可能とする
 - ファイルの読み書きは排他制御（Mutex等）により、並行アクセスの安全性を保証する
 

@@ -1,9 +1,9 @@
-# 機能仕様書: Ollama Router System（統合版・アーカイブ）
+# 機能仕様書: LLM Router System（統合版・アーカイブ）
 
 **機能ID**: `SPEC-32e2b31a`
 **作成日**: 2025-10-30
 **ステータス**: ✅ **分割済み・アーカイブ**
-**入力**: ユーザー説明: "Ollama Router System - 複数マシンでOllamaインスタンスを管理する中央集権型システム"
+**入力**: ユーザー説明: "LLM Router System - 複数マシンでOllamaインスタンスを管理する中央集権型システム"
 
 ---
 

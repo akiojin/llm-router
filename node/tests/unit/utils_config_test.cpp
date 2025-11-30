@@ -60,9 +60,11 @@ TEST(UtilsConfigTest, LoadsNodeConfigFromFileWithLock) {
 
 TEST(UtilsConfigTest, EnvOverridesNodeConfig) {
     EnvGuard guard({"LLM_ROUTER_URL", "LLM_MODELS_DIR", "LLM_NODE_PORT",
-                    "LLM_HEARTBEAT_SECS", "LLM_ALLOW_NO_GPU", "LLM_NODE_CONFIG"});
+                    "LLM_HEARTBEAT_SECS", "LLM_ALLOW_NO_GPU", "LLM_NODE_CONFIG",
+                    "LLM_NODE_MODELS_DIR", "LLM_NODE_HEARTBEAT_SECS", "LLM_NODE_ALLOW_NO_GPU"});
 
     unsetenv("LLM_NODE_CONFIG");
+    // Test with deprecated env var names (fallback)
     setenv("LLM_ROUTER_URL", "http://env:1234", 1);
     setenv("LLM_MODELS_DIR", "/env/models", 1);
     setenv("LLM_NODE_PORT", "19000", 1);
@@ -75,4 +77,25 @@ TEST(UtilsConfigTest, EnvOverridesNodeConfig) {
     EXPECT_EQ(cfg.node_port, 19000);
     EXPECT_EQ(cfg.heartbeat_interval_sec, 7);
     EXPECT_FALSE(cfg.require_gpu);
+}
+
+TEST(UtilsConfigTest, NewEnvVarsTakePriorityOverDeprecated) {
+    EnvGuard guard({"LLM_ROUTER_URL", "LLM_NODE_MODELS_DIR", "LLM_MODELS_DIR",
+                    "LLM_NODE_PORT", "LLM_NODE_HEARTBEAT_SECS", "LLM_HEARTBEAT_SECS",
+                    "LLM_NODE_ALLOW_NO_GPU", "LLM_ALLOW_NO_GPU", "LLM_NODE_CONFIG"});
+
+    unsetenv("LLM_NODE_CONFIG");
+
+    // Set both new and deprecated env vars
+    setenv("LLM_NODE_MODELS_DIR", "/new/models", 1);
+    setenv("LLM_MODELS_DIR", "/old/models", 1);  // Should be ignored
+    setenv("LLM_NODE_HEARTBEAT_SECS", "15", 1);
+    setenv("LLM_HEARTBEAT_SECS", "5", 1);  // Should be ignored
+    setenv("LLM_NODE_ALLOW_NO_GPU", "true", 1);
+    setenv("LLM_ALLOW_NO_GPU", "false", 1);  // Should be ignored
+
+    auto cfg = loadNodeConfig();
+    EXPECT_EQ(cfg.models_dir, "/new/models");
+    EXPECT_EQ(cfg.heartbeat_interval_sec, 15);
+    EXPECT_FALSE(cfg.require_gpu);  // LLM_NODE_ALLOW_NO_GPU=true
 }

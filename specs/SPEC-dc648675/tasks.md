@@ -53,7 +53,7 @@
     - `cd src` → allow (Worktree内、exit 0)
     - `cd /` → block (exit 2, JSON with "decision": "block")
     - `cd ~` → block (exit 2)
-    - `cd /ollama-router` → block (Worktree外、exit 2)
+    - `cd /llm-router` → block (Worktree外、exit 2)
     - `cd ../..` → block (親ディレクトリ、exit 2)
   - 実行: `bats tests/hooks/test-block-cd-command.bats`
   - 期待: 既存実装が全テストに合格

@@ -1,7 +1,7 @@
 # 実装計画: ロードバランシングシステム
 
 **機能ID**: `SPEC-589f2df1` | **日付**: 2025-10-30（部分実装） | **仕様**: [spec.md](./spec.md)
-**入力**: `/ollama-router/specs/SPEC-589f2df1/spec.md`の機能仕様
+**入力**: `/llm-router/specs/SPEC-589f2df1/spec.md`の機能仕様
 **ステータス**: 🚧 **部分実装** (Phase 1: ラウンドロビン完了、Phase 2: メトリクスベース未実装)
 
 ## 概要
