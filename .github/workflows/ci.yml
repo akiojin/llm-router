@@ -69,7 +69,8 @@ jobs:
       - name: clang-tidy (sources only)
         run: |
           cd node
-          run-clang-tidy -p build src include -quiet || (cat /tmp/run-clang-tidy.log || true; exit 1)
+          FILES=$(find src include -type f \( -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.cxx' -o -name '*.h' -o -name '*.hpp' \))
+          run-clang-tidy -p build $FILES -quiet || (cat /tmp/run-clang-tidy.log || true; exit 1)
       - name: cppcheck (warnings)
         run: |
           cd node
