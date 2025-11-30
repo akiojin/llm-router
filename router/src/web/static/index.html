@@ -478,10 +478,11 @@
           <div class="api-key-form">
             <input type="text" id="api-key-name" placeholder="キー名（例: Production）" class="api-key-input" />
             <select id="api-key-expiry" class="api-key-select">
-              <option value="">有効期限なし</option>
+              <option value="">無制限</option>
+              <option value="3">3日間</option>
               <option value="7">7日間</option>
-              <option value="30">30日間</option>
-              <option value="90">90日間</option>
+              <option value="21">21日間</option>
+              <option value="70">70日間</option>
             </select>
             <button type="button" id="create-api-key" class="btn btn--primary">発行</button>
           </div>

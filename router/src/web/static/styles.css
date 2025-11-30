@@ -1553,6 +1553,16 @@ body {
   font-size: 0.8rem;
 }
 
+.api-key-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.unlimited-warning {
+  cursor: help;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f0f4ff;

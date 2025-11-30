@@ -97,6 +97,48 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ApiKey>, RouterError> {
     Ok(rows.into_iter().map(|r| r.into_api_key()).collect())
 }
 
+/// APIキーを更新（名前と有効期限）
+///
+/// # Arguments
+/// * `pool` - データベース接続プール
+/// * `id` - APIキーID
+/// * `name` - 新しい名前
+/// * `expires_at` - 新しい有効期限（Noneの場合は無期限）
+///
+/// # Returns
+/// * `Ok(Some(ApiKey))` - 更新後のAPIキー
+/// * `Ok(None)` - APIキーが見つからなかった
+/// * `Err(RouterError)` - 更新失敗
+pub async fn update(
+    pool: &SqlitePool,
+    id: Uuid,
+    name: &str,
+    expires_at: Option<DateTime<Utc>>,
+) -> Result<Option<ApiKey>, RouterError> {
+    let result = sqlx::query("UPDATE api_keys SET name = ?, expires_at = ? WHERE id = ?")
+        .bind(name)
+        .bind(expires_at.map(|dt| dt.to_rfc3339()))
+        .bind(id.to_string())
+        .execute(pool)
+        .await
+        .map_err(|e| RouterError::Database(format!("Failed to update API key: {}", e)))?;
+
+    if result.rows_affected() == 0 {
+        return Ok(None);
+    }
+
+    // 更新後のAPIキーを取得
+    let row = sqlx::query_as::<_, ApiKeyRow>(
+        "SELECT id, key_hash, name, created_by, created_at, expires_at FROM api_keys WHERE id = ?",
+    )
+    .bind(id.to_string())
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| RouterError::Database(format!("Failed to find updated API key: {}", e)))?;
+
+    Ok(row.map(|r| r.into_api_key()))
+}
+
 /// APIキーを削除
 ///
 /// # Arguments
