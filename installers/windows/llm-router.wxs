@@ -2,10 +2,10 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product
     Id="*"
-    Name="Ollama Router"
+    Name="LLM Router"
     Language="1041"
     Version="$(var.ProductVersion)"
-    Manufacturer="Ollama Router"
+    Manufacturer="LLM Router"
     Codepage="65001"
     UpgradeCode="{B5064C44-1AB8-4AEA-86A1-0B36FEC7B6B7}"
   >
@@ -20,10 +20,10 @@
 
     <MajorUpgrade
       AllowDowngrades="no"
-      DowngradeErrorMessage="A newer version of Ollama Router is already installed."
+      DowngradeErrorMessage="A newer version of LLM Router is already installed."
     />
 
-    <Feature Id="MainFeature" Title="Ollama Router" Level="1">
+    <Feature Id="MainFeature" Title="LLM Router" Level="1">
       <ComponentGroupRef Id="RuntimeComponents" />
     </Feature>
   </Product>
@@ -31,10 +31,10 @@
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="Ollama Router" />
+        <Directory Id="INSTALLFOLDER" Name="LLM Router" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="Ollama Router" />
+        <Directory Id="ApplicationProgramsFolder" Name="LLM Router" />
       </Directory>
     </Directory>
   </Fragment>
@@ -57,15 +57,15 @@
       <Component Id="CoordinatorStartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{66D07D25-2201-47C1-9535-FA9244062B1F}" Win64="yes">
         <Shortcut
           Id="CoordinatorShortcut"
-          Name="Ollama Router"
-          Description="Ollama Router を起動"
+          Name="LLM Router"
+          Description="LLM Router を起動"
           Target="[INSTALLFOLDER]llm-router.exe"
           WorkingDirectory="INSTALLFOLDER"
           Icon="CoordIcon"
           IconIndex="0"
         />
         <RemoveFolder Id="RemoveCoordinatorProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\\OllamaRouter" Name="CoordinatorShortcut" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\\LLMRouter" Name="CoordinatorShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
 
     </ComponentGroup>

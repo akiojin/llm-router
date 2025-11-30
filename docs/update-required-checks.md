@@ -73,12 +73,12 @@ gh pr checks <PR番号> --json name --jq '.[].name' | sort -u
 
 ```bash
 # 現在の設定を確認
-gh api repos/akiojin/ollama-router/branches/develop/protection/required_status_checks
+gh api repos/akiojin/llm-router/branches/develop/protection/required_status_checks
 
 # 正しいチェック名で更新
 gh api \
   --method PUT \
-  repos/akiojin/ollama-router/branches/develop/protection/required_status_checks/contexts \
+  repos/akiojin/llm-router/branches/develop/protection/required_status_checks/contexts \
   -H "Accept: application/vnd.github+json" \
   --raw-field 'contexts[]=Commit Message Lint' \
   --raw-field 'contexts[]=Markdown Lint' \

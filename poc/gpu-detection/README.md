@@ -1,6 +1,6 @@
 # GPU Detection PoC
 
-このPoCは、Ollama RouterのAgentが起動時にGPUを自動検出するための方法を検証します。
+このPoCは、LLM RouterのAgentが起動時にGPUを自動検出するための方法を検証します。
 
 ## 目的
 

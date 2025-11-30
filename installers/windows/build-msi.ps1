@@ -11,9 +11,9 @@ if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
 
 Push-Location $PSScriptRoot
 
-$wxs = Join-Path $PSScriptRoot "ollama-router-node.wxs"
-$wixobj = "llm-node-$Arch.wixobj"
-$msi = "llm-node-$Arch.msi"
+$wxs = Join-Path $PSScriptRoot "llm-router.wxs"
+$wixobj = "llm-router-$Arch.wixobj"
+$msi = "llm-router-$Arch.msi"
 
 candle.exe -dBinariesDir="$BinariesDir" -dProductVersion="1.0.0" -arch "$Arch" -out $wixobj $wxs
 light.exe -out $msi $wixobj

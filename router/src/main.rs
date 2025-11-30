@@ -1,4 +1,4 @@
-//! Ollama Router Server Entry Point
+//! LLM Router Server Entry Point
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 use clap::Parser;
