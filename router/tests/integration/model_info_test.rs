@@ -284,16 +284,54 @@ async fn test_model_matrix_view_multiple_agents() {
     );
 }
 
-/// T021: /v1/models は対応モデル5件のみを返す
+/// T021: /v1/models は対応モデル5件のみを返す（APIキー認証必須）
 #[tokio::test]
 async fn test_v1_models_returns_fixed_list() {
-    let app = build_app().await;
+    // テスト用のDBを作成
+    let db_pool = sqlx::SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+
+    // テストユーザーとAPIキーを作成
+    let test_user = llm_router::db::users::create(
+        &db_pool,
+        "test-admin",
+        "testpassword",
+        llm_router_common::auth::UserRole::Admin,
+    )
+    .await
+    .expect("Failed to create test user");
+    let api_key = llm_router::db::api_keys::create(&db_pool, "test-key", test_user.id, None)
+        .await
+        .expect("Failed to create test API key");
+
+    let registry = NodeRegistry::new();
+    let load_manager = LoadManager::new(registry.clone());
+    let request_history =
+        std::sync::Arc::new(llm_router::db::request_history::RequestHistoryStorage::new().unwrap());
+    let task_manager = llm_router::tasks::DownloadTaskManager::new();
+    let jwt_secret = "test-secret".to_string();
+    let state = AppState {
+        registry,
+        load_manager,
+        request_history,
+        task_manager,
+        db_pool,
+        jwt_secret,
+    };
+
+    let app = api::create_router(state);
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri("/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key.key))
                 .body(Body::empty())
                 .unwrap(),
         )

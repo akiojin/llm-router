@@ -71,6 +71,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/chat/completions", post(openai::chat_completions))
         .route("/v1/completions", post(openai::completions))
         .route("/v1/embeddings", post(openai::embeddings))
+        .route("/v1/models", get(openai::list_models))
+        .route("/v1/models/:model_id", get(openai::get_model))
         .layer(middleware::from_fn_with_state(
             state.db_pool.clone(),
             crate::auth::middleware::api_key_auth_middleware,
@@ -136,8 +138,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/nodes/:node_id/logs", get(logs::get_node_logs))
         .route("/api/chat", post(proxy::proxy_chat))
         .route("/api/generate", post(proxy::proxy_generate))
-        .route("/v1/models", get(openai::list_models))
-        .route("/v1/models/:model_id", get(openai::get_model))
         // モデル管理API (SPEC-8ae67d67)
         .route("/api/models/available", get(models::get_available_models))
         .route("/api/models/loaded", get(models::get_loaded_models))

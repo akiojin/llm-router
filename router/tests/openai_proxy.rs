@@ -788,7 +788,7 @@ async fn test_openai_models_list_success() {
         .mount(&mock_server)
         .await;
 
-    let (state, _api_key) = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let response = router
@@ -796,6 +796,7 @@ async fn test_openai_models_list_success() {
             axum::http::Request::builder()
                 .method("GET")
                 .uri("/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::empty())
                 .unwrap(),
         )
@@ -826,7 +827,7 @@ async fn test_openai_model_detail_success() {
         .mount(&mock_server)
         .await;
 
-    let (state, _api_key) = build_state_with_mock(&mock_server).await;
+    let (state, api_key) = build_state_with_mock(&mock_server).await;
     let router = api::create_router(state);
 
     let response = router
@@ -834,6 +835,7 @@ async fn test_openai_model_detail_success() {
             axum::http::Request::builder()
                 .method("GET")
                 .uri("/v1/models/gpt-oss:20b")
+                .header("Authorization", format!("Bearer {}", api_key))
                 .body(axum::body::Body::empty())
                 .unwrap(),
         )
