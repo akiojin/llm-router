@@ -87,16 +87,17 @@
           <div class="chat-session-bar">
             <div class="stack">
               <p class="eyebrow">現在のセッション</p>
-              <div class="chat-session-title" id="active-session-title">新規チャット</div>
-              <p class="mini" id="active-session-meta">メッセージ 0件</p>
-            </div>
-            <button type="button" id="new-chat-inline" class="ghost">新規チャット</button>
-          </div>
+          <div class="chat-session-title" id="active-session-title">新規チャット</div>
+          <p class="mini" id="active-session-meta">メッセージ 0件</p>
+        </div>
+        <button type="button" id="new-chat-inline" class="ghost">新規チャット</button>
+      </div>
+      <div class="chat-meta" id="chat-meta-hint">モデルを読み込み中...</div>
 
-          <div id="error-banner" class="openui-banner hidden" role="alert"></div>
-          <div id="chat-log" class="chat-log" aria-live="polite">
-            <div class="chat-empty">No messages yet. Send a message using the input below.</div>
-          </div>
+      <div id="error-banner" class="openui-banner hidden" role="alert"></div>
+      <div id="chat-log" class="chat-log" aria-live="polite">
+        <div class="chat-empty">No messages yet. Send a message using the input below.</div>
+      </div>
           <form id="chat-form" class="chat-form">
             <textarea
               id="chat-input"

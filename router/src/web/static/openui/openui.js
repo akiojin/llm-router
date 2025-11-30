@@ -45,6 +45,7 @@
     providerToggle: document.getElementById("provider-toggle"),
     activeSessionTitle: document.getElementById("active-session-title"),
     activeSessionMeta: document.getElementById("active-session-meta"),
+    chatMeta: document.getElementById("chat-meta-hint"),
   };
   dom.providerButtons = dom.providerToggle
     ? Array.from(dom.providerToggle.querySelectorAll(".segmented__btn"))
@@ -153,6 +154,11 @@
         ? "該当モデルがないため全モデルを表示中"
         : `表示中: ${displayCount}件`;
       dom.modelHint.textContent = `${filterLabel} · ${tail}`;
+      if (dom.chatMeta) {
+        const chosen = dom.modelSelect?.value || "-";
+        const scopeLabel = state.providerFilter === "all" ? "全モデル" : filterLabel.replace("フィルター: ", "");
+        dom.chatMeta.textContent = `${scopeLabel} · 選択モデル: ${chosen}`;
+      }
     }
   }
 
