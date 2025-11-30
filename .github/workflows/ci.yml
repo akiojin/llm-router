@@ -135,7 +135,11 @@ jobs:
       - name: gcovr lcov report
         run: |
           mkdir -p coverage-cpp
-          gcovr -r node -x coverage-cpp/coverage.xml -s
+          gcovr -r node \
+            --exclude 'node/third_party' \
+            --exclude 'node/build/third_party' \
+            --gcov-ignore-parse-errors \
+            -x coverage-cpp/coverage.xml -s
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:

@@ -14,7 +14,7 @@ use llm_router_common::{
 };
 use reqwest;
 use serde_json::{json, Value};
-use std::time::Instant;
+use std::{net::IpAddr, time::Instant};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -198,6 +198,26 @@ fn parse_cloud_model(model: &str) -> Option<(String, String)> {
     None
 }
 
+/// クラウドプロバイダ用の仮想ノード情報を生成する
+fn cloud_virtual_agent(provider: &str) -> (Uuid, String, IpAddr) {
+    let node_id = match provider {
+        "openai" => Uuid::parse_str("00000000-0000-0000-0000-00000000c001").unwrap(),
+        "google" => Uuid::parse_str("00000000-0000-0000-0000-00000000c002").unwrap(),
+        "anthropic" => Uuid::parse_str("00000000-0000-0000-0000-00000000c003").unwrap(),
+        _ => Uuid::parse_str("00000000-0000-0000-0000-00000000c0ff").unwrap(),
+    };
+    let machine_name = format!("cloud:{provider}");
+    let agent_ip: IpAddr = "0.0.0.0".parse().unwrap();
+    (node_id, machine_name, agent_ip)
+}
+
+struct CloudProxyResult {
+    response: Response,
+    response_body: Option<Value>,
+    status: StatusCode,
+    error_message: Option<String>,
+}
+
 fn map_openai_messages_to_google_contents(messages: &[Value]) -> Vec<Value> {
     messages
         .iter()
@@ -247,7 +267,7 @@ async fn proxy_openai_provider(
     mut payload: Value,
     stream: bool,
     model: String,
-) -> Result<Response, AppError> {
+) -> Result<CloudProxyResult, AppError> {
     let req_id = Uuid::new_v4();
     let started = Instant::now();
     let api_key = get_required_key(
@@ -285,12 +305,29 @@ async fn proxy_openai_provider(
             res.status().as_u16(),
             started.elapsed().as_millis(),
         );
-        return forward_streaming_response(res).map_err(AppError::from);
+        let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+        let response = forward_streaming_response(res).map_err(AppError::from)?;
+        return Ok(CloudProxyResult {
+            response,
+            response_body: None,
+            status,
+            error_message: if status.is_success() {
+                None
+            } else {
+                Some(status.to_string())
+            },
+        });
     }
 
     let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let ct = res.headers().get(reqwest::header::CONTENT_TYPE).cloned();
     let bytes = res.bytes().await.map_err(map_reqwest_error)?;
+    let parsed_body = serde_json::from_slice::<Value>(&bytes).ok();
+    let error_message = if status.is_success() {
+        None
+    } else {
+        Some(String::from_utf8_lossy(&bytes).trim().to_string())
+    };
     let mut resp = Response::builder().status(status);
     if let Some(ct) = ct {
         if let Ok(hv) = HeaderValue::from_str(ct.to_str().unwrap_or("")) {
@@ -308,7 +345,12 @@ async fn proxy_openai_provider(
         "cloud proxy complete (openai)"
     );
     cloud_metrics::record("openai", status.as_u16(), started.elapsed().as_millis());
-    Ok(built)
+    Ok(CloudProxyResult {
+        response: built,
+        response_body: parsed_body,
+        status,
+        error_message,
+    })
 }
 
 fn map_generation_config(payload: &Value) -> Value {
@@ -323,7 +365,7 @@ async fn proxy_google_provider(
     model: String,
     payload: Value,
     stream: bool,
-) -> Result<Response, AppError> {
+) -> Result<CloudProxyResult, AppError> {
     let req_id = Uuid::new_v4();
     let started = Instant::now();
     let api_key = get_required_key(
@@ -374,7 +416,18 @@ async fn proxy_google_provider(
             res.status().as_u16(),
             started.elapsed().as_millis(),
         );
-        return forward_streaming_response(res).map_err(AppError::from);
+        let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+        let response = forward_streaming_response(res).map_err(AppError::from)?;
+        return Ok(CloudProxyResult {
+            response,
+            response_body: None,
+            status,
+            error_message: if status.is_success() {
+                None
+            } else {
+                Some(status.to_string())
+            },
+        });
     }
 
     let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -418,14 +471,25 @@ async fn proxy_google_provider(
 
     cloud_metrics::record("google", status.as_u16(), started.elapsed().as_millis());
 
-    Ok(built)
+    let error_message = if status.is_success() {
+        None
+    } else {
+        serde_json::to_string(&data).ok()
+    };
+
+    Ok(CloudProxyResult {
+        response: built,
+        response_body: Some(resp_body),
+        status,
+        error_message,
+    })
 }
 
 async fn proxy_anthropic_provider(
     model: String,
     payload: Value,
     stream: bool,
-) -> Result<Response, AppError> {
+) -> Result<CloudProxyResult, AppError> {
     let req_id = Uuid::new_v4();
     let started = Instant::now();
     let api_key = get_required_key(
@@ -485,7 +549,18 @@ async fn proxy_anthropic_provider(
             res.status().as_u16(),
             started.elapsed().as_millis(),
         );
-        return forward_streaming_response(res).map_err(AppError::from);
+        let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+        let response = forward_streaming_response(res).map_err(AppError::from)?;
+        return Ok(CloudProxyResult {
+            response,
+            response_body: None,
+            status,
+            error_message: if status.is_success() {
+                None
+            } else {
+                Some(status.to_string())
+            },
+        });
     }
 
     let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -537,24 +612,107 @@ async fn proxy_anthropic_provider(
 
     cloud_metrics::record("anthropic", status.as_u16(), started.elapsed().as_millis());
 
-    Ok(built)
+    let error_message = if status.is_success() {
+        None
+    } else {
+        serde_json::to_string(&data).ok()
+    };
+
+    Ok(CloudProxyResult {
+        response: built,
+        response_body: Some(resp_body),
+        status,
+        error_message,
+    })
 }
 
 async fn proxy_openai_cloud_post(
+    state: &AppState,
     target_path: &str,
     model: &str,
     stream: bool,
     payload: Value,
+    request_type: RequestType,
 ) -> Result<Response, AppError> {
     let (provider, model_name) = parse_cloud_model(model)
         .ok_or_else(|| validation_error("cloud model prefix is invalid"))?;
+    let (node_id, agent_machine_name, agent_ip) = cloud_virtual_agent(&provider);
+    let record_id = Uuid::new_v4();
+    let timestamp = Utc::now();
+    let request_body = payload.clone();
+    let started = Instant::now();
 
-    match provider.as_str() {
+    let outcome = match match provider.as_str() {
         "openai" => proxy_openai_provider(target_path, payload, stream, model_name).await,
         "google" => proxy_google_provider(model_name, payload, stream).await,
         "anthropic" => proxy_anthropic_provider(model_name, payload, stream).await,
         _ => Err(validation_error("unsupported cloud provider prefix")),
-    }
+    } {
+        Ok(res) => res,
+        Err(e) => {
+            let duration = started.elapsed();
+            save_request_record(
+                state.request_history.clone(),
+                RequestResponseRecord {
+                    id: record_id,
+                    timestamp,
+                    request_type,
+                    model: model.to_string(),
+                    node_id,
+                    agent_machine_name,
+                    agent_ip,
+                    client_ip: None,
+                    request_body,
+                    response_body: None,
+                    duration_ms: duration.as_millis() as u64,
+                    status: RecordStatus::Error {
+                        message: format!("{e:?}"),
+                    },
+                    completed_at: Utc::now(),
+                },
+            );
+            return Err(e);
+        }
+    };
+
+    let duration = started.elapsed();
+    let status = outcome.status;
+    let status_record = if status.is_success() {
+        RecordStatus::Success
+    } else {
+        RecordStatus::Error {
+            message: outcome
+                .error_message
+                .clone()
+                .unwrap_or_else(|| status.to_string()),
+        }
+    };
+    let response_body = if status.is_success() {
+        outcome.response_body.clone()
+    } else {
+        None
+    };
+
+    save_request_record(
+        state.request_history.clone(),
+        RequestResponseRecord {
+            id: record_id,
+            timestamp,
+            request_type,
+            model: model.to_string(),
+            node_id,
+            agent_machine_name,
+            agent_ip,
+            client_ip: None,
+            request_body,
+            response_body,
+            duration_ms: duration.as_millis() as u64,
+            status: status_record,
+            completed_at: Utc::now(),
+        },
+    );
+
+    Ok(outcome.response)
 }
 
 async fn proxy_openai_post(
@@ -567,7 +725,8 @@ async fn proxy_openai_post(
 ) -> Result<Response, AppError> {
     // Cloud-prefixed model -> forward to provider API
     if parse_cloud_model(&model).is_some() {
-        return proxy_openai_cloud_post(target_path, &model, stream, payload).await;
+        return proxy_openai_cloud_post(state, target_path, &model, stream, payload, request_type)
+            .await;
     }
 
     let record_id = Uuid::new_v4();
@@ -884,11 +1043,14 @@ mod tests {
         tasks::DownloadTaskManager, AppState,
     };
     use axum::body::to_bytes;
-    use llm_router_common::protocol::RequestType;
+    use axum::http::StatusCode;
+    use llm_router_common::protocol::{RecordStatus, RequestType};
     use serde_json::json;
     use serial_test::serial;
     use sqlx::SqlitePool;
     use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::time::{sleep, Duration};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -915,6 +1077,13 @@ mod tests {
         }
     }
 
+    async fn create_state_with_tempdir() -> (AppState, tempfile::TempDir) {
+        let dir = tempdir().expect("temp dir");
+        std::env::set_var("LLM_ROUTER_DATA_DIR", dir.path());
+        let state = create_local_state().await;
+        (state, dir)
+    }
+
     #[test]
     fn parse_cloud_prefixes() {
         assert_eq!(
@@ -939,11 +1108,19 @@ mod tests {
         // Save and remove any existing API key to test error case
         let saved = std::env::var("OPENAI_API_KEY").ok();
         std::env::remove_var("OPENAI_API_KEY");
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload = json!({"model":"openai:gpt-4o","messages":[]});
-        let err = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", false, payload)
-            .await
-            .unwrap_err();
+        let err = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "openai:gpt-4o",
+            false,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .unwrap_err();
         let msg = format!("{:?}", err);
         assert!(
             msg.contains("OPENAI_API_KEY"),
@@ -955,6 +1132,7 @@ mod tests {
         if let Some(key) = saved {
             std::env::set_var("OPENAI_API_KEY", key);
         }
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 
     #[tokio::test]
@@ -963,12 +1141,19 @@ mod tests {
         // Save and remove any existing API key to test error case
         let saved = std::env::var("GOOGLE_API_KEY").ok();
         std::env::remove_var("GOOGLE_API_KEY");
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload = json!({"model":"google:gemini-pro","messages":[]});
-        let err =
-            proxy_openai_cloud_post("/v1/chat/completions", "google:gemini-pro", false, payload)
-                .await
-                .unwrap_err();
+        let err = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "google:gemini-pro",
+            false,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .unwrap_err();
         let msg = format!("{:?}", err);
         assert!(
             msg.contains("GOOGLE_API_KEY"),
@@ -980,6 +1165,7 @@ mod tests {
         if let Some(key) = saved {
             std::env::set_var("GOOGLE_API_KEY", key);
         }
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 
     #[tokio::test]
@@ -988,12 +1174,19 @@ mod tests {
         // Save and remove any existing API key to test error case
         let saved = std::env::var("ANTHROPIC_API_KEY").ok();
         std::env::remove_var("ANTHROPIC_API_KEY");
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload = json!({"model":"anthropic:claude-3","messages":[]});
-        let err =
-            proxy_openai_cloud_post("/v1/chat/completions", "anthropic:claude-3", false, payload)
-                .await
-                .unwrap_err();
+        let err = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "anthropic:claude-3",
+            false,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .unwrap_err();
         let msg = format!("{:?}", err);
         assert!(
             msg.contains("ANTHROPIC_API_KEY"),
@@ -1005,6 +1198,7 @@ mod tests {
         if let Some(key) = saved {
             std::env::set_var("ANTHROPIC_API_KEY", key);
         }
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 
     #[tokio::test]
@@ -1025,11 +1219,19 @@ mod tests {
 
         std::env::set_var("OPENAI_API_KEY", "testkey");
         std::env::set_var("OPENAI_BASE_URL", server.uri());
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload = json!({"model":"openai:gpt-4o","messages":[],"stream":true});
-        let resp = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", true, payload)
-            .await
-            .expect("cloud stream response");
+        let resp = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "openai:gpt-4o",
+            true,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .expect("cloud stream response");
         let body = to_bytes(resp.into_body(), 1_000_000).await.unwrap();
         let body_str = String::from_utf8(body.to_vec()).unwrap();
         assert!(body_str.contains("delta"));
@@ -1037,6 +1239,7 @@ mod tests {
 
         std::env::remove_var("OPENAI_API_KEY");
         std::env::remove_var("OPENAI_BASE_URL");
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 
     #[tokio::test]
@@ -1054,13 +1257,20 @@ mod tests {
 
         std::env::set_var("GOOGLE_API_KEY", "gkey");
         std::env::set_var("GOOGLE_API_BASE_URL", server.uri());
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload =
             json!({"model":"google:gemini-pro","messages":[{"role":"user","content":"hi"}]});
-        let resp =
-            proxy_openai_cloud_post("/v1/chat/completions", "google:gemini-pro", false, payload)
-                .await
-                .expect("google mapped response");
+        let resp = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "google:gemini-pro",
+            false,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .expect("google mapped response");
         let bytes = to_bytes(resp.into_body(), 1_000_000).await.unwrap();
         let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(v["model"].as_str().unwrap(), "google:gemini-pro");
@@ -1071,6 +1281,7 @@ mod tests {
 
         std::env::remove_var("GOOGLE_API_KEY");
         std::env::remove_var("GOOGLE_API_BASE_URL");
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 
     #[tokio::test]
@@ -1090,13 +1301,20 @@ mod tests {
 
         std::env::set_var("ANTHROPIC_API_KEY", "akey");
         std::env::set_var("ANTHROPIC_API_BASE_URL", server.uri());
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload =
             json!({"model":"anthropic:claude-3","messages":[{"role":"user","content":"hi"}]});
-        let resp =
-            proxy_openai_cloud_post("/v1/chat/completions", "anthropic:claude-3", false, payload)
-                .await
-                .expect("anthropic mapped response");
+        let resp = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "anthropic:claude-3",
+            false,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .expect("anthropic mapped response");
         let bytes = to_bytes(resp.into_body(), 1_000_000).await.unwrap();
         let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(v["model"].as_str().unwrap(), "anthropic:claude-3");
@@ -1107,6 +1325,65 @@ mod tests {
 
         std::env::remove_var("ANTHROPIC_API_KEY");
         std::env::remove_var("ANTHROPIC_API_BASE_URL");
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn cloud_request_is_recorded_in_history() {
+        let temp_dir = tempdir().expect("temp dir");
+        std::env::set_var("LLM_ROUTER_DATA_DIR", temp_dir.path());
+
+        let state = create_local_state().await;
+        let server = MockServer::start().await;
+        let tmpl = ResponseTemplate::new(200).set_body_json(json!({
+            "id": "chatcmpl-123",
+            "model": "gpt-4o",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": "hello"},
+                "finish_reason": "stop"
+            }]
+        }));
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(tmpl)
+            .mount(&server)
+            .await;
+
+        std::env::set_var("OPENAI_API_KEY", "testkey");
+        std::env::set_var("OPENAI_BASE_URL", server.uri());
+
+        let payload = json!({"model":"openai:gpt-4o","messages":[{"role":"user","content":"hi"}],"stream":false});
+        let response = proxy_openai_post(
+            &state,
+            payload,
+            "/v1/chat/completions",
+            "openai:gpt-4o".into(),
+            false,
+            RequestType::Chat,
+        )
+        .await
+        .expect("cloud proxy succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        sleep(Duration::from_millis(20)).await;
+
+        let records = state.request_history.load_records().await.expect("records");
+        assert_eq!(records.len(), 1, "cloud request should be recorded");
+
+        let record = &records[0];
+        assert_eq!(record.model, "openai:gpt-4o");
+        assert!(matches!(record.status, RecordStatus::Success));
+        assert_eq!(record.request_type, RequestType::Chat);
+        assert!(
+            record.response_body.is_some(),
+            "response should be captured"
+        );
+
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("OPENAI_BASE_URL");
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 
     #[tokio::test]
@@ -1139,11 +1416,19 @@ mod tests {
         // Save and remove any existing API key to test error case
         let saved = std::env::var("OPENAI_API_KEY").ok();
         std::env::remove_var("OPENAI_API_KEY");
+        let (state, _dir) = create_state_with_tempdir().await;
 
         let payload = json!({"model":"openai:gpt-4o","messages":[],"stream":true});
-        let err = proxy_openai_cloud_post("/v1/chat/completions", "openai:gpt-4o", true, payload)
-            .await
-            .unwrap_err();
+        let err = proxy_openai_cloud_post(
+            &state,
+            "/v1/chat/completions",
+            "openai:gpt-4o",
+            true,
+            payload,
+            RequestType::Chat,
+        )
+        .await
+        .unwrap_err();
         let msg = format!("{:?}", err);
         assert!(
             msg.contains("OPENAI_API_KEY"),
@@ -1155,5 +1440,6 @@ mod tests {
         if let Some(key) = saved {
             std::env::set_var("OPENAI_API_KEY", key);
         }
+        std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }
 }
