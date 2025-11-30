@@ -1,10 +1,10 @@
-// 認証ユーティリティ関数
+// Authentication utility functions
 
 /**
- * JWTトークン付きでfetchを実行するラッパー関数
- * @param {string} url - リクエストURL
- * @param {RequestInit} options - fetchオプション
- * @returns {Promise<Response>} - fetchレスポンス
+ * Wrapper function to execute fetch with JWT token
+ * @param {string} url - Request URL
+ * @param {RequestInit} options - fetch options
+ * @returns {Promise<Response>} - fetch response
  */
 async function authenticatedFetch(url, options = {}) {
   const token = localStorage.getItem('jwt_token');
@@ -22,7 +22,7 @@ async function authenticatedFetch(url, options = {}) {
     headers,
   });
 
-  // 401の場合はログインページにリダイレクト
+  // Redirect to login page on 401
   if (response.status === 401) {
     localStorage.removeItem('jwt_token');
     window.location.href = '/dashboard/login.html';
@@ -32,5 +32,5 @@ async function authenticatedFetch(url, options = {}) {
   return response;
 }
 
-// グローバルに公開
+// Expose globally
 window.authenticatedFetch = authenticatedFetch;

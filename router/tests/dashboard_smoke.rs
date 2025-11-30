@@ -116,7 +116,7 @@ async fn dashboard_static_index_contains_gpu_labels() {
         "dashboard table should include GPU column: {html}"
     );
     assert!(
-        html.contains("GPUモデル"),
+        html.contains("GPU Model"),
         "dashboard modal should mention GPU model: {html}"
     );
 }

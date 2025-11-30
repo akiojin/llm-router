@@ -1,4 +1,4 @@
-// ユーザー管理のJavaScript (T084-T087)
+// User Management JavaScript (T084-T087)
 
 (function () {
   'use strict';
@@ -18,7 +18,7 @@
   let users = [];
   let editingUserId = null;
 
-  // ユーザー一覧を読み込む（T084）
+  // Load user list (T084)
   async function loadUsers() {
     try {
       const response = await authenticatedFetch('/api/users');
@@ -26,24 +26,24 @@
         users = await response.json();
         renderUsers();
       } else {
-        showError('ユーザーの読み込みに失敗しました');
+        showError('Failed to load users');
       }
     } catch (error) {
       console.error('Failed to load users:', error);
-      showError('ユーザーの読み込みに失敗しました');
+      showError('Failed to load users');
     }
   }
 
-  // ユーザー一覧を表示（T084）
+  // Render user list (T084)
   function renderUsers() {
     if (users.length === 0) {
-      usersTbody.innerHTML = '<tr><td colspan="5" class="empty-message">ユーザーがいません</td></tr>';
+      usersTbody.innerHTML = '<tr><td colspan="5" class="empty-message">No users</td></tr>';
       return;
     }
 
     usersTbody.innerHTML = users
       .map((user) => {
-        const createdAt = new Date(user.created_at).toLocaleString('ja-JP');
+        const createdAt = new Date(user.created_at).toLocaleString();
         const roleLabel = user.role === 'admin' ? 'Admin' : 'User';
 
         return `
@@ -53,15 +53,15 @@
             <td><span class="badge badge--${user.role}">${roleLabel}</span></td>
             <td>${createdAt}</td>
             <td>
-              <button class="btn btn--secondary btn--small edit-user" data-id="${user.id}">編集</button>
-              <button class="btn btn--danger btn--small delete-user" data-id="${user.id}" data-username="${escapeHtml(user.username)}">削除</button>
+              <button class="btn btn--secondary btn--small edit-user" data-id="${user.id}">Edit</button>
+              <button class="btn btn--danger btn--small delete-user" data-id="${user.id}" data-username="${escapeHtml(user.username)}">Delete</button>
             </td>
           </tr>
         `;
       })
       .join('');
 
-    // 編集・削除ボタンのイベントリスナーを追加
+    // Add event listeners for edit/delete buttons
     document.querySelectorAll('.edit-user').forEach((btn) => {
       btn.addEventListener('click', function () {
         const userId = this.dataset.id;
@@ -78,14 +78,14 @@
     });
   }
 
-  // ユーザーを作成（T085）
+  // Create user (T085)
   async function createUser() {
     const username = userUsernameInput.value.trim();
     const password = userPasswordInput.value;
     const role = userRoleSelect.value;
 
     if (!username || !password) {
-      alert('ユーザー名とパスワードを入力してください');
+      alert('Please enter username and password');
       return;
     }
 
@@ -107,22 +107,22 @@
         loadUsers();
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(error.error || 'ユーザーの作成に失敗しました');
+        alert(error.error || 'Failed to create user');
       }
     } catch (error) {
       console.error('Failed to create user:', error);
-      alert('ユーザーの作成に失敗しました');
+      alert('Failed to create user');
     }
   }
 
-  // ユーザーを更新（T086: パスワード変更含む）
+  // Update user (T086: including password change)
   async function updateUser(userId) {
     const username = userUsernameInput.value.trim();
     const password = userPasswordInput.value;
     const role = userRoleSelect.value;
 
     if (!username) {
-      alert('ユーザー名を入力してください');
+      alert('Please enter username');
       return;
     }
 
@@ -131,7 +131,7 @@
       role,
     };
 
-    // パスワードが入力されている場合のみ含める（T086）
+    // Only include password if provided (T086)
     if (password) {
       body.password = password;
     }
@@ -150,26 +150,26 @@
         loadUsers();
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(error.error || 'ユーザーの更新に失敗しました');
+        alert(error.error || 'Failed to update user');
       }
     } catch (error) {
       console.error('Failed to update user:', error);
-      alert('ユーザーの更新に失敗しました');
+      alert('Failed to update user');
     }
   }
 
-  // ユーザーを削除（T087: 最後の管理者警告）
+  // Delete user (T087: last admin warning)
   async function deleteUser(userId, username) {
-    // 最後の管理者かチェック
+    // Check if last admin
     const adminCount = users.filter((u) => u.role === 'admin').length;
     const user = users.find((u) => u.id === userId);
 
     if (user && user.role === 'admin' && adminCount === 1) {
-      alert('最後の管理者ユーザーは削除できません');
+      alert('Cannot delete the last admin user');
       return;
     }
 
-    if (!confirm(`ユーザー "${username}" を削除しますか？`)) {
+    if (!confirm(`Delete user "${username}"?`)) {
       return;
     }
 
@@ -182,30 +182,30 @@
         loadUsers();
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(error.error || 'ユーザーの削除に失敗しました');
+        alert(error.error || 'Failed to delete user');
       }
     } catch (error) {
       console.error('Failed to delete user:', error);
-      alert('ユーザーの削除に失敗しました');
+      alert('Failed to delete user');
     }
   }
 
-  // ユーザー作成モーダルを開く
+  // Open create user modal
   function openCreateUserModal() {
     editingUserId = null;
-    userModalTitle.textContent = 'ユーザーを作成';
+    userModalTitle.textContent = 'Create User';
     userForm.reset();
     userPasswordInput.required = true;
     userModal.classList.remove('hidden');
   }
 
-  // ユーザー編集モーダルを開く
+  // Open edit user modal
   function openEditUserModal(userId) {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
 
     editingUserId = userId;
-    userModalTitle.textContent = 'ユーザーを編集';
+    userModalTitle.textContent = 'Edit User';
     userUsernameInput.value = user.username;
     userPasswordInput.value = '';
     userPasswordInput.required = false;
@@ -213,14 +213,14 @@
     userModal.classList.remove('hidden');
   }
 
-  // ユーザーモーダルを閉じる
+  // Close user modal
   function closeUserModal() {
     userModal.classList.add('hidden');
     userForm.reset();
     editingUserId = null;
   }
 
-  // ユーザーモーダルの保存ボタン
+  // User modal save button
   function handleUserModalSave() {
     if (editingUserId) {
       updateUser(editingUserId);
@@ -229,25 +229,25 @@
     }
   }
 
-  // エラーメッセージを表示
+  // Show error message
   function showError(message) {
     usersTbody.innerHTML = `<tr><td colspan="5" class="empty-message" style="color: #c53030;">${escapeHtml(message)}</td></tr>`;
   }
 
-  // HTMLエスケープ
+  // HTML escape
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
 
-  // イベントリスナー
+  // Event listeners
   createUserButton.addEventListener('click', openCreateUserModal);
   userModalClose.addEventListener('click', closeUserModal);
   userModalCancel.addEventListener('click', closeUserModal);
   userModalSave.addEventListener('click', handleUserModalSave);
 
-  // タブが開かれたときにユーザーを読み込む
+  // Load users when users tab is opened
   document.querySelectorAll('.tab-button').forEach((btn) => {
     btn.addEventListener('click', function () {
       if (this.dataset.tab === 'users') {
@@ -256,7 +256,7 @@
     });
   });
 
-  // 初期読み込み（ユーザータブがアクティブの場合）
+  // Initial load (if users tab is active)
   const currentTab = document.querySelector('.tab-button--active');
   if (currentTab && currentTab.dataset.tab === 'users') {
     loadUsers();

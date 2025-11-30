@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ollama Router OpenUI Chat</title>
+    <title>LLM Router OpenUI Chat</title>
     <link rel="stylesheet" href="/dashboard/styles.css" />
     <link rel="stylesheet" href="/openui/openui.css" />
   </head>
@@ -11,69 +11,69 @@
     <header class="openui-header">
       <div class="stack">
         <p class="eyebrow">Router Playground</p>
-        <h1>簡易チャット (OpenUI)</h1>
+        <h1>Simple Chat (OpenUI)</h1>
         <p class="lede">
-          ルーターが受け付ける /api/chat にブラウザから直接メッセージを送るための軽量UIです。
-          ダッシュボードを開かなくても、モデルの疎通確認や動作チェックが行えます。
+          A lightweight UI for sending messages directly to /api/chat from the browser.
+          You can verify model connectivity without opening the dashboard.
         </p>
       </div>
       <div class="openui-header__status">
-        <div id="router-status" class="status-pill status-pill--connecting">接続確認中…</div>
+        <div id="router-status" class="status-pill status-pill--connecting">Connecting...</div>
         <p class="mini" id="endpoint-hint">POST /api/chat (@ same origin)</p>
-        <p class="mini" id="model-count">モデル一覧を取得しています…</p>
+        <p class="mini" id="model-count">Fetching model list...</p>
       </div>
     </header>
 
     <main class="openui-layout">
-      <section class="openui-controls card" aria-label="チャット設定">
+      <section class="openui-controls card" aria-label="Chat settings">
         <div class="control-field">
-          <label for="model-select">モデル</label>
-          <select id="model-select" name="model" aria-label="使用するモデル">
-            <option>読み込み中…</option>
+          <label for="model-select">Model</label>
+          <select id="model-select" name="model" aria-label="Model to use">
+            <option>Loading...</option>
           </select>
         </div>
         <div class="control-row">
           <label class="checkbox">
             <input type="checkbox" id="stream-toggle" />
-            ストリーミングで受信
+            Enable streaming
           </label>
           <label class="checkbox">
             <input type="checkbox" id="append-system" checked />
-            システムプロンプトを送る
+            Send system prompt
           </label>
         </div>
         <div class="control-field">
-          <label for="system-prompt">システムプロンプト</label>
+          <label for="system-prompt">System Prompt</label>
           <textarea
             id="system-prompt"
             rows="3"
-            placeholder="例: すべて日本語で簡潔に回答してください"
+            placeholder="e.g., Answer concisely in English"
           ></textarea>
         </div>
         <div class="control-buttons">
-          <button type="button" id="reset-chat" class="ghost">履歴をクリア</button>
-          <button type="button" id="copy-curl" class="ghost">cURLをコピー</button>
+          <button type="button" id="reset-chat" class="ghost">Clear history</button>
+          <button type="button" id="copy-curl" class="ghost">Copy cURL</button>
         </div>
-        <p class="mini">このページは同一オリジンのルーターにのみ POST します。</p>
+        <p class="mini">This page only POSTs to the router at the same origin.</p>
       </section>
 
-      <section class="openui-chat card" aria-label="チャット欄">
+      <section class="openui-chat card" aria-label="Chat area">
         <div id="error-banner" class="openui-banner hidden" role="alert"></div>
         <div id="chat-log" class="chat-log" aria-live="polite">
-          <div class="chat-empty">まだメッセージがありません。下部の入力欄から送信してください。</div>
+          <div class="chat-empty">No messages yet. Send a message using the input below.</div>
         </div>
         <form id="chat-form" class="chat-form">
           <textarea
             id="chat-input"
             rows="3"
-            placeholder="Shift+Enter で改行、Enter で送信"
+            placeholder="Shift+Enter for newline, Enter to send"
             autocomplete="off"
           ></textarea>
           <div class="chat-actions">
-            <span class="mini" id="send-hint">Enterで送信 / Shift+Enterで改行</span>
+            <span class="mini" id="send-hint">Enter to send / Shift+Enter for newline</span>
             <div class="chat-buttons">
-              <button type="button" id="stop-button" class="ghost" disabled>停止</button>
-              <button type="submit" id="send-button">送信</button>
+              <button type="button" id="stop-button" class="ghost" disabled>Stop</button>
+              <button type="submit" id="send-button">Send</button>
             </div>
           </div>
         </form>

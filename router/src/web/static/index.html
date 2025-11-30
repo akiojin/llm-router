@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ollama Router ダッシュボード</title>
+    <title>LLM Router Dashboard</title>
     <link rel="stylesheet" href="/dashboard/styles.css" />
     <script
       src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"
@@ -15,23 +15,23 @@
   <body>
     <header class="page-header">
       <div class="title-group">
-        <h1>Ollama Router ダッシュボード</h1>
-        <p class="subtitle">ノードの稼働状況とシステム統計をリアルタイム監視</p>
+        <h1>LLM Router Dashboard</h1>
+        <p class="subtitle">Real-time monitoring of node status and system statistics</p>
       </div>
       <div class="header-controls">
         <a href="/chat" class="refresh-button" target="_blank" rel="noreferrer">
-          チャット
+          Chat
         </a>
         <button id="api-keys-button" class="refresh-button" type="button">
-          APIキー管理
+          API Keys
         </button>
         <span id="connection-status" class="status-pill status-pill--connecting">
-          接続状態: 更新中…
+          Status: Updating...
         </span>
-        <span id="last-refreshed" class="last-refreshed">最終更新: -</span>
-        <span id="refresh-metrics" class="last-refreshed">取得: - / 描画: -</span>
+        <span id="last-refreshed" class="last-refreshed">Last Updated: -</span>
+        <span id="refresh-metrics" class="last-refreshed">Fetch: - / Render: -</span>
         <button id="refresh-button" class="refresh-button" type="button">
-          手動更新
+          Refresh
         </button>
       </div>
     </header>
@@ -39,46 +39,46 @@
     <main>
     <section class="banner hidden" id="error-banner"></section>
 
-      <!-- タブナビゲーションは廃止（単一ビュー） -->
+      <!-- Tab navigation removed (single view) -->
 
       <div class="tab-panel tab-panel--active" id="tab-dashboard">
       <section class="stats-grid">
         <article class="stat-card">
-          <h2>登録ノード</h2>
+          <h2>Registered Nodes</h2>
           <p class="stat-value" data-stat="total-nodes">-</p>
           <p class="stat-caption">
-            オンライン <span data-stat="online-nodes">-</span> / オフライン
+            Online <span data-stat="online-nodes">-</span> / Offline
             <span data-stat="offline-nodes">-</span>
           </p>
         </article>
         <article class="stat-card">
-          <h2>リクエスト総数</h2>
+          <h2>Total Requests</h2>
           <p class="stat-value" data-stat="total-requests">-</p>
           <p class="stat-caption">
-            成功 <span data-stat="successful-requests">-</span> / 失敗
+            Success <span data-stat="successful-requests">-</span> / Failed
             <span data-stat="failed-requests">-</span>
           </p>
         </article>
         <article class="stat-card">
-          <h2>平均レスポンス</h2>
+          <h2>Avg Response</h2>
           <p class="stat-value" data-stat="average-response-time-ms">-</p>
           <p class="stat-caption">
-            メトリクス更新: <span data-stat="last-metrics-updated-at">-</span>
+            Metrics Updated: <span data-stat="last-metrics-updated-at">-</span>
           </p>
         </article>
         <article class="stat-card">
-          <h2>平均GPU使用率</h2>
+          <h2>Avg GPU Usage</h2>
           <p class="stat-value" data-stat="average-gpu-usage">-</p>
           <p class="stat-caption">
-            メモリ: <span data-stat="average-gpu-memory-usage">-</span>
+            Memory: <span data-stat="average-gpu-memory-usage">-</span>
           </p>
         </article>
         <article class="stat-card">
-          <h2>アクティブリクエスト</h2>
+          <h2>Active Requests</h2>
           <p class="stat-value" data-stat="total-active-requests">-</p>
           <p class="stat-caption">
-            最終登録: <span data-stat="last-registered-at">-</span><br />
-            最終確認: <span data-stat="last-seen-at">-</span>
+            Last Registered: <span data-stat="last-registered-at">-</span><br />
+            Last Seen: <span data-stat="last-seen-at">-</span>
           </p>
         </article>
       </section>
@@ -87,26 +87,26 @@
       <div class="tab-panel" id="tab-nodes">
       <section class="nodes-section">
         <header class="section-header">
-          <h2>ノード一覧</h2>
+          <h2>Node List</h2>
           <div class="section-tools">
             <div class="export-group">
-              <button type="button" id="export-json" class="btn">JSONエクスポート</button>
-              <button type="button" id="export-csv" class="btn">CSVエクスポート</button>
+              <button type="button" id="export-json" class="btn">Export JSON</button>
+              <button type="button" id="export-csv" class="btn">Export CSV</button>
             </div>
             <label class="filter-label">
-              <span>状態</span>
+              <span>Status</span>
               <select id="filter-status">
-                <option value="all">すべて</option>
-                <option value="online">オンライン</option>
-                <option value="offline">オフライン</option>
+                <option value="all">All</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
               </select>
             </label>
             <label class="filter-label">
-              <span>検索</span>
+              <span>Search</span>
               <input
                 type="search"
                 id="filter-query"
-                placeholder="マシン名・IPアドレス"
+                placeholder="Machine name / IP address"
                 autocomplete="off"
               />
             </label>
@@ -132,54 +132,54 @@
                 <thead>
                   <tr>
                 <th>
-                  <input type="checkbox" id="select-all" aria-label="すべて選択" />
+                  <input type="checkbox" id="select-all" aria-label="Select all" />
                 </th>
                 <th data-sort="machine" class="sortable">
-                  <span>名前</span>
+                  <span>Name</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
                 <th data-sort="ip" class="sortable">
-                  <span>アドレス</span>
+                  <span>Address</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
                 <th data-sort="status" class="sortable">
-                  <span>状態</span>
+                  <span>Status</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
                 <th data-sort="uptime" class="sortable">
-                  <span>稼働時間</span>
+                  <span>Uptime</span>
                   <span class="sort-indicator" aria-hidden="true">–</span>
                 </th>
                 <th>CPU / GPU</th>
-                  <th>メモリ / GPU</th>
-                  <th>処理中</th>
+                  <th>Memory / GPU</th>
+                  <th>Active</th>
                   <th data-sort="total" class="sortable">
-                    <span>累積</span>
+                    <span>Total</span>
                     <span class="sort-indicator" aria-hidden="true">–</span>
                   </th>
-                  <th>平均応答</th>
-                  <th>最終確認</th>
-                  <th>操作</th>
+                  <th>Avg Response</th>
+                  <th>Last Seen</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
             <tbody id="nodes-body">
               <tr class="empty-row">
-                <td colspan="12">データ取得中…</td>
+                <td colspan="12">Loading data...</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="pagination" aria-label="ノード一覧ページネーション">
-          <button type="button" id="page-prev" class="btn" aria-label="前のページ">&lt;</button>
+        <div class="pagination" aria-label="Node list pagination">
+          <button type="button" id="page-prev" class="btn" aria-label="Previous page">&lt;</button>
           <span class="pagination__info" id="page-info">- / -</span>
-          <button type="button" id="page-next" class="btn" aria-label="次のページ">&gt;</button>
+          <button type="button" id="page-next" class="btn" aria-label="Next page">&gt;</button>
         </div>
       </section>
 
       <section class="charts-section">
         <header class="section-header">
-          <h2>リクエスト推移グラフ</h2>
-          <p class="section-caption">直近60分の成功・失敗リクエスト件数</p>
+          <h2>Request Trend Graph</h2>
+          <p class="section-caption">Success/Failed requests in the last 60 minutes</p>
         </header>
         <div class="chart-container">
           <canvas id="requests-chart" aria-label="Requests per minute" role="img"></canvas>
@@ -190,24 +190,24 @@
       <div class="tab-panel" id="tab-history">
       <section class="request-history-section">
         <header class="section-header">
-          <h2>リクエスト履歴一覧</h2>
+          <h2>Request History</h2>
           <div class="section-tools">
-            <button type="button" id="export-history-csv" class="btn">CSVエクスポート</button>
+            <button type="button" id="export-history-csv" class="btn">Export CSV</button>
             <label class="filter-label">
-              <span>モデル</span>
+              <span>Model</span>
               <input
                 type="search"
                 id="filter-history-model"
-                placeholder="モデル名でフィルタ"
+                placeholder="Filter by model name"
                 autocomplete="off"
               />
             </label>
             <label class="filter-label">
-              <span>表示件数</span>
+              <span>Per Page</span>
               <select id="history-per-page" class="per-page-select">
-                <option value="25">25件</option>
-                <option value="50" selected>50件</option>
-                <option value="100">100件</option>
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
               </select>
             </label>
           </div>
@@ -217,28 +217,28 @@
           <table class="request-history-table">
             <thead>
               <tr>
-                <th>タイムスタンプ</th>
-                <th>種類</th>
-                <th>モデル</th>
-                <th>エージェント</th>
-                <th>リクエスト元IP</th>
-                <th>処理時間</th>
-                <th>ステータス</th>
-                <th>操作</th>
+                <th>Timestamp</th>
+                <th>Type</th>
+                <th>Model</th>
+                <th>Agent</th>
+                <th>Client IP</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="request-history-tbody">
               <tr>
-                <td colspan="8" class="empty-message">履歴を読み込み中...</td>
+                <td colspan="8" class="empty-message">Loading history...</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <div class="pagination" id="history-pagination">
-          <button type="button" id="history-page-prev" class="btn" aria-label="前のページ">&lt;</button>
+          <button type="button" id="history-page-prev" class="btn" aria-label="Previous page">&lt;</button>
           <span class="pagination__info" id="history-page-info">- / -</span>
-          <button type="button" id="history-page-next" class="btn" aria-label="次のページ">&gt;</button>
+          <button type="button" id="history-page-next" class="btn" aria-label="Next page">&gt;</button>
         </div>
       </section>
       </div>
@@ -248,12 +248,12 @@
           <article class="log-card" aria-labelledby="logs-coordinator-title">
             <header class="log-card__header">
               <div>
-                <h2 id="logs-coordinator-title">ルーターログ</h2>
+                <h2 id="logs-coordinator-title">Router Logs</h2>
                 <p class="log-card__path" id="logs-coordinator-path"></p>
               </div>
               <div class="log-card__actions">
                 <button type="button" id="logs-coordinator-refresh" class="btn btn--secondary">
-                  再読み込み
+                  Reload
                 </button>
               </div>
             </header>
@@ -269,18 +269,18 @@
           <article class="log-card" aria-labelledby="logs-node-title">
             <header class="log-card__header">
               <div>
-                <h2 id="logs-node-title">ノードログ</h2>
+                <h2 id="logs-node-title">Node Logs</h2>
                 <p class="log-card__path" id="logs-node-path"></p>
               </div>
               <div class="log-card__actions">
                 <label class="log-node-select">
-                  <span>ノード</span>
+                  <span>Node</span>
                   <select id="logs-node-select">
-                    <option value="">選択してください</option>
+                    <option value="">Select a node</option>
                   </select>
                 </label>
                 <button type="button" id="logs-node-refresh" class="btn btn--secondary">
-                  再読み込み
+                  Reload
                 </button>
               </div>
             </header>
@@ -292,80 +292,80 @@
     </main>
 
     <footer class="page-footer">
-      <small>&copy; 2025 Ollama Router</small>
+      <small>&copy; 2025 LLM Router</small>
     </footer>
 
     <div id="node-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="node-modal-title">
       <div class="modal__dialog">
         <header class="modal__header">
-          <h2 id="node-modal-title">ノード詳細</h2>
-          <button type="button" id="node-modal-close" class="modal__close" aria-label="閉じる">×</button>
+          <h2 id="node-modal-title">Node Details</h2>
+          <button type="button" id="node-modal-close" class="modal__close" aria-label="Close">×</button>
         </header>
         <section class="modal__content">
           <form id="node-settings-form" class="detail-list">
             <div>
-              <dt>表示名</dt>
-              <dd><input id="detail-custom-name" name="custom_name" type="text" placeholder="任意の名前" /></dd>
+              <dt>Display Name</dt>
+              <dd><input id="detail-custom-name" name="custom_name" type="text" placeholder="Custom name" /></dd>
             </div>
             <div>
-              <dt>タグ</dt>
-              <dd><input id="detail-tags" name="tags" type="text" placeholder="カンマ区切りで入力" /></dd>
+              <dt>Tags</dt>
+              <dd><input id="detail-tags" name="tags" type="text" placeholder="Comma separated" /></dd>
             </div>
             <div>
-              <dt>メモ</dt>
-              <dd><textarea id="detail-notes" name="notes" rows="3" placeholder="任意のメモ"></textarea></dd>
+              <dt>Notes</dt>
+              <dd><textarea id="detail-notes" name="notes" rows="3" placeholder="Optional notes"></textarea></dd>
             </div>
 
             <div>
-              <dt>マシン名</dt>
+              <dt>Machine Name</dt>
               <dd id="detail-machine-name">-</dd>
             </div>
             <div>
-              <dt>IPアドレス</dt>
+              <dt>IP Address</dt>
               <dd id="detail-ip-address">-</dd>
             </div>
             <div>
-              <dt>Ollamaバージョン</dt>
+              <dt>Backend Version</dt>
               <dd id="detail-ollama-version">-</dd>
             </div>
             <div>
-              <dt>モデル</dt>
+              <dt>Models</dt>
               <dd id="detail-loaded-models">-</dd>
             </div>
             <div>
-              <dt>稼働時間</dt>
+              <dt>Uptime</dt>
               <dd id="detail-uptime">-</dd>
             </div>
             <div>
-              <dt>状態</dt>
+              <dt>Status</dt>
               <dd id="detail-status">-</dd>
             </div>
             <div>
-              <dt>最終確認</dt>
+              <dt>Last Seen</dt>
               <dd id="detail-last-seen">-</dd>
             </div>
             <div>
-              <dt>累積リクエスト</dt>
+              <dt>Total Requests</dt>
               <dd id="detail-total-requests">-</dd>
             </div>
             <div>
-              <dt>直近平均応答</dt>
+              <dt>Avg Response Time</dt>
               <dd id="detail-average-response">-</dd>
             </div>
             <div>
-              <dt>GPU使用率</dt>
+              <dt>GPU Usage</dt>
               <dd id="detail-gpu-usage">-</dd>
             </div>
             <div>
-              <dt>GPUメモリ使用率</dt>
+              <dt>GPU Memory Usage</dt>
               <dd id="detail-gpu-memory">-</dd>
             </div>
             <div>
-              <dt>GPU能力スコア</dt>
+              <dt>GPU Capability Score</dt>
               <dd id="detail-gpu-capability-score">-</dd>
             </div>
             <div>
-              <dt>GPUモデル</dt>
+              <dt>GPU Model</dt>
               <dd id="detail-gpu-model">-</dd>
             </div>
             <div>
@@ -373,28 +373,28 @@
               <dd id="detail-gpu-compute">-</dd>
             </div>
           </form>
-          <section class="modal__metrics" aria-label="ノードメトリクス">
-            <h3>メトリクス</h3>
-            <p id="node-metrics-status" class="metrics-status">メトリクスを読み込み中…</p>
+          <section class="modal__metrics" aria-label="Node metrics">
+            <h3>Metrics</h3>
+            <p id="node-metrics-status" class="metrics-status">Loading metrics...</p>
             <div class="metrics-chart">
               <canvas
                 id="node-metrics-chart"
-                aria-label="CPUとメモリの推移"
+                aria-label="CPU and memory trends"
                 role="img"
               ></canvas>
             </div>
           </section>
-          <section class="modal__logs" id="node-log-section" aria-label="ノードログ">
+          <section class="modal__logs" id="node-log-section" aria-label="Node logs">
             <div class="modal__logs-header">
-              <h3>最新ログ</h3>
+              <h3>Recent Logs</h3>
               <div class="modal__logs-actions">
                 <span id="node-log-path" class="modal__logs-path"></span>
                 <button type="button" id="node-log-refresh" class="btn btn--secondary">
-                  再読み込み
+                  Reload
                 </button>
               </div>
             </div>
-            <p id="node-log-status" class="modal__logs-status">ログを読み込み中…</p>
+            <p id="node-log-status" class="modal__logs-status">Loading logs...</p>
             <div
               class="log-viewer log-viewer--compact"
               id="node-log-viewer"
@@ -404,10 +404,10 @@
           </section>
         </section>
         <footer class="modal__footer">
-          <button type="button" id="node-modal-disconnect" class="btn">強制切断</button>
-          <button type="button" id="node-modal-delete" class="btn btn--danger">削除</button>
-          <button type="button" id="node-modal-save" class="btn btn--primary">保存</button>
-          <button type="button" id="node-modal-ok" class="btn">閉じる</button>
+          <button type="button" id="node-modal-disconnect" class="btn">Disconnect</button>
+          <button type="button" id="node-modal-delete" class="btn btn--danger">Delete</button>
+          <button type="button" id="node-modal-save" class="btn btn--primary">Save</button>
+          <button type="button" id="node-modal-ok" class="btn">Close</button>
         </footer>
       </div>
     </div>
@@ -415,8 +415,8 @@
     <div id="request-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="request-modal-title">
       <div class="modal__dialog">
         <header class="modal__header">
-          <h2 id="request-modal-title">リクエスト詳細</h2>
-          <button type="button" id="request-modal-close" class="modal__close" aria-label="閉じる">×</button>
+          <h2 id="request-modal-title">Request Details</h2>
+          <button type="button" id="request-modal-close" class="modal__close" aria-label="Close">×</button>
         </header>
         <section class="modal__content">
           <form id="request-detail-form" class="detail-list">
@@ -425,45 +425,45 @@
               <dd id="request-detail-id">-</dd>
             </div>
             <div>
-              <dt>タイムスタンプ</dt>
+              <dt>Timestamp</dt>
               <dd id="request-detail-timestamp">-</dd>
             </div>
             <div>
-              <dt>種類</dt>
+              <dt>Type</dt>
               <dd id="request-detail-type">-</dd>
             </div>
             <div>
-              <dt>モデル</dt>
+              <dt>Model</dt>
               <dd id="request-detail-model">-</dd>
             </div>
             <div>
-              <dt>ノード</dt>
+              <dt>Node</dt>
               <dd id="request-detail-node">-</dd>
             </div>
             <div>
-              <dt>リクエスト元IP</dt>
+              <dt>Client IP</dt>
               <dd id="request-detail-client-ip">-</dd>
             </div>
             <div>
-              <dt>処理時間</dt>
+              <dt>Duration</dt>
               <dd id="request-detail-duration">-</dd>
             </div>
             <div>
-              <dt>ステータス</dt>
+              <dt>Status</dt>
               <dd id="request-detail-status">-</dd>
             </div>
             <div>
-              <dt>リクエストボディ</dt>
+              <dt>Request Body</dt>
               <dd><pre id="request-detail-request-body" class="json-body">-</pre></dd>
             </div>
             <div>
-              <dt>レスポンスボディ</dt>
+              <dt>Response Body</dt>
               <dd><pre id="request-detail-response-body" class="json-body">-</pre></dd>
             </div>
           </form>
         </section>
         <footer class="modal__footer">
-          <button type="button" id="request-modal-ok" class="btn">閉じる</button>
+          <button type="button" id="request-modal-ok" class="btn">Close</button>
         </footer>
       </div>
     </div>
@@ -471,27 +471,27 @@
     <div id="api-keys-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="api-keys-modal-title">
       <div class="modal__dialog modal__dialog--wide">
         <header class="modal__header">
-          <h2 id="api-keys-modal-title">APIキー管理</h2>
-          <button type="button" id="api-keys-modal-close" class="modal__close" aria-label="閉じる">×</button>
+          <h2 id="api-keys-modal-title">API Key Management</h2>
+          <button type="button" id="api-keys-modal-close" class="modal__close" aria-label="Close">×</button>
         </header>
         <section class="modal__content">
           <div class="api-key-form">
-            <input type="text" id="api-key-name" placeholder="キー名（例: Production）" class="api-key-input" />
+            <input type="text" id="api-key-name" placeholder="Key name (e.g., Production)" class="api-key-input" />
             <select id="api-key-expiry" class="api-key-select">
-              <option value="">無制限</option>
-              <option value="3">3日間</option>
-              <option value="7">7日間</option>
-              <option value="21">21日間</option>
-              <option value="70">70日間</option>
+              <option value="">No expiry</option>
+              <option value="3">3 days</option>
+              <option value="7">7 days</option>
+              <option value="21">21 days</option>
+              <option value="70">70 days</option>
             </select>
-            <button type="button" id="create-api-key" class="btn btn--primary">発行</button>
+            <button type="button" id="create-api-key" class="btn btn--primary">Create</button>
           </div>
 
           <div id="new-key-display" class="new-key-display hidden">
-            <p class="new-key-warning">このキーは一度だけ表示されます。必ずコピーしてください。</p>
+            <p class="new-key-warning">This key is only shown once. Please copy it now.</p>
             <div class="new-key-box">
               <code id="new-key-value"></code>
-              <button type="button" id="copy-api-key" class="btn btn--secondary">コピー</button>
+              <button type="button" id="copy-api-key" class="btn btn--secondary">Copy</button>
             </div>
           </div>
 
@@ -499,20 +499,20 @@
             <table class="api-keys-table">
               <thead>
                 <tr>
-                  <th>名前</th>
-                  <th>作成日</th>
-                  <th>有効期限</th>
-                  <th>操作</th>
+                  <th>Name</th>
+                  <th>Created</th>
+                  <th>Expires</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="api-keys-tbody">
-                <tr><td colspan="4" class="empty-message">読み込み中...</td></tr>
+                <tr><td colspan="4" class="empty-message">Loading...</td></tr>
               </tbody>
             </table>
           </div>
         </section>
         <footer class="modal__footer">
-          <button type="button" id="api-keys-modal-ok" class="btn">閉じる</button>
+          <button type="button" id="api-keys-modal-ok" class="btn">Close</button>
         </footer>
       </div>
     </div>

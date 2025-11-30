@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ログイン - Ollama Coordinator</title>
+    <title>Login - LLM Router</title>
     <link rel="stylesheet" href="/dashboard/styles.css" />
     <style>
       .login-container {
@@ -111,15 +111,15 @@
     <div class="login-container">
       <div class="login-card">
         <div class="login-header">
-          <h1>Ollama Coordinator</h1>
-          <p>ダッシュボードにログイン</p>
+          <h1>LLM Router</h1>
+          <p>Sign in to Dashboard</p>
         </div>
 
         <div id="error-message" class="error-message" role="alert"></div>
 
         <form id="login-form" class="login-form">
           <div class="form-group">
-            <label for="username">ユーザー名</label>
+            <label for="username">Username</label>
             <input
               type="text"
               id="username"
@@ -131,7 +131,7 @@
           </div>
 
           <div class="form-group">
-            <label for="password">パスワード</label>
+            <label for="password">Password</label>
             <input
               type="password"
               id="password"
@@ -142,7 +142,7 @@
           </div>
 
           <button type="submit" id="login-button" class="login-button">
-            ログイン
+            Sign In
           </button>
         </form>
       </div>

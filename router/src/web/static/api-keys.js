@@ -1,9 +1,9 @@
-// APIキー管理のJavaScript
+// API Key Management JavaScript
 
 (function () {
   'use strict';
 
-  // DOM要素
+  // DOM elements
   const apiKeysButton = document.getElementById('api-keys-button');
   const apiKeysModal = document.getElementById('api-keys-modal');
   const apiKeysModalClose = document.getElementById('api-keys-modal-close');
@@ -19,7 +19,7 @@
   let apiKeys = [];
   let editingKeyId = null;
 
-  // モーダルを開く
+  // Open modal
   function openModal() {
     apiKeysModal.classList.remove('hidden');
     newKeyDisplay.classList.add('hidden');
@@ -27,24 +27,24 @@
     loadApiKeys();
   }
 
-  // モーダルを閉じる
+  // Close modal
   function closeModal() {
     apiKeysModal.classList.add('hidden');
     newKeyDisplay.classList.add('hidden');
     cancelEdit();
   }
 
-  // 編集モードをキャンセル
+  // Cancel edit mode
   function cancelEdit() {
     editingKeyId = null;
     apiKeyNameInput.value = '';
     apiKeyExpirySelect.value = '';
-    createApiKeyButton.textContent = '発行';
+    createApiKeyButton.textContent = 'Create';
     createApiKeyButton.classList.remove('btn--secondary');
     createApiKeyButton.classList.add('btn--primary');
   }
 
-  // APIキー一覧を読み込む
+  // Load API keys list
   async function loadApiKeys() {
     try {
       const response = await authenticatedFetch('/api/api-keys');
@@ -53,29 +53,29 @@
         apiKeys = data.api_keys || data || [];
         renderApiKeys();
       } else if (response.status === 401 || response.status === 403) {
-        showError('認証が必要です。ログインしてください。');
+        showError('Authentication required. Please log in.');
       } else {
-        showError('APIキーの読み込みに失敗しました');
+        showError('Failed to load API keys');
       }
     } catch (error) {
       console.error('Failed to load API keys:', error);
-      showError('APIキーの読み込みに失敗しました');
+      showError('Failed to load API keys');
     }
   }
 
-  // APIキー一覧を表示
+  // Render API keys list
   function renderApiKeys() {
     if (!Array.isArray(apiKeys) || apiKeys.length === 0) {
-      apiKeysTbody.innerHTML = '<tr><td colspan="4" class="empty-message">APIキーがありません</td></tr>';
+      apiKeysTbody.innerHTML = '<tr><td colspan="4" class="empty-message">No API keys</td></tr>';
       return;
     }
 
     apiKeysTbody.innerHTML = apiKeys
       .map((key) => {
-        const createdAt = new Date(key.created_at).toLocaleString('ja-JP');
+        const createdAt = new Date(key.created_at).toLocaleString();
         const isUnlimited = !key.expires_at;
-        const expiresAt = isUnlimited ? '無制限' : new Date(key.expires_at).toLocaleString('ja-JP');
-        const warningMark = isUnlimited ? '<span class="unlimited-warning" title="無制限のAPIキー">⚠️</span> ' : '';
+        const expiresAt = isUnlimited ? 'No expiry' : new Date(key.expires_at).toLocaleString();
+        const warningMark = isUnlimited ? '<span class="unlimited-warning" title="No expiry API key">&#9888;</span> ' : '';
 
         return `
           <tr>
@@ -83,22 +83,22 @@
             <td>${createdAt}</td>
             <td>${warningMark}${expiresAt}</td>
             <td class="api-key-actions">
-              <button class="btn btn--small edit-api-key" data-id="${key.id}" data-name="${escapeHtml(key.name)}" data-expires="${key.expires_at || ''}">編集</button>
-              <button class="btn btn--danger btn--small delete-api-key" data-id="${key.id}">削除</button>
+              <button class="btn btn--small edit-api-key" data-id="${key.id}" data-name="${escapeHtml(key.name)}" data-expires="${key.expires_at || ''}">Edit</button>
+              <button class="btn btn--danger btn--small delete-api-key" data-id="${key.id}">Delete</button>
             </td>
           </tr>
         `;
       })
       .join('');
 
-    // 編集ボタンのイベントリスナーを追加
+    // Add event listeners for edit buttons
     document.querySelectorAll('.edit-api-key').forEach((btn) => {
       btn.addEventListener('click', function () {
         startEdit(this.dataset.id, this.dataset.name, this.dataset.expires);
       });
     });
 
-    // 削除ボタンのイベントリスナーを追加
+    // Add event listeners for delete buttons
     document.querySelectorAll('.delete-api-key').forEach((btn) => {
       btn.addEventListener('click', function () {
         const keyId = this.dataset.id;
@@ -107,18 +107,18 @@
     });
   }
 
-  // 編集モードを開始
+  // Start edit mode
   function startEdit(keyId, name, expiresAt) {
     editingKeyId = keyId;
     apiKeyNameInput.value = name;
 
-    // 有効期限から日数を計算（概算）
+    // Calculate days from expiry (approximate)
     if (expiresAt) {
       const now = new Date();
       const expires = new Date(expiresAt);
       const diffDays = Math.round((expires - now) / (1000 * 60 * 60 * 24));
 
-      // 近い選択肢を選ぶ
+      // Select closest option
       if (diffDays <= 3) {
         apiKeyExpirySelect.value = '3';
       } else if (diffDays <= 7) {
@@ -134,19 +134,19 @@
       apiKeyExpirySelect.value = '';
     }
 
-    createApiKeyButton.textContent = '更新';
+    createApiKeyButton.textContent = 'Update';
     createApiKeyButton.classList.remove('btn--primary');
     createApiKeyButton.classList.add('btn--secondary');
     apiKeyNameInput.focus();
   }
 
-  // APIキーを発行または更新
+  // Create or update API key
   async function createOrUpdateApiKey() {
     const name = apiKeyNameInput.value.trim();
     const expiryDays = apiKeyExpirySelect.value;
 
     if (!name) {
-      alert('キーの名前を入力してください');
+      alert('Please enter a key name');
       return;
     }
 
@@ -158,15 +158,15 @@
     }
 
     if (editingKeyId) {
-      // 更新モード
+      // Update mode
       await updateApiKey(editingKeyId, name, expiresAt);
     } else {
-      // 新規発行モード
+      // Create mode
       await createApiKey(name, expiresAt);
     }
   }
 
-  // APIキーを発行
+  // Create API key
   async function createApiKey(name, expiresAt) {
     try {
       const response = await authenticatedFetch('/api/api-keys', {
@@ -187,15 +187,15 @@
         loadApiKeys();
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(error.message || error.error || 'APIキーの発行に失敗しました');
+        alert(error.message || error.error || 'Failed to create API key');
       }
     } catch (error) {
       console.error('Failed to create API key:', error);
-      alert('APIキーの発行に失敗しました');
+      alert('Failed to create API key');
     }
   }
 
-  // APIキーを更新
+  // Update API key
   async function updateApiKey(keyId, name, expiresAt) {
     try {
       const response = await authenticatedFetch(`/api/api-keys/${keyId}`, {
@@ -213,28 +213,28 @@
         cancelEdit();
         loadApiKeys();
       } else if (response.status === 404) {
-        alert('APIキーが見つかりません');
+        alert('API key not found');
         cancelEdit();
         loadApiKeys();
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(error.message || error.error || 'APIキーの更新に失敗しました');
+        alert(error.message || error.error || 'Failed to update API key');
       }
     } catch (error) {
       console.error('Failed to update API key:', error);
-      alert('APIキーの更新に失敗しました');
+      alert('Failed to update API key');
     }
   }
 
-  // 発行されたキーを表示
+  // Show newly created key
   function showNewKey(key) {
     newKeyValue.textContent = key;
     newKeyDisplay.classList.remove('hidden');
   }
 
-  // APIキーを削除
+  // Delete API key
   async function deleteApiKey(keyId) {
-    if (!confirm('このAPIキーを削除しますか？')) {
+    if (!confirm('Are you sure you want to delete this API key?')) {
       return;
     }
 
@@ -249,45 +249,45 @@
         }
         loadApiKeys();
       } else {
-        alert('APIキーの削除に失敗しました');
+        alert('Failed to delete API key');
       }
     } catch (error) {
       console.error('Failed to delete API key:', error);
-      alert('APIキーの削除に失敗しました');
+      alert('Failed to delete API key');
     }
   }
 
-  // クリップボードにコピー
+  // Copy to clipboard
   async function copyToClipboard() {
     const key = newKeyValue.textContent;
     try {
       await navigator.clipboard.writeText(key);
-      alert('APIキーをコピーしました');
+      alert('API key copied to clipboard');
     } catch (error) {
-      // フォールバック
+      // Fallback
       const textarea = document.createElement('textarea');
       textarea.value = key;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      alert('APIキーをコピーしました');
+      alert('API key copied to clipboard');
     }
   }
 
-  // エラーメッセージを表示
+  // Show error message
   function showError(message) {
     apiKeysTbody.innerHTML = `<tr><td colspan="4" class="empty-message" style="color: #c53030;">${escapeHtml(message)}</td></tr>`;
   }
 
-  // HTMLエスケープ
+  // HTML escape
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
 
-  // イベントリスナー
+  // Event listeners
   if (apiKeysButton) {
     apiKeysButton.addEventListener('click', openModal);
   }
@@ -304,7 +304,7 @@
     copyApiKeyButton.addEventListener('click', copyToClipboard);
   }
 
-  // モーダル背景クリックで閉じる
+  // Close modal on background click
   if (apiKeysModal) {
     apiKeysModal.addEventListener('click', function (e) {
       if (e.target === apiKeysModal) {
@@ -313,7 +313,7 @@
     });
   }
 
-  // ESCキーで閉じる
+  // Close on ESC key
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && apiKeysModal && !apiKeysModal.classList.contains('hidden')) {
       closeModal();
