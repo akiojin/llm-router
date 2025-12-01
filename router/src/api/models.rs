@@ -763,6 +763,12 @@ pub async fn get_task_progress(
     Ok(Json(task))
 }
 
+/// GET /api/tasks - アクティブなタスク一覧を取得
+pub async fn list_tasks(State(state): State<AppState>) -> Json<Vec<DownloadTask>> {
+    let tasks = state.task_manager.list_active_tasks().await;
+    Json(tasks)
+}
+
 /// T034: POST /api/tasks/{task_id}/progress - タスク進捗を更新（ノードから呼ばれる）
 pub async fn update_progress(
     State(state): State<AppState>,

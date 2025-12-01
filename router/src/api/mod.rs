@@ -149,6 +149,7 @@ pub fn create_router(state: AppState) -> Router {
             "/api/nodes/:node_id/models/pull",
             post(models::pull_model_to_node),
         )
+        .route("/api/tasks", get(models::list_tasks))
         .route("/api/tasks/:task_id", get(models::get_task_progress))
         .route(
             "/api/tasks/:task_id/progress",

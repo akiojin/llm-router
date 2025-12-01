@@ -183,6 +183,22 @@ async function fetchAgentModels(agentId) {
 }
 
 /**
+ * GET /api/tasks - Fetch all active tasks
+ */
+async function fetchActiveTasks() {
+  try {
+    const response = await fetch('/api/tasks');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to fetch active tasks:', error);
+    return [];
+  }
+}
+
+/**
  * GET /api/tasks/{task_id} - Fetch task progress
  */
 async function fetchTaskProgress(taskId) {
@@ -1006,16 +1022,24 @@ export async function initModelsUI(agents) {
   loadedModels = await fetchLoadedModels();
   renderLoadedModels();
 
+  // アクティブなタスクを初期取得
+  const activeTasks = await fetchActiveTasks();
+  for (const task of activeTasks) {
+    downloadTasks.set(task.id, task);
+  }
+  renderDownloadTasks();
+
   // 進捗監視開始
   monitorProgress();
 
   const tasksRefresh = elements.tasksRefreshBtn();
   if (tasksRefresh) {
     tasksRefresh.addEventListener('click', async () => {
-      const ids = Array.from(downloadTasks.keys());
-      for (const id of ids) {
-        const t = await fetchTaskProgress(id);
-        if (t) downloadTasks.set(id, t);
+      // サーバーからアクティブなタスク一覧を再取得
+      const tasks = await fetchActiveTasks();
+      downloadTasks.clear();
+      for (const task of tasks) {
+        downloadTasks.set(task.id, task);
       }
       renderDownloadTasks();
     });
