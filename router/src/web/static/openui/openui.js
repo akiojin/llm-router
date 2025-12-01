@@ -46,6 +46,8 @@
     activeSessionTitle: document.getElementById("active-session-title"),
     activeSessionMeta: document.getElementById("active-session-meta"),
     chatMeta: document.getElementById("chat-meta-hint"),
+    settingsToggle: document.getElementById("settings-toggle"),
+    settingsPanel: document.querySelector(".openui-controls"),
   };
   dom.providerButtons = dom.providerToggle
     ? Array.from(dom.providerToggle.querySelectorAll(".segmented__btn"))
@@ -755,6 +757,17 @@
     }
   }
 
+  function toggleSettings() {
+    if (!dom.settingsPanel || !dom.settingsToggle) return;
+    const isCollapsed = dom.settingsPanel.classList.toggle(
+      "openui-controls--collapsed",
+    );
+    const icon = dom.settingsToggle.querySelector(".settings-toggle__icon");
+    const text = dom.settingsToggle.querySelector(".settings-toggle__text");
+    if (icon) icon.textContent = isCollapsed ? "\u25B6" : "\u25BC";
+    if (text) text.textContent = isCollapsed ? "設定を表示" : "設定を隠す";
+  }
+
   function initEvents() {
     dom.chatForm?.addEventListener("submit", handleSubmit);
     dom.chatInput?.addEventListener("keydown", handleKeydown);
@@ -781,6 +794,7 @@
     dom.providerButtons?.forEach((btn) => {
       btn.addEventListener("click", () => setProviderFilter(btn.dataset.provider));
     });
+    dom.settingsToggle?.addEventListener("click", toggleSettings);
   }
 
   document.addEventListener("DOMContentLoaded", () => {

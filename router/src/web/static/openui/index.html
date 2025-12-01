@@ -10,17 +10,12 @@
   <body class="openui-body">
     <header class="openui-header">
       <div class="stack">
-        <p class="eyebrow">Router Playground</p>
-        <h1>Simple Chat (OpenUI)</h1>
-        <p class="lede">
-          A lightweight UI for sending messages directly to /api/chat from the browser.
-          You can verify model connectivity without opening the dashboard.
-        </p>
+        <p class="eyebrow">LLM Router</p>
+        <h1>Chat</h1>
       </div>
       <div class="openui-header__status">
         <div id="router-status" class="status-pill status-pill--connecting">Connecting...</div>
-        <p class="mini" id="endpoint-hint">POST /api/chat (@ same origin)</p>
-        <p class="mini" id="model-count">Fetching model list...</p>
+        <p class="mini" id="model-count">Loading...</p>
       </div>
     </header>
 
@@ -39,7 +34,11 @@
       </aside>
 
       <div class="openui-main">
-        <section class="openui-controls card" aria-label="Chat settings">
+        <button type="button" id="settings-toggle" class="settings-toggle">
+          <span class="settings-toggle__icon">&#9654;</span>
+          <span class="settings-toggle__text">設定を表示</span>
+        </button>
+        <section class="openui-controls card openui-controls--collapsed" aria-label="Chat settings">
           <div class="control-field">
             <label>推論先</label>
             <div class="segmented" id="provider-toggle" role="group" aria-label="Choose provider">
