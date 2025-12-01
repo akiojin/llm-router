@@ -3,7 +3,6 @@
 #include "models/model_storage.h"
 #include "models/model_repair.h"
 #include "include/llama.h"
-#include "chat.h"
 
 #include <spdlog/spdlog.h>
 #include <random>
@@ -45,63 +44,209 @@ std::string InferenceEngine::buildChatPrompt(const std::vector<ChatMessage>& mes
     return oss.str();
 }
 
-// モデル固有のチャットテンプレートを適用してプロンプトを構築（Jinjaサポート）
+// ChatML形式でプロンプトを構築するフォールバック関数
+static std::string buildChatMLPrompt(const std::vector<ChatMessage>& messages) {
+    std::ostringstream oss;
+    for (const auto& msg : messages) {
+        oss << "<|im_start|>" << msg.role << "\n" << msg.content << "<|im_end|>\n";
+    }
+    // アシスタント応答の開始
+    oss << "<|im_start|>assistant\n";
+    return oss.str();
+}
+
+// gpt-oss形式でプロンプトを構築する関数
+// gpt-oss固有トークン: <|start|>, <|message|>, <|end|>, <|channel|>
+// 応答形式: <|start|>assistant<|channel|>final<|message|>content<|end|>
+// Reasoning: none を設定して推論チャンネルを無効化
+static std::string buildGptOssPrompt(const std::vector<ChatMessage>& messages) {
+    std::ostringstream oss;
+
+    // システムメッセージの有無をチェック
+    bool hasSystemMessage = false;
+    for (const auto& msg : messages) {
+        if (msg.role == "system") {
+            hasSystemMessage = true;
+            break;
+        }
+    }
+
+    // システムメッセージがない場合、推論無効のシステムプロンプトを追加
+    if (!hasSystemMessage) {
+        oss << "<|start|>system<|message|>You are a helpful assistant.\n\nReasoning: none<|end|>";
+    }
+
+    for (const auto& msg : messages) {
+        if (msg.role == "system") {
+            // システムメッセージに推論設定を追加
+            oss << "<|start|>system<|message|>" << msg.content << "\n\nReasoning: none<|end|>";
+        } else {
+            oss << "<|start|>" << msg.role << "<|message|>" << msg.content << "<|end|>";
+        }
+    }
+
+    // アシスタント応答の開始（final チャンネルでコンテンツを直接生成）
+    oss << "<|start|>assistant<|channel|>final<|message|>";
+    return oss.str();
+}
+
+// gpt-ossモデルの出力から特殊トークンを除去する後処理関数
+static std::string cleanGptOssOutput(const std::string& output) {
+    std::string result = output;
+
+    // gpt-ossの特殊トークンリスト
+    const std::vector<std::string> tokens_to_remove = {
+        "<|start|>", "<|end|>", "<|message|>", "<|channel|>",
+        "<|startoftext|>", "<|endoftext|>", "<|return|>", "<|call|>",
+        "<|constrain|>", "<|endofprompt|>"
+    };
+
+    // 特殊トークンを除去
+    for (const auto& token : tokens_to_remove) {
+        size_t pos = 0;
+        while ((pos = result.find(token, pos)) != std::string::npos) {
+            result.erase(pos, token.length());
+        }
+    }
+
+    // "to=" パターンを全て除去（例: "to=assistant", "to=You", "to=user"）
+    // 正規表現的に "to=" + 英数字列 を除去
+    {
+        size_t pos = 0;
+        while ((pos = result.find("to=", pos)) != std::string::npos) {
+            size_t end_pos = pos + 3;  // "to=" の後ろ
+            // 英数字とアンダースコアが続く間は除去対象
+            while (end_pos < result.size() &&
+                   (std::isalnum(static_cast<unsigned char>(result[end_pos])) ||
+                    result[end_pos] == '_')) {
+                end_pos++;
+            }
+            result.erase(pos, end_pos - pos);
+        }
+    }
+
+    // チャンネル名やロール名を単独で除去（行頭や空白後）
+    const std::vector<std::string> channel_names = {
+        "assistant", "analysis", "final", "commentary", "user", "system", "developer"
+    };
+    for (const auto& name : channel_names) {
+        // "=name" パターンを除去（特殊トークン直後）
+        std::string eq_pattern = "=" + name;
+        size_t pos = 0;
+        while ((pos = result.find(eq_pattern, pos)) != std::string::npos) {
+            // 前の文字が英数字でない場合のみ除去
+            if (pos == 0 || !std::isalnum(static_cast<unsigned char>(result[pos - 1]))) {
+                result.erase(pos, eq_pattern.length());
+            } else {
+                pos++;
+            }
+        }
+    }
+
+    // 先頭と末尾の空白を除去
+    size_t start = result.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) {
+        return "";
+    }
+    size_t end = result.find_last_not_of(" \t\n\r");
+    return result.substr(start, end - start + 1);
+}
+
+// モデルがgpt-oss形式かどうかを判定
+// モデルのテンプレートやアーキテクチャから判定する
+static bool isGptOssModel(llama_model* model) {
+    // 1. アーキテクチャ名で判定（最も確実）
+    char arch_buf[64] = {0};
+    int arch_len = llama_model_meta_val_str(model, "general.architecture", arch_buf, sizeof(arch_buf));
+    spdlog::info("isGptOssModel: arch_len={}, arch_buf='{}'", arch_len, arch_buf);
+    if (arch_len > 0) {
+        std::string arch(arch_buf);
+        spdlog::info("isGptOssModel: checking architecture '{}'", arch);
+        if (arch == "gptoss") {
+            spdlog::info("Detected gpt-oss model by architecture: {}", arch);
+            return true;
+        }
+    }
+
+    // 2. チャットテンプレートにgpt-oss固有トークンが含まれているかチェック
+    const char* tmpl = llama_model_chat_template(model, nullptr);
+    spdlog::info("isGptOssModel: chat_template={}", tmpl != nullptr ? tmpl : "(null)");
+    if (tmpl != nullptr && tmpl[0] != '\0') {
+        std::string template_str(tmpl);
+        if (template_str.find("<|start|>") != std::string::npos ||
+            template_str.find("<|message|>") != std::string::npos) {
+            spdlog::info("Detected gpt-oss model by chat template tokens");
+            return true;
+        }
+    }
+
+    spdlog::info("isGptOssModel: not detected as gpt-oss");
+    return false;
+}
+
+// モデル固有のチャットテンプレートを適用してプロンプトを構築
 static std::string applyModelChatTemplate(
     llama_model* model,
     const std::vector<ChatMessage>& messages) {
 
-    // common_chat_templates を使用してJinjaテンプレートをサポート
-    auto tmpls = common_chat_templates_init(model, "");
-    if (!tmpls) {
-        spdlog::error("Failed to initialize chat templates");
-        throw std::runtime_error(
-            "Failed to initialize chat templates. "
-            "This model may not support chat completions.");
+    // gpt-ossモデルの場合は専用テンプレートを使用
+    if (isGptOssModel(model)) {
+        spdlog::info("Detected gpt-oss model, using gpt-oss chat format");
+        return buildGptOssPrompt(messages);
     }
 
-    // テンプレートソースを取得してログ出力
-    const char* tmpl_src = common_chat_templates_source(tmpls.get());
-    if (tmpl_src) {
-        spdlog::debug("Model chat template source (first 200 chars): {}",
-            std::string(tmpl_src).substr(0, 200));
-    }
-
-    // メッセージを common_chat_msg 形式に変換
-    std::vector<common_chat_msg> chat_messages;
-    chat_messages.reserve(messages.size());
+    // llama_chat_message 配列を構築
+    std::vector<llama_chat_message> llama_messages;
+    llama_messages.reserve(messages.size());
     for (const auto& msg : messages) {
-        common_chat_msg chat_msg;
-        chat_msg.role = msg.role;
-        chat_msg.content = msg.content;
-        chat_messages.push_back(chat_msg);
+        llama_messages.push_back({msg.role.c_str(), msg.content.c_str()});
     }
 
-    // テンプレート入力を構築
-    common_chat_templates_inputs inputs;
-    inputs.messages = chat_messages;
-    inputs.add_generation_prompt = true;
-    inputs.use_jinja = true;  // Jinjaテンプレートを有効化（gpt-oss等）
+    // モデルからチャットテンプレートを取得
+    const char* tmpl = llama_model_chat_template(model, nullptr);
 
-    // テンプレートを適用
-    common_chat_params params;
-    try {
-        params = common_chat_templates_apply(tmpls.get(), inputs);
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to apply chat template: {}", e.what());
-        throw std::runtime_error(
-            std::string("Failed to apply chat template: ") + e.what());
+    // テンプレートがない場合はChatML形式を使用
+    if (tmpl == nullptr || tmpl[0] == '\0') {
+        spdlog::info("Model has no chat template, using ChatML format");
+        return buildChatMLPrompt(messages);
     }
 
-    if (params.prompt.empty()) {
-        spdlog::error("Chat template produced empty prompt");
-        throw std::runtime_error(
-            "Chat template produced empty prompt. "
-            "This model's chat template may not be supported.");
+    spdlog::debug("Model chat template found: {}", tmpl);
+
+    // 初回呼び出しで必要なバッファサイズを取得
+    int32_t required_size = llama_chat_apply_template(
+        tmpl,
+        llama_messages.data(),
+        llama_messages.size(),
+        true,  // add_ass: アシスタント応答の開始を追加
+        nullptr,
+        0);
+
+    if (required_size < 0) {
+        // テンプレート適用に失敗した場合、ChatML形式にフォールバック
+        spdlog::warn("llama_chat_apply_template failed (size={}), using ChatML fallback", required_size);
+        return buildChatMLPrompt(messages);
     }
 
-    spdlog::debug("Applied chat template: {} chars, format: {}",
-        params.prompt.size(), common_chat_format_name(params.format));
-    return params.prompt;
+    // バッファを確保してテンプレートを適用
+    std::vector<char> buf(static_cast<size_t>(required_size) + 1);
+    int32_t actual_size = llama_chat_apply_template(
+        tmpl,
+        llama_messages.data(),
+        llama_messages.size(),
+        true,
+        buf.data(),
+        static_cast<int32_t>(buf.size()));
+
+    if (actual_size < 0 || actual_size > static_cast<int32_t>(buf.size())) {
+        spdlog::error("llama_chat_apply_template failed on second call");
+        // ChatML形式にフォールバック
+        return buildChatMLPrompt(messages);
+    }
+
+    std::string prompt(buf.data(), static_cast<size_t>(actual_size));
+    spdlog::debug("Applied chat template: {} chars", prompt.size());
+    return prompt;
 }
 
 // チャット生成（llama.cpp API使用）
@@ -293,7 +438,8 @@ std::string InferenceEngine::generateChat(
     // Qwen3などのモデルは<|im_end|>で応答を終了するが、EOGとして認識されない場合がある
     static const std::vector<std::string> stop_sequences = {
         "<|im_end|>",       // ChatML (Qwen3, etc.)
-        "<|end|>",          // Some models
+        "<|end|>",          // gpt-oss, Some models
+        "<|start|>",        // gpt-oss (新しいメッセージの開始を検出)
         "<|eot_id|>",       // Llama 3
         "</s>",             // Llama 2, Mistral
         "<|endoftext|>",    // GPT-style
@@ -306,6 +452,13 @@ std::string InferenceEngine::generateChat(
             output = output.substr(0, pos);
             break;
         }
+    }
+
+    // 12. gpt-ossモデルの場合は特殊トークンを除去する後処理を適用
+    if (isGptOssModel(model)) {
+        spdlog::info("Applying gpt-oss output cleanup, before: {} chars", output.size());
+        output = cleanGptOssOutput(output);
+        spdlog::info("After cleanup: {} chars", output.size());
     }
 
     // Debug: log final output hex dump (first 100 bytes)
@@ -450,7 +603,8 @@ std::vector<std::string> InferenceEngine::generateChatStream(
     // ストップシーケンスの定義（chatMLテンプレート用）
     static const std::vector<std::string> stop_sequences = {
         "<|im_end|>",       // ChatML (Qwen3, etc.)
-        "<|end|>",          // Some models
+        "<|end|>",          // gpt-oss, Some models
+        "<|start|>",        // gpt-oss (新しいメッセージの開始を検出)
         "<|eot_id|>",       // Llama 3
         "</s>",             // Llama 2, Mistral
         "<|endoftext|>",    // GPT-style
