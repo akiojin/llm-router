@@ -94,11 +94,16 @@ static std::string buildGptOssPrompt(const std::vector<ChatMessage>& messages) {
 static std::string cleanGptOssOutput(const std::string& output) {
     std::string result = output;
 
-    // gpt-ossの特殊トークンリスト
+    // gpt-ossおよびChatMLの特殊トークンリスト
     const std::vector<std::string> tokens_to_remove = {
+        // gpt-oss tokens
         "<|start|>", "<|end|>", "<|message|>", "<|channel|>",
         "<|startoftext|>", "<|endoftext|>", "<|return|>", "<|call|>",
-        "<|constrain|>", "<|endofprompt|>"
+        "<|constrain|>", "<|endofprompt|>",
+        // ChatML tokens
+        "<|im_start|>", "<|im_end|>", "<|assistant>", "<|user>", "<|system>",
+        // Common control tokens
+        "<|eot_id|>", "</s>", "<s>", "<|begin_of_text|>", "<|end_of_text|>"
     };
 
     // 特殊トークンを除去
@@ -125,21 +130,41 @@ static std::string cleanGptOssOutput(const std::string& output) {
         }
     }
 
-    // チャンネル名やロール名を単独で除去（行頭や空白後）
+    // チャンネル名やロール名を含むパターンを除去
+    // 例: "assistantanalysis:", "analysis:", "final:", "assistantfinal:", etc.
+    const std::vector<std::string> channel_patterns = {
+        // 連結パターン（優先度高）
+        "assistantanalysis:", "assistantfinal:", "assistantcommentary:",
+        "useranalysis:", "userfinal:", "usercommentary:",
+        "systemanalysis:", "systemfinal:", "systemcommentary:",
+        // 単独パターン
+        "analysis:", "final:", "commentary:",
+        "assistant:", "user:", "system:", "developer:",
+        // "=name" パターン
+        "=assistant", "=analysis", "=final", "=commentary",
+        "=user", "=system", "=developer"
+    };
+    for (const auto& pattern : channel_patterns) {
+        size_t pos = 0;
+        while ((pos = result.find(pattern, pos)) != std::string::npos) {
+            result.erase(pos, pattern.length());
+        }
+    }
+
+    // 行頭のチャンネル名（コロンなし）を除去
     const std::vector<std::string> channel_names = {
         "assistant", "analysis", "final", "commentary", "user", "system", "developer"
     };
     for (const auto& name : channel_names) {
-        // "=name" パターンを除去（特殊トークン直後）
-        std::string eq_pattern = "=" + name;
+        // 行頭の "name\n" パターン
+        std::string line_pattern = "\n" + name + "\n";
         size_t pos = 0;
-        while ((pos = result.find(eq_pattern, pos)) != std::string::npos) {
-            // 前の文字が英数字でない場合のみ除去
-            if (pos == 0 || !std::isalnum(static_cast<unsigned char>(result[pos - 1]))) {
-                result.erase(pos, eq_pattern.length());
-            } else {
-                pos++;
-            }
+        while ((pos = result.find(line_pattern, pos)) != std::string::npos) {
+            result.erase(pos + 1, name.length() + 1);  // 最初の\nは残す
+        }
+        // 文字列先頭の場合
+        if (result.find(name + "\n") == 0) {
+            result.erase(0, name.length() + 1);
         }
     }
 
@@ -189,7 +214,7 @@ static std::string applyModelChatTemplate(
     llama_model* model,
     const std::vector<ChatMessage>& messages) {
 
-    // gpt-ossモデルの場合は専用テンプレートを使用
+    // gpt-ossモデルの場合はgpt-oss専用形式を使用
     if (isGptOssModel(model)) {
         spdlog::info("Detected gpt-oss model, using gpt-oss chat format");
         return buildGptOssPrompt(messages);
@@ -314,6 +339,12 @@ std::string InferenceEngine::generateChat(
     }
 
     // 6. トークン化
+    // gpt-ossモデルはadd_bos_token=falseを指定しているため、
+    // add_special=falseに設定。parse_special=trueで特殊トークンを認識させる。
+    bool is_gptoss = isGptOssModel(model);
+    bool add_special = !is_gptoss;  // gpt-oss以外はBOS追加
+    bool parse_special = is_gptoss; // gpt-ossは特殊トークンをパース
+
     std::vector<llama_token> tokens(prompt.size() + 128);
     int32_t n_tokens = llama_tokenize(
         vocab,
@@ -321,8 +352,8 @@ std::string InferenceEngine::generateChat(
         static_cast<int32_t>(prompt.size()),
         tokens.data(),
         static_cast<int32_t>(tokens.size()),
-        true,   // add_special (BOS)
-        false   // parse_special
+        add_special,
+        parse_special
     );
 
     if (n_tokens < 0) {
@@ -334,8 +365,8 @@ std::string InferenceEngine::generateChat(
             static_cast<int32_t>(prompt.size()),
             tokens.data(),
             static_cast<int32_t>(tokens.size()),
-            true,
-            false
+            add_special,
+            parse_special
         );
     }
 
@@ -546,16 +577,22 @@ std::vector<std::string> InferenceEngine::generateChatStream(
     const llama_vocab* vocab = llama_model_get_vocab(model);
     std::string prompt = applyModelChatTemplate(model, messages);
 
+    // gpt-ossモデルはadd_bos_token=falseを指定しているため、
+    // add_special=falseに設定。parse_special=trueで特殊トークンを認識させる。
+    bool is_gptoss = isGptOssModel(model);
+    bool add_special = !is_gptoss;  // gpt-oss以外はBOS追加
+    bool parse_special = is_gptoss; // gpt-ossは特殊トークンをパース
+
     std::vector<llama_token> tokens(prompt.size() + 128);
     int32_t n_tokens = llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-        tokens.data(), static_cast<int32_t>(tokens.size()), true, false);
+        tokens.data(), static_cast<int32_t>(tokens.size()), add_special, parse_special);
 
     if (n_tokens < 0) {
         tokens.resize(static_cast<size_t>(-n_tokens));
         n_tokens = llama_tokenize(
             vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-            tokens.data(), static_cast<int32_t>(tokens.size()), true, false);
+            tokens.data(), static_cast<int32_t>(tokens.size()), add_special, parse_special);
     }
 
     tokens.resize(static_cast<size_t>(n_tokens));

@@ -528,3 +528,146 @@ node/
 - ハートビートは10秒間隔で送信
 - TDDサイクルを厳守（テスト→実装→リファクタリング）
 - semantic-releaseによる自動バージョニング
+
+---
+
+## 現在の課題: gpt-oss モデルチャット出力問題 (2025-12-02)
+
+### 問題の概要
+
+gpt-oss:20b モデルを使用した `/v1/chat/completions` API のレスポンスが意味不明なテキストになる。
+
+**症状例:**
+
+```
+"We need 's think step=analysisWe have the user wants to craft a problem..."
+```
+
+モデルが「final」チャンネルではなく「analysis」（推論）チャンネルの内容を出力している。
+
+### 経緯
+
+#### 1. 元々の問題: ChatMLフォールバック削除 (コミット 5658099)
+
+以前の実装では `llama_chat_apply_template` を使用し、テンプレートが無い場合は ChatML 形式にフォールバックしていた。
+このフォールバックが削除され、gpt-oss のような独自フォーマットを持つモデルで問題が発生。
+
+#### 2. gpt-oss フォーマットの実装
+
+gpt-oss モデル用の専用プロンプトビルダー `buildGptOssPrompt` を実装:
+
+```cpp
+// gpt-oss の特殊トークン形式
+<|start|>system<|message|>You are a helpful assistant.
+
+Reasoning: none<|end|>
+<|start|>user<|message|>こんにちは<|end|>
+<|start|>assistant<|channel|>final<|message|>
+```
+
+#### 3. トークナイゼーション問題の発見
+
+gpt-oss モデルのメタデータ:
+
+```
+tokenizer.ggml.add_bos_token = false
+tokenizer.ggml.add_eos_token = false
+general.architecture = gptoss
+```
+
+しかし、コードでは:
+
+```cpp
+// 問題のあったコード
+bool add_special = true;    // ← BOSトークンを追加していた（モデルは不要と指定）
+bool parse_special = false; // ← 特殊トークンをパースしていなかった
+```
+
+#### 4. トークナイゼーション修正（2025-12-02）
+
+```cpp
+// 修正後のコード
+bool is_gptoss = isGptOssModel(model);
+bool add_special = !is_gptoss;  // gpt-oss はBOS不要
+bool parse_special = is_gptoss; // gpt-oss は特殊トークンをパース
+```
+
+### 現在のステータス
+
+**修正済み:**
+
+- [x] gpt-oss モデル検出ロジック
+- [x] gpt-oss 専用プロンプトフォーマット
+- [x] トークナイゼーションパラメータ (`add_special=false`, `parse_special=true`)
+- [x] ノード再ビルド
+
+**未解決:**
+
+- [ ] モデルが `<|channel|>final` 指示を無視している
+- [ ] `Reasoning: none` システムプロンプトが効いていない
+- [ ] analysis チャンネルの内容が出力される
+
+### 根本原因の分析
+
+gpt-oss モデルはマルチチャンネル推論システムを持つ:
+
+- `analysis`: 内部推論プロセス（非公開にすべき）
+- `final`: 最終回答（ユーザーに表示すべき）
+- `commentary`: 補足説明
+
+現在の問題:
+
+1. プロンプトで `<|channel|>final<|message|>` と指定しているが、モデルが無視
+2. `Reasoning: none` でanalysisを無効化しようとしているが効果なし
+3. 出力に `step=analysis` が含まれる → analysis チャンネルが出力されている
+
+### 今後の計画
+
+#### 短期対策（即時）
+
+1. **出力後処理の強化**
+   - analysis チャンネルの内容を検出して除去
+   - `<|channel|>final` 以降の内容のみを抽出
+   - `step=analysis` などの推論マーカーを除去
+
+2. **プロンプト調整**
+   - システムプロンプトで明示的に推論を禁止
+   - `<|channel|>final` の前に改行を追加
+   - 別のチャンネル指定方法を試行
+
+#### 中期対策
+
+1. **モデル出力のデバッグ**
+   - 生成されたトークンをログ出力
+   - どの時点で analysis チャンネルに入っているか特定
+   - EOGトークンの検出状況を確認
+
+2. **gpt-oss ドキュメント参照**
+   - モデル公式のチャット形式仕様を確認
+   - 推論無効化の正しい方法を調査
+
+#### 長期対策
+
+1. **チャンネル分離処理の実装**
+   - モデル出力をチャンネルごとに分離
+   - final チャンネルのみをAPIレスポンスに含める
+   - analysis/commentary は内部ログに出力
+
+### 関連ファイル
+
+- `node/src/core/inference_engine.cpp`: 推論エンジン本体
+  - `buildGptOssPrompt()`: gpt-oss プロンプト構築
+  - `cleanupGptOssOutput()`: 出力クリーンアップ
+  - `isGptOssModel()`: モデル検出
+  - `generateChat()`: 非ストリーミング生成
+  - `generateChatStream()`: ストリーミング生成
+
+### 参考: モデルメタデータ
+
+```
+general.architecture = gptoss
+tokenizer.ggml.add_bos_token = false
+tokenizer.ggml.add_eos_token = false
+EOG tokens: 199999 ('<|endoftext|>'), 200002 ('<|return|>'), 200012 ('<|call|>')
+Note: '<|end|>' は return/call トークンがあるため EOG から除外
+```
