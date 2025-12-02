@@ -39,6 +39,7 @@ struct RemoteModel {
     std::string id;
     std::string path;
     std::string download_url;
+    std::string chat_template;
 };
 
 class ModelSync {

@@ -92,6 +92,7 @@ std::vector<RemoteModel> ModelSync::fetchRemoteModels() {
                 rm.id = m["id"].get<std::string>();
                 rm.path = m.value("path", "");
                 rm.download_url = m.value("download_url", "");
+                rm.chat_template = m.value("chat_template", "");
 
                 if (m.contains("etag") && m["etag"].is_string()) {
                     setCachedEtag(rm.id, m["etag"].get<std::string>());
@@ -225,6 +226,16 @@ ModelSyncResult ModelSync::sync() {
                     auto filename = ModelStorage::modelNameToDir(id) + "/model.gguf";
                     auto out = downloader.downloadBlob(info.download_url, filename, nullptr);
                     ok = !out.empty();
+                }
+
+                // metadata (chat_template)
+                if (ok && !info.chat_template.empty()) {
+                    auto meta_dir = fs::path(models_dir_) / ModelStorage::modelNameToDir(id);
+                    auto meta_path = meta_dir / "metadata.json";
+                    nlohmann::json meta;
+                    meta["chat_template"] = info.chat_template;
+                    std::ofstream ofs(meta_path, std::ios::binary | std::ios::trunc);
+                    ofs << meta.dump();
                 }
             }
 

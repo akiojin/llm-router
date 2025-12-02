@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <thread>
 #include <filesystem>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include "runtime/state.h"
 #include "utils/logger.h"
@@ -46,6 +47,7 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
             // optional fields from request
             std::string path = j.value("path", "");
             std::string download_url = j.value("download_url", "");
+            std::string chat_template = j.value("chat_template", "");
 
             // helper: model name -> dir (colon to underscore, append _latest when tagなし)
             auto modelNameToDir = [](const std::string& name) {
@@ -57,7 +59,7 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
                 return dir;
             };
 
-            std::thread([sync, client, model_name, task_id, path, download_url, modelNameToDir]() {
+            std::thread([sync, client, model_name, task_id, path, download_url, chat_template, modelNameToDir]() {
                 spdlog::info("Starting model pull: model={}, task_id={}, path='{}', download_url='{}'",
                               model_name, task_id, path, download_url);
 
@@ -96,6 +98,17 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
                 }
 
                 if (success) {
+                    // persist chat_template if provided
+                    if (!chat_template.empty()) {
+                        std::error_code ec;
+                        std::filesystem::create_directories(target_dir, ec);
+                        if (!ec) {
+                            nlohmann::json meta;
+                            meta["chat_template"] = chat_template;
+                            std::ofstream ofs(target_dir / "metadata.json", std::ios::binary | std::ios::trunc);
+                            ofs << meta.dump();
+                        }
+                    }
                     spdlog::info("Model pull complete: model={}, task_id={}", model_name, task_id);
                     client->reportProgress(task_id, 1.0, std::nullopt);
                 } else {

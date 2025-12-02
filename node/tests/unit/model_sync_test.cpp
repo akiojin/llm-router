@@ -110,6 +110,39 @@ TEST(ModelSyncTest, ReportsStatusTransitionsAndLastResult) {
     server.stop();
 }
 
+TEST(ModelSyncTest, CopiesSharedPathWhenAvailable) {
+    // Prepare shared model file
+    TempDirGuard shared_guard;
+    fs::create_directories(shared_guard.path);
+    auto shared_file = shared_guard.path / "model.gguf";
+    {
+        std::ofstream ofs(shared_file);
+        ofs << "abc";
+    }
+
+    // HTTP server returning /v1/models with path pointing to shared_file
+    ModelServer server;
+    server.response_body = std::string(R"({"data":[{"id":"gpt-oss:7b","path":"")") + shared_file.string() + R"("}]})";
+    server.start(18087);
+
+    TempDirGuard local_guard;
+    ModelSync sync("http://127.0.0.1:18087", local_guard.path.string());
+
+    auto result = sync.sync();
+
+    server.stop();
+
+    // Should not queue download because shared path was copied
+    EXPECT_TRUE(result.to_download.empty());
+
+    auto target = local_guard.path / "gpt-oss_7b" / "model.gguf";
+    EXPECT_TRUE(fs::exists(target));
+    std::ifstream ifs(target);
+    std::string content;
+    ifs >> content;
+    EXPECT_EQ(content, "abc");
+}
+
 TEST(ModelSyncTest, PrioritiesControlConcurrencyAndOrder) {
     const int port = 18110;
     httplib::Server server;

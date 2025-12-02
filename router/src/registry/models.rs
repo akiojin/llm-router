@@ -45,6 +45,9 @@ pub struct ModelInfo {
     /// 共有ストレージ上のモデルパス（存在する場合のみ）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// 外部から提供されるchat_template（GGUFに含まれない場合の補助）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template: Option<String>,
     /// HFリポジトリ名
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repo: Option<String>,
@@ -77,6 +80,7 @@ impl ModelInfo {
             source: ModelSource::Predefined,
             download_url: None,
             path: None,
+            chat_template: None,
             repo: None,
             filename: None,
             last_modified: None,

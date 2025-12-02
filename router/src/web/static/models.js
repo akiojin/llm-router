@@ -135,6 +135,20 @@ async function registerModel(repo, filename, displayName) {
   return response.json();
 }
 
+async function pullModelFromHf(repo, filename, chatTemplate) {
+  const payload = { repo, filename, chat_template: chatTemplate };
+  const response = await fetch('/api/models/pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const txt = await response.text();
+    throw new Error(txt || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 /**
  * POST /api/models/distribute - Distribute model
  */
@@ -468,9 +482,9 @@ function renderHfModelCard(model) {
     '</div>',
     `
       <div class="model-card__actions">
-        <button class="btn btn-small" data-action="register" data-repo="${escapeHtml(
+        <button class="btn btn-small" data-action="pull" data-repo="${escapeHtml(
           repo
-        )}" data-file="${escapeHtml(filename)}">Register</button>
+        )}" data-file="${escapeHtml(filename)}">Pull</button>
       </div>
     </div>`
   );
@@ -552,16 +566,17 @@ function renderHfModels(models) {
     return;
   }
   container.innerHTML = filtered.map((m) => renderHfModelCard(m)).join('');
-  container.querySelectorAll('button[data-action="register"]').forEach((btn) => {
+  container.querySelectorAll('button[data-action="pull"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const repo = btn.dataset.repo;
       const file = btn.dataset.file;
       try {
-        await registerModel(repo, file, `${repo}/${file}`);
+        await pullModelFromHf(repo, file, null);
         await refreshRegisteredModels();
-        showSuccess('Registered model');
+        showSuccess('Pulled model to router');
       } catch (e) {
         console.error(e);
+        showError(e.message || 'Failed to pull model');
       }
     });
   });

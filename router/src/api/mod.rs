@@ -141,6 +141,7 @@ pub fn create_router(state: AppState) -> Router {
         // モデル管理API (SPEC-8ae67d67)
         .route("/api/models/available", get(models::get_available_models))
         .route("/api/models/register", post(models::register_model))
+        .route("/api/models/pull", post(models::pull_model_from_hf))
         .route("/api/models/loaded", get(models::get_loaded_models))
         .route("/api/models/distribute", post(models::distribute_models))
         .route("/api/models/download", post(models::distribute_models))

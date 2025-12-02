@@ -133,6 +133,9 @@ pub async fn list_models(State(_state): State<AppState>) -> Result<Response, App
         if let Some(url) = m.download_url.clone() {
             obj["download_url"] = json!(url);
         }
+        if let Some(tpl) = m.chat_template.clone() {
+            obj["chat_template"] = json!(tpl);
+        }
         data.push(obj);
     }
 
@@ -190,6 +193,9 @@ pub async fn get_model(
     if let Some(model) = all.into_iter().find(|m| m.name == body["id"]) {
         if let Some(url) = model.download_url {
             body["download_url"] = json!(url);
+        }
+        if let Some(tpl) = model.chat_template {
+            body["chat_template"] = json!(tpl);
         }
     }
 
