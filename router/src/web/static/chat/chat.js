@@ -55,6 +55,7 @@
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
     sidebarToggleMobile: document.getElementById("sidebar-toggle-mobile"),
+    apiKeyInput: document.getElementById("api-key-input"),
   };
   dom.providerButtons = dom.providerToggle
     ? Array.from(dom.providerToggle.querySelectorAll(".provider-btn"))
@@ -289,6 +290,7 @@
       const settings = {
         streamEnabled: dom.streamToggle?.checked ?? false,
         appendSystem: dom.appendSystem?.checked ?? true,
+        apiKey: dom.apiKeyInput?.value || "",
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (_err) {
@@ -306,6 +308,9 @@
       }
       if (dom.appendSystem && typeof settings.appendSystem === "boolean") {
         dom.appendSystem.checked = settings.appendSystem;
+      }
+      if (dom.apiKeyInput && typeof settings.apiKey === "string") {
+        dom.apiKeyInput.value = settings.apiKey;
       }
     } catch (_err) {
       // 復元失敗は無視
@@ -688,10 +693,19 @@
     }
   }
 
+  function getAuthHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const apiKey = dom.apiKeyInput?.value?.trim();
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    return headers;
+  }
+
   async function postChat(payload, signal) {
     const res = await fetch(state.endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(payload),
       signal,
     });
@@ -708,7 +722,7 @@
     state.controller = controller;
     const res = await fetch(state.endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -949,6 +963,7 @@
     });
     dom.streamToggle?.addEventListener("change", persistSettings);
     dom.appendSystem?.addEventListener("change", persistSettings);
+    dom.apiKeyInput?.addEventListener("change", persistSettings);
     dom.newChat?.addEventListener("click", () => createSession());
     dom.newChatInline?.addEventListener("click", () => createSession());
     if (dom.sessionList) {
