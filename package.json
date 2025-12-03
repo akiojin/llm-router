@@ -1,6 +1,6 @@
 {
   "name": "llm-router-release",
-  "version": "2.2.0",
+  "version": "2.3.1",
   "description": "Centralized management system for routing LLM inference nodes across multiple machines.",
   "private": true,
   "packageManager": "pnpm@10.20.0",
