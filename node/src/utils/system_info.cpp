@@ -13,7 +13,7 @@
 #include <unistd.h>
 #endif
 
-namespace ollama_node {
+namespace llm_node {
 
 static uint64_t get_total_memory_bytes() {
 #if defined(_WIN32)
@@ -84,4 +84,4 @@ std::string format_system_info(const SystemInfo& info) {
     return oss.str();
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

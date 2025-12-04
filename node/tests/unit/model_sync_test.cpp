@@ -8,7 +8,7 @@
 
 #include "models/model_sync.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 namespace fs = std::filesystem;
 
 class ModelServer {

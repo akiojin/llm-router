@@ -16,10 +16,12 @@ pub struct RegisterRequest {
     pub machine_name: String,
     /// IPアドレス
     pub ip_address: IpAddr,
-    /// Ollamaバージョン
-    pub ollama_version: String,
-    /// Ollamaポート番号
-    pub ollama_port: u16,
+    /// ランタイムバージョン（llama.cpp）
+    #[serde(rename = "runtime_version", alias = "runtime_version")]
+    pub runtime_version: String,
+    /// ランタイムポート番号（推論用）
+    #[serde(rename = "runtime_port", alias = "runtime_port")]
+    pub runtime_port: u16,
     /// GPU利用可能フラグ
     pub gpu_available: bool,
     /// GPUデバイス情報
@@ -113,7 +115,7 @@ pub struct HealthCheckRequest {
     pub ready_models: Option<(u8, u8)>,
 }
 
-/// Ollamaチャットリクエスト
+/// LLM runtimeチャットリクエスト
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatRequest {
     /// モデル名
@@ -212,8 +214,8 @@ mod tests {
         let request = RegisterRequest {
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "NVIDIA RTX 4090".to_string(),

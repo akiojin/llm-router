@@ -16,7 +16,6 @@ set(INTEGRATION_TEST_SOURCES
     ../../src/models/model_registry.cpp
     ../../src/models/model_sync.cpp
     ../../src/models/model_downloader.cpp
-    ../../src/models/ollama_compat.cpp
     ../../src/models/model_storage.cpp
     ../../src/models/model_repair.cpp
     ../../src/metrics/prometheus_exporter.cpp

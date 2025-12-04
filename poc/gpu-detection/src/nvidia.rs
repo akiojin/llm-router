@@ -52,7 +52,7 @@ pub fn detect_nvidia() -> NvidiaDetectionResult {
         result.details.push("✗ /proc/driver/nvidia/version not found".to_string());
     }
 
-    // Method 3: Check library paths (like Ollama does)
+    // Method 3: Check library paths (like LLM runtime does)
     result.details.push("\n=== Method 3: Library Search ===".to_string());
     let library_patterns = vec![
         "/usr/local/cuda/lib64/libnvidia-ml.so*",

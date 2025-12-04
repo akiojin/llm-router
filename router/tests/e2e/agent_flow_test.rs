@@ -50,8 +50,8 @@ async fn test_complete_agent_flow() {
     let register_request = RegisterRequest {
         machine_name: "test-agent".to_string(),
         ip_address: IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 100)),
-        ollama_version: "0.1.0".to_string(),
-        ollama_port: 11434,
+        runtime_version: "0.1.0".to_string(),
+        runtime_port: 11434,
         gpu_available: true,
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
@@ -179,8 +179,8 @@ async fn test_agent_token_persistence() {
     let register_request = RegisterRequest {
         machine_name: "test-agent-2".to_string(),
         ip_address: IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 101)),
-        ollama_version: "0.1.0".to_string(),
-        ollama_port: 11434,
+        runtime_version: "0.1.0".to_string(),
+        runtime_port: 11434,
         gpu_available: true,
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
@@ -269,8 +269,8 @@ async fn test_list_nodes() {
     let register_request = RegisterRequest {
         machine_name: "list-test-node".to_string(),
         ip_address: IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 200)),
-        ollama_version: "0.1.0".to_string(),
-        ollama_port: 11434,
+        runtime_version: "0.1.0".to_string(),
+        runtime_port: 11434,
         gpu_available: true,
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),
@@ -342,8 +342,8 @@ async fn test_node_metrics_update() {
     let register_request = RegisterRequest {
         machine_name: "metrics-test-node".to_string(),
         ip_address: IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 201)),
-        ollama_version: "0.1.0".to_string(),
-        ollama_port: 11434,
+        runtime_version: "0.1.0".to_string(),
+        runtime_port: 11434,
         gpu_available: true,
         gpu_devices: vec![GpuDeviceInfo {
             model: "Test GPU".to_string(),

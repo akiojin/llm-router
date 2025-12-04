@@ -4,8 +4,8 @@
 
 ## 目的
 
-`ollama ps` コマンドは、モデルが実行中でない場合にGPU情報を返さないため、Agent起動時のGPU検出には使用できません。
-このPoCでは、Ollamaの実装を参考に、デバイスファイルやsysfs、システムコマンドを使用した代替検出方法を検証します。
+`runtime ps` コマンドは、モデルが実行中でない場合にGPU情報を返さないため、Agent起動時のGPU検出には使用できません。
+このPoCでは、LLM runtimeの実装を参考に、デバイスファイルやsysfs、システムコマンドを使用した代替検出方法を検証します。
 
 ## 検出方法
 
@@ -20,7 +20,7 @@
    - 存在すればNVIDIA GPUが利用可能
 
 3. **ライブラリ検索** (`libnvidia-ml.so*`)
-   - Ollamaと同様の検索パターンを使用
+   - LLM runtimeと同様の検索パターンを使用
    - 複数の標準パスを確認
 
 ### AMD GPU
@@ -30,7 +30,7 @@
    - ROCmインストール時に存在
 
 2. **KFD Topology (sysfs)** (`/sys/class/kfd/kfd/topology/nodes/*/properties`)
-   - Ollama v0.1.29+ で使用されている方法
+   - LLM runtime v0.1.29+ で使用されている方法
    - `vendor_id 0x1002` でAMD GPUを識別
    - ライブラリ不要で動作
 
@@ -105,7 +105,7 @@ Docker for Mac環境でも、`lscpu` と `/proc/cpuinfo` を使用してApple Si
 
 ### 変更内容
 
-1. `OllamaPsGpuCollector` を削除
+1. `LLM runtimePsGpuCollector` を削除
 2. PoCで検証した検出ロジックを各GPUコレクタに実装
 3. 検出優先順位:
    - NVIDIA: デバイスファイル → driver version → ライブラリ検索
@@ -115,7 +115,7 @@ Docker for Mac環境でも、`lscpu` と `/proc/cpuinfo` を使用してApple Si
 
 ## 参考
 
-- [Ollama GPU detection implementation](https://github.com/ollama/ollama)
+- [LLM runtime GPU detection implementation](https://github.com/runtime/runtime)
 - NVIDIA: `/gpu/gpu_linux.go`
 - AMD: `/gpu/amd_linux.go` (v0.1.29+)
 - Apple Silicon: `/gpu/cpu_common.go`

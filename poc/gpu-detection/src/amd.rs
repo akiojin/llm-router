@@ -24,7 +24,7 @@ pub fn detect_amd() -> AmdDetectionResult {
         result.details.push("✗ /dev/kfd not found".to_string());
     }
 
-    // Method 2: Check sysfs KFD topology (like Ollama v0.1.29+)
+    // Method 2: Check sysfs KFD topology (like LLM runtime v0.1.29+)
     result.details.push("\n=== Method 2: KFD Topology (sysfs) ===".to_string());
     let kfd_path = "/sys/class/kfd/kfd/topology/nodes";
 

@@ -248,7 +248,7 @@ std::unique_ptr<httplib::Client> makeClient(const ParsedUrl& url, std::chrono::m
 
 namespace fs = std::filesystem;
 
-namespace ollama_node {
+namespace llm_node {
 
 ModelDownloader::ModelDownloader(std::string registry_base, std::string models_dir,
                                  std::chrono::milliseconds timeout, int max_retries,
@@ -506,4 +506,4 @@ std::string ModelDownloader::downloadBlob(const std::string& blob_url, const std
     return "";
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

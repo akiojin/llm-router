@@ -7,12 +7,12 @@
 #include "utils/logger.h"
 #include "utils/system_info.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 TEST(LoggerTest, InitSetsLevelAndWritesToSink) {
     std::stringstream ss;
     auto sink = std::make_shared<spdlog::sinks::ostream_sink_mt>(ss);
-    ollama_node::logger::init("debug", "%v", "", {sink});
+    llm_node::logger::init("debug", "%v", "", {sink});
 
     spdlog::info("hello");
     EXPECT_EQ(spdlog::default_logger()->level(), spdlog::level::debug);

@@ -6,7 +6,7 @@
 #include <utility>
 #include <filesystem>
 
-namespace ollama_node {
+namespace llm_node {
 
 struct DownloadConfig {
     int max_retries{2};
@@ -34,4 +34,4 @@ struct NodeConfig {
 NodeConfig loadNodeConfig();
 std::pair<NodeConfig, std::string> loadNodeConfigWithLog();
 
-}  // namespace ollama_node
+}  // namespace llm_node

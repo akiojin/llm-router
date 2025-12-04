@@ -7,7 +7,7 @@
 #include "models/model_registry.h"
 #include "core/inference_engine.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 TEST(NodePrometheusTest, MetricsEndpointReturnsText) {
     ModelRegistry registry;
@@ -23,8 +23,8 @@ TEST(NodePrometheusTest, MetricsEndpointReturnsText) {
     ASSERT_TRUE(resp);
     EXPECT_EQ(resp->status, 200);
     EXPECT_EQ(resp->get_header_value("Content-Type"), "text/plain");
-    EXPECT_NE(resp->body.find("ollama_node_uptime_seconds"), std::string::npos);
-    EXPECT_NE(resp->body.find("ollama_node_pull_total"), std::string::npos);
+    EXPECT_NE(resp->body.find("llm_node_uptime_seconds"), std::string::npos);
+    EXPECT_NE(resp->body.find("llm_node_pull_total"), std::string::npos);
 
     server.stop();
 }

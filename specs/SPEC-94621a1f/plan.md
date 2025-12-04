@@ -162,7 +162,7 @@ agent/
 {
   "machine_name": "server-01",
   "ip_address": "192.168.1.100",
-  "ollama_version": "0.1.0",
+  "runtime_version": "0.1.0",
   "system_info": {
     "os": "Linux",
     "arch": "x86_64",
@@ -189,7 +189,7 @@ agent/
     "machine_name": "server-01",
     "ip_address": "192.168.1.100",
     "status": "Online",
-    "ollama_version": "0.1.0",
+    "runtime_version": "0.1.0",
     "registered_at": "2025-10-30T10:00:00Z",
     "last_seen": "2025-10-30T12:30:00Z"
   }
@@ -209,7 +209,7 @@ pub struct Agent {
     pub id: Uuid,
     pub machine_name: String,
     pub ip_address: String,
-    pub ollama_version: String,
+    pub runtime_version: String,
     pub status: AgentStatus,
     pub registered_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,

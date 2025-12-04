@@ -1,17 +1,17 @@
 groups:
   - name: llm-node
     rules:
-      - alert: OllamaNodeDown
+      - alert: LLM runtimeNodeDown
         expr: up{job="llm-node"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Ollama node is down"
-          description: "Ollama node exporter is not responding for more than 1 minute."
+          summary: "LLM runtime node is down"
+          description: "LLM runtime node exporter is not responding for more than 1 minute."
 
-      - alert: OllamaNodeNoPulls
-        expr: rate(ollama_node_pulls_total[10m]) == 0
+      - alert: LLM runtimeNodeNoPulls
+        expr: rate(runtime_node_pulls_total[10m]) == 0
         for: 10m
         labels:
           severity: warning

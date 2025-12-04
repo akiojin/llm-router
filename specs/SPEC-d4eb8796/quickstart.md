@@ -172,8 +172,8 @@ RESPONSE=$(curl -X POST http://localhost:8080/api/agents \
   -d '{
     "machine_name": "test-agent",
     "ip_address": "192.168.1.100",
-    "ollama_version": "0.1.0",
-    "ollama_port": 11434,
+    "runtime_version": "0.1.0",
+    "runtime_port": 11434,
     "gpu_available": true,
     "gpu_devices": [{
       "name": "NVIDIA RTX 3090",

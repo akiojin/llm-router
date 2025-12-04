@@ -62,8 +62,8 @@ Expose the port as configured (`-p 8080:8080`) and open the dashboard from the h
 | Export list            | Use “JSONエクスポート” or “CSVエクスポート” buttons to download the filtered list.                        |
 | View CPU/memory/GPU trend | Open “詳細” and scroll to the “メトリクス” section for CPU/メモリ/GPUの折れ線グラフ (latest 120 samples). |
 | Monitor GPU utilisation | The stats card “平均GPU使用率” displays the current average GPU utilisation and memory usage across all fresh agents. |
-| Override Ollama download | Set `LLM_DOWNLOAD_URL` (and optionally `LLM_PLATFORM` such as `linux-arm64`) when running the agent to force a specific binary. |
-| Auto model preload   | Agents now pull `gpt-oss:20b` automatically once Ollama is up. Override with `LLM_DEFAULT_MODEL`; adjust the pull timeout with `LLM_PULL_TIMEOUT_SECS`. |
+| Override LLM runtime download | Set `LLM_DOWNLOAD_URL` (and optionally `LLM_PLATFORM` such as `linux-arm64`) when running the agent to force a specific binary. |
+| Auto model preload   | Agents now pull `gpt-oss:20b` automatically once LLM runtime is up. Override with `LLM_DEFAULT_MODEL`; adjust the pull timeout with `LLM_PULL_TIMEOUT_SECS`. |
 | View loaded models    | The “モデル” column shows each agent’s reported models (top entry + preview). Open “詳細” to see the full, deduplicated list. |
 | Run multiple agents on one host | Launch each agent with a unique `LLM_PORT` (e.g. 11434, 12434…). The coordinator now treats ports on the same machine as distinct agents. |
 

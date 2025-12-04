@@ -15,8 +15,8 @@ async fn test_agent_registration_success() {
     let _request_body = json!({
         "machine_name": "test-machine",
         "ip_address": "192.168.1.100",
-        "ollama_version": "0.1.0",
-        "ollama_port": 11434
+        "runtime_version": "0.1.0",
+        "runtime_port": 11434
     });
 
     // Act: POST /api/nodes/register
@@ -43,7 +43,7 @@ async fn test_agent_registration_invalid_request() {
     // Arrange: 不正なリクエスト
     let _request_body = json!({
         "machine_name": "test-machine"
-        // ip_address, ollama_version, ollama_portが欠けている
+        // ip_address, runtime_version, runtime_portが欠けている
     });
 
     // Act: POST /api/nodes/register

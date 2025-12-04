@@ -105,7 +105,7 @@ export LLM_REPAIR_TIMEOUT_SECS=600  # 10分
 
 ```bash
 # 1. モデルファイルを破損させる（テスト用）
-echo "corrupted" > ~/.ollama/models/blobs/sha256-xxxx
+echo "corrupted" > ~/.runtime/models/blobs/sha256-xxxx
 
 # 2. リクエスト送信
 curl -X POST http://localhost:8081/v1/chat/completions \

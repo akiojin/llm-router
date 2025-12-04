@@ -41,7 +41,7 @@
 # Agent側で実行
 ./agent \
   --coordinator-url http://localhost:8080 \
-  --ollama-port 11434 \
+  --runtime-port 11434 \
   --agent-api-port 11435
 ```
 
@@ -123,7 +123,7 @@ curl http://localhost:8080/api/models/available
       "description": "Mistral AI's 7B parameter model"
     }
   ],
-  "source": "ollama_library"
+  "source": "runtime_library"
 }
 ```
 
@@ -200,7 +200,7 @@ curl -X POST http://localhost:8080/api/models/distribute \
 curl http://localhost:8080/api/models/available
 ```
 
-- Ollama公式ライブラリから取得したモデル一覧が表示されます
+- LLM runtime公式ライブラリから取得したモデル一覧が表示されます
 - モデル名、表示名、サイズ、説明が含まれます
 
 #### 2. 特定ノードのインストール済みモデルを確認
@@ -339,17 +339,17 @@ curl -X POST http://localhost:8080/api/models/distribute \
 
 **原因**:
 
-- ノード側でOllamaサービスが起動していない
+- ノード側でLLM runtimeサービスが起動していない
 - ネットワーク帯域が不足している
 
 **解決方法**:
 
-1. Ollamaサービスの起動を確認:
+1. LLM runtimeサービスの起動を確認:
 
    ```bash
-   systemctl status ollama
+   systemctl status runtime
    # または
-   ps aux | grep ollama
+   ps aux | grep runtime
    ```
 
 2. ダウンロード速度を確認:

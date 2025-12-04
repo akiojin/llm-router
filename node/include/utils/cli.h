@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace ollama_node {
+namespace llm_node {
 
 /// Result of CLI argument parsing
 struct CliResult {
@@ -33,4 +33,4 @@ std::string getHelpMessage();
 /// @return Version message string
 std::string getVersionMessage();
 
-}  // namespace ollama_node
+}  // namespace llm_node

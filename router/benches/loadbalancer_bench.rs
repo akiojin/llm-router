@@ -29,8 +29,8 @@ async fn setup_agents(count: usize) -> LoadManager {
             .register(RegisterRequest {
                 machine_name: format!("agent-{}", i),
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, (i / 256) as u8, (i % 256) as u8)),
-                ollama_version: "0.1.0".to_string(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".to_string(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),

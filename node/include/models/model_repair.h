@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace ollama_node {
+namespace llm_node {
 
 class ModelSync;
 class ModelDownloader;
@@ -120,4 +120,4 @@ private:
     static bool validateGgufHeader(const std::string& path);
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

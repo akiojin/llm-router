@@ -52,8 +52,8 @@ async fn test_auto_download_on_registration_16gb_gpu() {
     let register_payload = json!({
         "machine_name": "high-end-gpu-server",
         "ip_address": "192.168.1.100",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 4090", "count": 1, "memory": 16_000_000_000u64}
@@ -102,8 +102,8 @@ async fn test_auto_download_on_registration_8gb_gpu() {
     let register_payload = json!({
         "machine_name": "mid-range-gpu-server",
         "ip_address": "192.168.1.101",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 3060", "count": 1, "memory": 8_000_000_000u64}
@@ -147,8 +147,8 @@ async fn test_auto_download_on_registration_4_5gb_gpu() {
     let register_payload = json!({
         "machine_name": "entry-gpu-server",
         "ip_address": "192.168.1.102",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA GTX 1650", "count": 1, "memory": 4_500_000_000u64}
@@ -192,8 +192,8 @@ async fn test_auto_download_on_registration_small_gpu() {
     let register_payload = json!({
         "machine_name": "small-gpu-server",
         "ip_address": "192.168.1.103",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA GT 1030", "count": 1, "memory": 2_000_000_000u64}
@@ -237,8 +237,8 @@ async fn test_progress_display_during_download() {
     let register_payload = json!({
         "machine_name": "progress-test-server",
         "ip_address": "192.168.1.104",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 4090", "count": 1, "memory": 16_000_000_000u64}

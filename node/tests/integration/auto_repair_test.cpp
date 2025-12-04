@@ -12,7 +12,7 @@
 #include "models/model_storage.h"
 
 namespace fs = std::filesystem;
-using namespace ollama_node;
+using namespace llm_node;
 using namespace std::chrono_literals;
 
 class TempDirGuard {

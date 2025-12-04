@@ -171,7 +171,7 @@ impl NodeRegistry {
         // 同じマシン名のノードが既に存在するか確認
         let existing = nodes
             .values()
-            .find(|n| n.machine_name == req.machine_name && n.ollama_port == req.ollama_port)
+            .find(|n| n.machine_name == req.machine_name && n.runtime_port == req.runtime_port)
             .map(|n| n.id);
 
         let (node_id, status, node) = if let Some(id) = existing {
@@ -180,8 +180,8 @@ impl NodeRegistry {
             let now = Utc::now();
             let was_online = node.status == NodeStatus::Online;
             node.ip_address = req.ip_address;
-            node.ollama_version = req.ollama_version.clone();
-            node.ollama_port = req.ollama_port;
+            node.runtime_version = req.runtime_version.clone();
+            node.runtime_port = req.runtime_port;
             node.gpu_available = req.gpu_available;
             node.gpu_devices = req.gpu_devices.clone();
             node.gpu_count = req.gpu_count;
@@ -191,7 +191,7 @@ impl NodeRegistry {
             if !was_online || node.online_since.is_none() {
                 node.online_since = Some(now);
             }
-            node.agent_api_port = Some(req.ollama_port + 1);
+            node.agent_api_port = Some(req.runtime_port + 1);
             node.initializing = true;
             node.ready_models = Some((0, 0));
             (id, RegisterStatus::Updated, node.clone())
@@ -203,8 +203,8 @@ impl NodeRegistry {
                 id: node_id,
                 machine_name: req.machine_name,
                 ip_address: req.ip_address,
-                ollama_version: req.ollama_version,
-                ollama_port: req.ollama_port,
+                runtime_version: req.runtime_version,
+                runtime_port: req.runtime_port,
                 status: NodeStatus::Online,
                 registered_at: now,
                 last_seen: now,
@@ -220,7 +220,7 @@ impl NodeRegistry {
                 gpu_model_name: None,
                 gpu_compute_capability: None,
                 gpu_capability_score: None,
-                agent_api_port: Some(req.ollama_port + 1),
+                agent_api_port: Some(req.runtime_port + 1),
                 initializing: true,
                 ready_models: Some((0, 0)),
             };
@@ -235,7 +235,7 @@ impl NodeRegistry {
         Ok(RegisterResponse {
             node_id,
             status,
-            agent_api_port: Some(node.ollama_port + 1),
+            agent_api_port: Some(node.runtime_port + 1),
             auto_distributed_model: None,
             download_task_id: None,
             agent_token: None,
@@ -501,8 +501,8 @@ mod tests {
         let req = RegisterRequest {
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -524,8 +524,8 @@ mod tests {
         let req = RegisterRequest {
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -550,8 +550,8 @@ mod tests {
         let req1 = RegisterRequest {
             machine_name: "machine1".to_string(),
             ip_address: "192.168.1.100".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -562,8 +562,8 @@ mod tests {
         let req2 = RegisterRequest {
             machine_name: "machine2".to_string(),
             ip_address: "192.168.1.101".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -581,8 +581,8 @@ mod tests {
         let req = RegisterRequest {
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -603,8 +603,8 @@ mod tests {
         let req = RegisterRequest {
             machine_name: "settings-machine".to_string(),
             ip_address: "192.168.1.150".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -638,8 +638,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "delete-me".to_string(),
                 ip_address: "127.0.0.1".parse().unwrap(),
-                ollama_version: "0.1.0".to_string(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".to_string(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
@@ -660,8 +660,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "models".into(),
                 ip_address: "127.0.0.1".parse().unwrap(),
-                ollama_version: "0.1.0".into(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".into(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),

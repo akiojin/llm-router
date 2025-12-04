@@ -4,7 +4,7 @@
 #include <string>
 #include <memory>
 
-namespace ollama_node {
+namespace llm_node {
 
 struct GpuDevice {
     int id;
@@ -53,4 +53,4 @@ public:
 #endif
 };
 
-} // namespace ollama_node
+} // namespace llm_node

@@ -46,8 +46,8 @@ async fn dashboard_agents_include_gpu_devices() {
     let payload = json!({
         "machine_name": "dashboard-gpu",
         "ip_address": "10.1.0.50",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "Apple M3 Max", "count": 1}

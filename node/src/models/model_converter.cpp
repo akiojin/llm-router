@@ -4,7 +4,7 @@
 
 namespace fs = std::filesystem;
 
-namespace ollama_node {
+namespace llm_node {
 
 ModelConverter::ModelConverter(std::string workspace_dir) : workspace_(std::move(workspace_dir)) {}
 
@@ -56,4 +56,4 @@ std::string ModelConverter::writePlaceholder(const fs::path& src, const std::str
     return dest.string();
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

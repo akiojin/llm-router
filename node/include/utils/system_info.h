@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdint>
 
-namespace ollama_node {
+namespace llm_node {
 
 struct SystemInfo {
     std::string os;
@@ -16,4 +16,4 @@ struct SystemInfo {
 SystemInfo collect_system_info();
 std::string format_system_info(const SystemInfo& info);
 
-}  // namespace ollama_node
+}  // namespace llm_node

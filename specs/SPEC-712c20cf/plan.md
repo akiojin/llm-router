@@ -198,7 +198,7 @@ coordinator/
     "machine_name": "server-01",
     "ip_address": "192.168.1.100",
     "status": "Online",
-    "ollama_version": "0.1.0",
+    "runtime_version": "0.1.0",
     "registered_at": "2025-10-30T10:00:00Z",
     "last_seen": "2025-10-30T12:30:00Z",
     "uptime_seconds": 9000

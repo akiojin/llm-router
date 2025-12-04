@@ -2,7 +2,7 @@
 
 #include "core/inference_engine.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 // テスト専用ヘルパー（inference_engine.cppで定義）
 namespace ollama_node {

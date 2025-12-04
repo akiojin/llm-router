@@ -3,7 +3,7 @@
 
 #include "models/hf_client.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 namespace fs = std::filesystem;
 
 class TempHfDir {

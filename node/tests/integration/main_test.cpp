@@ -8,7 +8,7 @@
 
 #include "runtime/state.h"
 
-extern "C" int ollama_node_run_for_test();
+extern "C" int llm_node_run_for_test();
 
 using namespace std::chrono_literals;
 
@@ -16,7 +16,7 @@ class TempDir {
 public:
     TempDir() {
         auto base = std::filesystem::temp_directory_path();
-        path = base / ("ollama-main-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        path = base / ("llm-main-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         std::filesystem::create_directories(path);
     }
     ~TempDir() {
@@ -56,7 +56,7 @@ TEST(MainTest, RunsWithStubRouterAndShutsDownOnFlag) {
     setenv("LLM_HEARTBEAT_SECS", "1", 1);
 
     std::atomic<int> exit_code{0};
-    std::thread node_thread([&]() { exit_code = ollama_node_run_for_test(); });
+    std::thread node_thread([&]() { exit_code = llm_node_run_for_test(); });
 
     // wait for node to start and accept a health check
     {
@@ -69,7 +69,7 @@ TEST(MainTest, RunsWithStubRouterAndShutsDownOnFlag) {
         }
     }
 
-    ollama_node::request_shutdown();
+    llm_node::request_shutdown();
     node_thread.join();
 
     router.stop();
@@ -98,7 +98,7 @@ TEST(MainTest, FailsWhenRouterRegistrationFails) {
     setenv("LLM_HEARTBEAT_SECS", "1", 1);
 
     std::atomic<int> exit_code{0};
-    std::thread node_thread([&]() { exit_code = ollama_node_run_for_test(); });
+    std::thread node_thread([&]() { exit_code = llm_node_run_for_test(); });
     node_thread.join();
 
     router.stop();

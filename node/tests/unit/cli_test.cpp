@@ -8,7 +8,7 @@
 #include "utils/cli.h"
 #include "utils/version.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 // Test --help flag
 TEST(CliTest, HelpFlagShowsHelpMessage) {

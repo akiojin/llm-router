@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iomanip>
 
-namespace ollama_node {
+namespace llm_node {
 
 std::string generate_request_id() {
     static thread_local std::mt19937_64 rng{std::random_device{}()};
@@ -32,4 +32,4 @@ std::string generate_span_id() {
     return oss.str();
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

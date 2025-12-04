@@ -6,7 +6,7 @@
 #include "models/model_sync.h"
 #include "models/model_downloader.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 namespace fs = std::filesystem;
 
 class TempDirGuard {

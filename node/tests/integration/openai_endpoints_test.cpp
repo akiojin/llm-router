@@ -7,7 +7,7 @@
 #include "models/model_registry.h"
 #include "core/inference_engine.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 TEST(OpenAIEndpointsTest, ListsModelsAndRespondsToChat) {
     ModelRegistry registry;

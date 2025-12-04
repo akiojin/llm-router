@@ -4,7 +4,7 @@
 
 namespace {
 
-using ollama_node::GpuDetector;
+using llm_node::GpuDetector;
 
 TEST(GpuDetectorSmokeTest, DefaultsAreEmpty) {
     GpuDetector detector;
@@ -18,7 +18,7 @@ TEST(GpuDetectorSmokeTest, DefaultsAreEmpty) {
 TEST(GpuDetectorTest, TotalMemorySumsAvailableDevicesOnly) {
     GpuDetector detector;
 
-    std::vector<ollama_node::GpuDevice> devices = {
+    std::vector<llm_node::GpuDevice> devices = {
         {0, "NVIDIA A100", 40ull * 1024 * 1024 * 1024, "8.0", "nvidia", true},
         {1, "AMD Test", 16ull * 1024 * 1024 * 1024, "gfx1100", "amd", false},
         {2, "Apple M3", 8ull * 1024 * 1024 * 1024, "Metal3", "apple", true},
@@ -34,7 +34,7 @@ TEST(GpuDetectorTest, TotalMemorySumsAvailableDevicesOnly) {
 TEST(GpuDetectorTest, CapabilityScoreWeightsByVendorAndComputeCapability) {
     GpuDetector detector;
 
-    std::vector<ollama_node::GpuDevice> devices = {
+    std::vector<llm_node::GpuDevice> devices = {
         {0, "NVIDIA 8GB", 8ull * 1024 * 1024 * 1024, "8.6", "nvidia", true},
         {1, "AMD 16GB", 16ull * 1024 * 1024 * 1024, "gfx1100", "amd", true},
         {2, "Apple 4GB", 4ull * 1024 * 1024 * 1024, "Metal3", "apple", true},
@@ -55,7 +55,7 @@ TEST(GpuDetectorTest, RequireGpuReflectsAvailability) {
     detector.setDetectedDevicesForTest({});
     EXPECT_FALSE(detector.requireGpu());
 
-    std::vector<ollama_node::GpuDevice> devices = {
+    std::vector<llm_node::GpuDevice> devices = {
         {0, "NVIDIA", 8ull * 1024 * 1024 * 1024, "8.0", "nvidia", true},
         {1, "Disabled", 4ull * 1024 * 1024 * 1024, "5.0", "nvidia", false},
     };

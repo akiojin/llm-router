@@ -11,7 +11,7 @@
 #include "models/model_downloader.h"
 #include "api/router_client.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 NodeEndpoints::NodeEndpoints() : health_status_("ok") {}
 
@@ -20,7 +20,7 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
 
     server.Post("/pull", [this](const httplib::Request& req, httplib::Response& res) {
         pull_count_.fetch_add(1);
-        exporter_.inc_counter("ollama_node_pull_total", 1.0, "Number of pull requests received");
+        exporter_.inc_counter("llm_node_pull_total", 1.0, "Number of pull requests received");
 
         // Parse request JSON
         auto j = nlohmann::json::parse(req.body, nullptr, false);
@@ -125,8 +125,8 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
         res.set_content(body.dump(), "application/json");
     });
 
-    server.Get("/startup", [](const httplib::Request&, httplib::Response& res) {
-        if (ollama_node::is_ready()) {
+    server.Get("/startup", [this](const httplib::Request&, httplib::Response& res) {
+        if (llm_node::is_ready()) {
             res.set_content(R"({"status":"ready"})", "application/json");
         } else {
             res.status = 503;
@@ -147,11 +147,11 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
     server.Get("/metrics/prom", [this](const httplib::Request&, httplib::Response& res) {
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::steady_clock::now() - start_time_).count();
-        exporter_.set_gauge("ollama_node_uptime_seconds", static_cast<double>(uptime), "Node uptime in seconds");
-        exporter_.set_gauge("ollama_node_pulls_total", static_cast<double>(pull_count_.load()), "Total pull requests served");
-        exporter_.set_gauge("ollama_node_gpu_devices", static_cast<double>(gpu_devices_), "Detected GPU devices");
-        exporter_.set_gauge("ollama_node_gpu_memory_bytes", static_cast<double>(gpu_total_mem_), "Total GPU memory bytes");
-        exporter_.set_gauge("ollama_node_gpu_capability", gpu_capability_, "Aggregated GPU capability score");
+        exporter_.set_gauge("llm_node_uptime_seconds", static_cast<double>(uptime), "Node uptime in seconds");
+        exporter_.set_gauge("llm_node_pulls_total", static_cast<double>(pull_count_.load()), "Total pull requests served");
+        exporter_.set_gauge("llm_node_gpu_devices", static_cast<double>(gpu_devices_), "Detected GPU devices");
+        exporter_.set_gauge("llm_node_gpu_memory_bytes", static_cast<double>(gpu_total_mem_), "Total GPU memory bytes");
+        exporter_.set_gauge("llm_node_gpu_capability", gpu_capability_, "Aggregated GPU capability score");
         res.set_content(exporter_.render(), "text/plain");
     });
 
@@ -178,4 +178,4 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
     });
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

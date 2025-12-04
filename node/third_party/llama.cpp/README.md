@@ -202,7 +202,6 @@ Instructions for adding support for new models: [HOWTO-add-model.md](docs/develo
 - [cztomsik/ava](https://github.com/cztomsik/ava) (MIT)
 - [Dot](https://github.com/alexpinel/Dot) (GPL)
 - [eva](https://github.com/ylsdamxssjxxdd/eva) (MIT)
-- [iohub/collama](https://github.com/iohub/coLLaMA) (Apache-2.0)
 - [janhq/jan](https://github.com/janhq/jan) (AGPL)
 - [johnbean393/Sidekick](https://github.com/johnbean393/Sidekick) (MIT)
 - [KanTV](https://github.com/zhouwg/kantv?tab=readme-ov-file) (Apache-2.0)
@@ -221,7 +220,6 @@ Instructions for adding support for new models: [HOWTO-add-model.md](docs/develo
 - [Mozilla-Ocho/llamafile](https://github.com/Mozilla-Ocho/llamafile) (Apache-2.0)
 - [nat/openplayground](https://github.com/nat/openplayground) (MIT)
 - [nomic-ai/gpt4all](https://github.com/nomic-ai/gpt4all) (MIT)
-- [ollama/ollama](https://github.com/ollama/ollama) (MIT)
 - [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) (AGPL)
 - [PocketPal AI](https://github.com/a-ghorbani/pocketpal-ai) (MIT)
 - [psugihara/FreeChat](https://github.com/psugihara/FreeChat) (MIT)
@@ -238,7 +236,6 @@ Instructions for adding support for new models: [HOWTO-add-model.md](docs/develo
 <summary>Tools</summary>
 
 - [akx/ggify](https://github.com/akx/ggify) – download PyTorch models from HuggingFace Hub and convert them to GGML
-- [akx/ollama-dl](https://github.com/akx/ollama-dl) – download models from the Ollama library to be used directly with llama.cpp
 - [crashr/gppm](https://github.com/crashr/gppm) – launch llama.cpp instances utilizing NVIDIA Tesla P40 or P100 GPUs with reduced idle power consumption
 - [gpustack/gguf-parser](https://github.com/gpustack/gguf-parser-go/tree/main/cmd/gguf-parser) - review/check the GGUF file and estimate the memory usage
 - [Styled Lines](https://marketplace.unity.com/packages/tools/generative-ai/styled-lines-llama-cpp-model-292902) (proprietary licensed, async wrapper of inference part for game development in Unity3d with pre-built Mobile and Web platform wrappers and a model example)

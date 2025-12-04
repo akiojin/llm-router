@@ -250,8 +250,8 @@ mod tests {
             id: Uuid::new_v4(),
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             status: NodeStatus::Online,
             registered_at: now,
             last_seen: now,
@@ -303,8 +303,8 @@ mod tests {
             id: Uuid::new_v4(),
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             status: NodeStatus::Online,
             registered_at: now,
             last_seen: now,
@@ -354,8 +354,8 @@ mod tests {
             id: node_id,
             machine_name: "test-machine-1".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             status: NodeStatus::Online,
             registered_at: now,
             last_seen: now,
@@ -388,8 +388,8 @@ mod tests {
             id: node_id,
             machine_name: "test-machine-2".to_string(),
             ip_address: "192.168.1.101".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.2.0".to_string(),
-            ollama_port: 11435,
+            runtime_version: "0.2.0".to_string(),
+            runtime_port: 11435,
             status: NodeStatus::Offline,
             registered_at: updated,
             last_seen: updated,
@@ -420,7 +420,7 @@ mod tests {
         let loaded_nodes = load_nodes().await.unwrap();
         assert_eq!(loaded_nodes.len(), 1);
         assert_eq!(loaded_nodes[0].machine_name, "test-machine-2");
-        assert_eq!(loaded_nodes[0].ollama_port, 11435);
+        assert_eq!(loaded_nodes[0].runtime_port, 11435);
 
         std::env::remove_var("LLM_ROUTER_DATA_DIR");
     }

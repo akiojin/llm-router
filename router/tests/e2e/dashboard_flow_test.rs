@@ -188,8 +188,8 @@ async fn test_dashboard_nodes_with_registered_node() {
     let register_request = RegisterRequest {
         machine_name: "dashboard-test-node".to_string(),
         ip_address: IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 150)),
-        ollama_version: "0.1.0".to_string(),
-        ollama_port: 11434,
+        runtime_version: "0.1.0".to_string(),
+        runtime_port: 11434,
         gpu_available: true,
         gpu_devices: vec![GpuDeviceInfo {
             model: "RTX 4090".to_string(),

@@ -104,9 +104,9 @@ pub enum NodeError {
     #[error("Coordinatorへの接続に失敗しました: {0}")]
     CoordinatorConnection(String),
 
-    /// Ollamaへの接続エラー
-    #[error("Ollamaへの接続に失敗しました: {0}")]
-    OllamaConnection(String),
+    /// LLM runtimeへの接続エラー
+    #[error("LLM runtimeへの接続に失敗しました: {0}")]
+    RuntimeConnection(String),
 
     /// 登録エラー
     #[error("ノード登録に失敗しました: {0}")]

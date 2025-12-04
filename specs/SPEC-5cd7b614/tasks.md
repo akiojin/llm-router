@@ -7,7 +7,7 @@
 
 ### Phase 0: 技術リサーチ ✅
 
-- [x] Ollamaのソースコードを調査してGPU検出方法を確認
+- [x] LLM runtimeのソースコードを調査してGPU検出方法を確認
 - [x] PoCプロジェクトでGPU検出を検証
 - [x] research.mdに調査結果を記録
 

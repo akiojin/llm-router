@@ -51,9 +51,9 @@ get_decision() {
     [ "$decision" = "block" ]
 }
 
-# テストケース5: cd /ollama-coordinator → block (Worktree外、exit 2)
-@test "cd /ollama-coordinator is blocked (outside worktree)" {
-    run run_hook "cd /ollama-coordinator"
+# テストケース5: cd /runtime-coordinator → block (Worktree外、exit 2)
+@test "cd /runtime-coordinator is blocked (outside worktree)" {
+    run run_hook "cd /runtime-coordinator"
     [ "$status" -eq 2 ]
     decision=$(get_decision)
     [ "$decision" = "block" ]

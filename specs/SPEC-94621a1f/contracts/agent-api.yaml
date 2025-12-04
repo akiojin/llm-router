@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Ollama Coordinator Agent Registration API
+  title: LLM runtime Coordinator Agent Registration API
   description: エージェント自己登録システムAPI
   version: 1.0.0
   license:
@@ -33,7 +33,7 @@ paths:
                   hostname: "server-01"
                   ip_address: "192.168.1.10"
                   port: 11434
-                  ollama_version: "0.1.23"
+                  runtime_version: "0.1.23"
       responses:
         '200':
           description: 登録成功
@@ -84,7 +84,7 @@ paths:
                       hostname: "server-01"
                       ip_address: "192.168.1.10"
                       port: 11434
-                      ollama_version: "0.1.23"
+                      runtime_version: "0.1.23"
                       status: "Online"
                       last_heartbeat: "2025-10-30T12:00:00Z"
                       registered_at: "2025-10-30T10:00:00Z"
@@ -92,7 +92,7 @@ paths:
                       hostname: "server-02"
                       ip_address: "192.168.1.11"
                       port: 11434
-                      ollama_version: "0.1.23"
+                      runtime_version: "0.1.23"
                       status: "Offline"
                       last_heartbeat: "2025-10-30T11:50:00Z"
                       registered_at: "2025-10-30T11:00:00Z"
@@ -147,7 +147,7 @@ components:
         - hostname
         - ip_address
         - port
-        - ollama_version
+        - runtime_version
       properties:
         hostname:
           type: string
@@ -162,13 +162,13 @@ components:
         port:
           type: integer
           format: int32
-          description: Ollamaポート番号
+          description: LLM runtimeポート番号
           example: 11434
           minimum: 1
           maximum: 65535
-        ollama_version:
+        runtime_version:
           type: string
-          description: Ollamaバージョン
+          description: LLM runtimeバージョン
           example: "0.1.23"
           minLength: 1
 
@@ -200,7 +200,7 @@ components:
         - hostname
         - ip_address
         - port
-        - ollama_version
+        - runtime_version
         - status
         - last_heartbeat
         - registered_at
@@ -221,11 +221,11 @@ components:
         port:
           type: integer
           format: int32
-          description: Ollamaポート番号
+          description: LLM runtimeポート番号
           example: 11434
-        ollama_version:
+        runtime_version:
           type: string
-          description: Ollamaバージョン
+          description: LLM runtimeバージョン
           example: "0.1.23"
         status:
           type: string

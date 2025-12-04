@@ -110,7 +110,7 @@ async fn test_complete_api_key_flow() {
     assert!(!api_key.is_empty(), "API key should not be empty");
 
     // Step 3: APIキーを使ってエンドポイントにアクセス
-    // Note: APIキーはOpenAI互換エンドポイント(/v1/*)とOllama APIで使用される
+    // Note: APIキーはOpenAI互換エンドポイント(/v1/*)とLLM runtime APIで使用される
     // ここではOpenAI互換のchat/completionsエンドポイントをテスト
     let use_key_response = app
         .clone()

@@ -68,9 +68,9 @@ pub async fn register_node(
         .json(&json!({
             "machine_name": "stub-node",
             "ip_address": node_addr.ip().to_string(),
-            "ollama_version": "0.0.0-test",
-            // ノードAPIポートは ollama_port+1 という前提のため、APIポートから1引いた値を報告する
-            "ollama_port": node_addr.port().saturating_sub(1),
+            "runtime_version": "0.0.0-test",
+            // ノードAPIポートは runtime_port+1 という前提のため、APIポートから1引いた値を報告する
+            "runtime_port": node_addr.port().saturating_sub(1),
             "gpu_available": true,
             "gpu_devices": [
                 {"model": "Test GPU", "count": 1, "memory": 16_000_000_000u64}

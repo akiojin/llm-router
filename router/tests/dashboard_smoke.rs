@@ -129,8 +129,8 @@ async fn dashboard_agents_and_stats_reflect_registry() {
         .register(RegisterRequest {
             machine_name: "agent-smoke".into(),
             ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 42)),
-            ollama_version: "0.1.0".into(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".into(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
@@ -222,8 +222,8 @@ async fn dashboard_request_history_tracks_activity() {
         .register(RegisterRequest {
             machine_name: "history-agent".into(),
             ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)),
-            ollama_version: "0.1.0".into(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".into(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
@@ -279,8 +279,8 @@ async fn dashboard_overview_returns_combined_payload() {
         .register(RegisterRequest {
             machine_name: "overview-smoke".into(),
             ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 9)),
-            ollama_version: "0.1.0".into(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".into(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),
@@ -328,8 +328,8 @@ async fn dashboard_agent_metrics_endpoint_returns_history() {
         .register(RegisterRequest {
             machine_name: "metrics-endpoint".into(),
             ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 11)),
-            ollama_version: "0.1.0".into(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".into(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices("Test GPU"),
             gpu_count: Some(1),

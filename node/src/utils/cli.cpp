@@ -3,7 +3,7 @@
 #include <sstream>
 #include <cstring>
 
-namespace ollama_node {
+namespace llm_node {
 
 std::string getHelpMessage() {
     std::ostringstream oss;
@@ -83,4 +83,4 @@ CliResult parseCliArgs(int argc, char* argv[]) {
     return result;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

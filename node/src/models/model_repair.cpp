@@ -10,7 +10,7 @@
 
 namespace fs = std::filesystem;
 
-namespace ollama_node {
+namespace llm_node {
 
 ModelRepair::ModelRepair(ModelSync& sync, ModelDownloader& downloader, ModelStorage& storage)
     : sync_(sync), downloader_(downloader), storage_(storage) {}
@@ -161,4 +161,4 @@ void ModelRepair::completeRepairTask(const std::string& model_name, const Repair
     cv_.notify_all();
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

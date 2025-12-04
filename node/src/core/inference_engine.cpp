@@ -9,7 +9,7 @@
 #include <sstream>
 #include <chrono>
 
-namespace ollama_node {
+namespace llm_node {
 
 // 前方宣言
 static std::string stripControlTokens(std::string text);
@@ -871,4 +871,4 @@ ModelLoadResult InferenceEngine::loadModelWithRepair(const std::string& model_na
     return result;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

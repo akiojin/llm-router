@@ -30,10 +30,10 @@ pub struct DashboardNode {
     pub machine_name: String,
     /// IPアドレス（文字列化）
     pub ip_address: String,
-    /// Ollama バージョン
-    pub ollama_version: String,
-    /// Ollama ポート
-    pub ollama_port: u16,
+    /// LLM runtime バージョン
+    pub runtime_version: String,
+    /// LLM runtime ポート
+    pub runtime_port: u16,
     /// ステータス
     pub status: NodeStatus,
     /// 登録日時
@@ -268,8 +268,8 @@ async fn collect_nodes(state: &AppState) -> Vec<DashboardNode> {
                 id: agent.id,
                 machine_name: agent.machine_name,
                 ip_address: agent.ip_address.to_string(),
-                ollama_version: agent.ollama_version,
-                ollama_port: agent.ollama_port,
+                runtime_version: agent.runtime_version,
+                runtime_port: agent.runtime_port,
                 status: agent.status,
                 registered_at: agent.registered_at,
                 last_seen: agent.last_seen,
@@ -493,8 +493,8 @@ mod tests {
         let register_req = RegisterRequest {
             machine_name: "agent-01".into(),
             ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
-            ollama_version: "0.1.0".into(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".into(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),
@@ -538,7 +538,7 @@ mod tests {
         let agent = &body[0];
         assert_eq!(agent.machine_name, "agent-01");
         assert_eq!(agent.status, NodeStatus::Online);
-        assert_eq!(agent.ollama_port, 11434);
+        assert_eq!(agent.runtime_port, 11434);
         assert_eq!(agent.total_requests, 1);
         assert_eq!(agent.successful_requests, 1);
         assert_eq!(agent.failed_requests, 0);
@@ -558,8 +558,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "agent-01".into(),
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
-                ollama_version: "0.1.0".into(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".into(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
@@ -574,8 +574,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "agent-02".into(),
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
-                ollama_version: "0.1.0".into(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".into(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
@@ -639,8 +639,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "agent-history".into(),
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 11)),
-                ollama_version: "0.1.0".into(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".into(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
@@ -680,8 +680,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "overview".into(),
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 21)),
-                ollama_version: "0.1.0".into(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".into(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),
@@ -713,8 +713,8 @@ mod tests {
             .register(RegisterRequest {
                 machine_name: "metrics-agent".into(),
                 ip_address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 31)),
-                ollama_version: "0.1.0".into(),
-                ollama_port: 11434,
+                runtime_version: "0.1.0".into(),
+                runtime_port: 11434,
                 gpu_available: true,
                 gpu_devices: sample_gpu_devices(),
                 gpu_count: Some(1),

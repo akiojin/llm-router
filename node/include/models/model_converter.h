@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <functional>
 
-namespace ollama_node {
+namespace llm_node {
 
 class ModelConverter {
 public:
@@ -40,4 +40,4 @@ private:
     std::string writePlaceholder(const std::filesystem::path& src, const std::string& model_name);
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

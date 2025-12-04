@@ -4,7 +4,7 @@
 #include "models/model_registry.h"
 #include "core/inference_engine.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 using json = nlohmann::json;
 
@@ -144,4 +144,4 @@ bool OpenAIEndpoints::validateModel(const std::string& model, httplib::Response&
     return true;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

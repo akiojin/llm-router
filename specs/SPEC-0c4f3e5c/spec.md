@@ -1,26 +1,26 @@
-# Ollamaモデルストレージ形式サポート
+# LLM runtimeモデルストレージ形式サポート
 
 ## 概要
 
-C++ NodeのLlamaManagerがOllamaのネイティブモデルストレージ形式（blobファイル）を
+C++ NodeのLlamaManagerがLLM runtimeのネイティブモデルストレージ形式（blobファイル）を
 正しく認識・ロードできるようにする。
 
 ## ビジネス価値
 
-- Ollamaでプルしたモデルをそのまま使用できる
+- LLM runtimeでプルしたモデルをそのまま使用できる
 - ユーザーが手動でモデルファイルを変換・移動する必要がない
-- Ollamaエコシステムとのシームレスな統合
+- LLM runtimeエコシステムとのシームレスな統合
 
 ## ユーザーストーリー
 
-### US-1: Ollamaでプルしたモデルを使用したい
+### US-1: LLM runtimeでプルしたモデルを使用したい
 
-ユーザーとして、`ollama pull`でダウンロードしたモデルを
+ユーザーとして、`runtime pull`でダウンロードしたモデルを
 C++ Nodeでそのまま使用できる。
 
 **受け入れ条件**:
 
-- Ollamaのblobストレージ形式（`~/.ollama/models/blobs/sha256-<hash>`）を認識する
+- LLM runtimeのblobストレージ形式（`~/.runtime/models/blobs/sha256-<hash>`）を認識する
 - `.gguf`拡張子のファイルも引き続きサポートする
 - manifestファイルからblobパスを正しく解決する
 
@@ -31,16 +31,16 @@ C++ Nodeでそのまま使用できる。
 以下のモデルファイル形式をサポートする:
 
 1. **GGUFファイル**: `.gguf`拡張子を持つファイル
-2. **Ollama blobファイル**: `sha256-<64文字の16進数>`形式のファイル名
+2. **LLM runtime blobファイル**: `sha256-<64文字の16進数>`形式のファイル名
 
-### FR-2: Ollamaストレージ構造
+### FR-2: LLM runtimeストレージ構造
 
-Ollamaの標準ストレージ構造を理解し、以下のパスを解決できる:
+LLM runtimeの標準ストレージ構造を理解し、以下のパスを解決できる:
 
 ```text
-~/.ollama/models/
+~/.runtime/models/
 ├── manifests/
-│   └── registry.ollama.ai/
+│   └── registry.runtime.ai/
 │       └── library/
 │           └── <model>/
 │               └── <tag>    # JSON manifest
@@ -50,8 +50,8 @@ Ollamaの標準ストレージ構造を理解し、以下のパスを解決で�
 
 ### FR-3: Manifest解析
 
-Ollamaのmanifestファイル（JSON形式）を解析し、
-`application/vnd.ollama.image.model`タイプのレイヤーからblobパスを取得する。
+LLM runtimeのmanifestファイル（JSON形式）を解析し、
+`application/vnd.runtime.image.model`タイプのレイヤーからblobパスを取得する。
 
 ### FR-4: Digestフォーマット変換
 
@@ -72,16 +72,16 @@ blobファイル名（`sha256-xxxx`形式）に変換する。
 
 ## テスト要件
 
-### TDD-1: isOllamaBlobFile関数テスト
+### TDD-1: isLLM runtimeBlobFile関数テスト
 
-- 有効なOllama blobファイル名を正しく判定する
+- 有効なLLM runtime blobファイル名を正しく判定する
 - 無効なファイル名を拒否する
 - 境界ケース（空文字、短すぎる文字列など）を処理する
 
 ### TDD-2: loadModel関数テスト
 
 - `.gguf`ファイルをロードできる
-- Ollama blobファイルをロードできる
+- LLM runtime blobファイルをロードできる
 - 無効な形式を拒否する
 
 ### TDD-3: resolveModelPath関数テスト

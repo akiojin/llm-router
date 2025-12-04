@@ -23,8 +23,8 @@ async fn test_round_robin_load_balancing() {
             ip_address: format!("192.168.1.{}", 200 + idx)
                 .parse::<IpAddr>()
                 .unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -66,8 +66,8 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
         .register(RegisterRequest {
             machine_name: "high-cpu-agent".to_string(),
             ip_address: "192.168.2.10".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -85,8 +85,8 @@ async fn test_load_based_balancing_favors_low_cpu_agents() {
         .register(RegisterRequest {
             machine_name: "low-cpu-agent".to_string(),
             ip_address: "192.168.2.11".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -170,8 +170,8 @@ async fn test_load_based_balancing_prefers_lower_latency() {
         .register(RegisterRequest {
             machine_name: "slow-agent".to_string(),
             ip_address: "192.168.3.10".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -189,8 +189,8 @@ async fn test_load_based_balancing_prefers_lower_latency() {
         .register(RegisterRequest {
             machine_name: "fast-agent".to_string(),
             ip_address: "192.168.3.11".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),

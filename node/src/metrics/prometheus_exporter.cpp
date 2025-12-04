@@ -3,7 +3,7 @@
 #include <sstream>
 #include <algorithm>
 
-namespace ollama_node::metrics {
+namespace llm_node::metrics {
 
 void PrometheusExporter::set_gauge(const std::string& name, double value, const std::string& help) {
     std::lock_guard<std::mutex> lk(mu_);
@@ -48,4 +48,4 @@ std::string PrometheusExporter::render() const {
     return oss.str();
 }
 
-}  // namespace ollama_node::metrics
+}  // namespace llm_node::metrics

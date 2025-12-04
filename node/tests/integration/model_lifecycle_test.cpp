@@ -50,7 +50,7 @@ private:
 /// Integration test: verify the complete load/unload cycle for on-demand loading
 TEST(ModelLifecycleTest, LoadUnloadCycle) {
     TempModelDir tmp;
-    ollama_node::LlamaManager manager(tmp.path());
+    llm_node::LlamaManager manager(tmp.path());
 
     // Configure on-demand settings
     manager.setIdleTimeout(std::chrono::milliseconds(100));
@@ -84,7 +84,7 @@ TEST(ModelLifecycleTest, LoadUnloadCycle) {
 /// Integration test: verify LRU eviction policy with max model limit
 TEST(ModelLifecycleTest, LRUEvictionPolicy) {
     TempModelDir tmp;
-    ollama_node::LlamaManager manager(tmp.path());
+    llm_node::LlamaManager manager(tmp.path());
 
     // Set max loaded models to 1 (restrictive for testing)
     manager.setMaxLoadedModels(1);
@@ -100,7 +100,7 @@ TEST(ModelLifecycleTest, LRUEvictionPolicy) {
 /// Integration test: verify idle timeout configuration
 TEST(ModelLifecycleTest, IdleTimeoutConfiguration) {
     TempModelDir tmp;
-    ollama_node::LlamaManager manager(tmp.path());
+    llm_node::LlamaManager manager(tmp.path());
 
     // Test default timeout (5 minutes)
     EXPECT_EQ(manager.getIdleTimeout(), std::chrono::minutes(5));
@@ -117,7 +117,7 @@ TEST(ModelLifecycleTest, IdleTimeoutConfiguration) {
 /// Integration test: verify memory limit configuration
 TEST(ModelLifecycleTest, MemoryLimitConfiguration) {
     TempModelDir tmp;
-    ollama_node::LlamaManager manager(tmp.path());
+    llm_node::LlamaManager manager(tmp.path());
 
     // Test default (0 = unlimited)
     EXPECT_EQ(manager.getMaxMemoryBytes(), 0);
@@ -139,7 +139,7 @@ TEST(ModelLifecycleTest, MemoryLimitConfiguration) {
 /// Integration test: access time tracking
 TEST(ModelLifecycleTest, AccessTimeTracking) {
     TempModelDir tmp;
-    ollama_node::LlamaManager manager(tmp.path());
+    llm_node::LlamaManager manager(tmp.path());
 
     // No models loaded, access time should be nullopt
     auto access_time = manager.getLastAccessTime("nonexistent.gguf");

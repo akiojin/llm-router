@@ -11,7 +11,7 @@
 #include <windows.h>
 #endif
 
-namespace ollama_node {
+namespace llm_node {
 
 // 簡易ファイルロック（ベストエフォート）。
 // Unix: flock、Windows: LockFileEx、その他: lockディレクトリ作成。
@@ -102,4 +102,4 @@ inline void FileLock::release() {
     locked_ = false;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

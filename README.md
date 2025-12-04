@@ -10,7 +10,7 @@ LLM Router is a powerful centralized system that provides unified management and
 
 ## Key Features
 
-- **Unified API Endpoint**: Access multiple Ollama instances through a single URL
+- **Unified API Endpoint**: Access multiple LLM runtime instances through a single URL
 - **Automatic Load Balancing**: Intelligently distribute requests across available agents
 - **Automatic Failure Detection**: Detect offline agents and exclude them from distribution
 - **Real-time Monitoring**: Comprehensive visualization of agent states and performance metrics via web dashboard
@@ -99,7 +99,7 @@ npm run start:node
 |----------|---------|-------------|
 | `LLM_ROUTER_URL` | `http://127.0.0.1:8080` | Router URL to register with |
 | `LLM_NODE_PORT` | `11435` | Node listen port |
-| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | Model storage directory |
+| `LLM_NODE_MODELS_DIR` | `~/.runtime/models` | Model storage directory |
 | `LLM_NODE_BIND_ADDRESS` | `0.0.0.0` | Bind address |
 | `LLM_NODE_HEARTBEAT_SECS` | `10` | Heartbeat interval (seconds) |
 | `LLM_NODE_ALLOW_NO_GPU` | `false` | Allow running without GPU |
@@ -204,7 +204,7 @@ Agents can report their metrics to the Coordinator for load balancing decisions.
 ┌─────────┐        ┌─────────┐        ┌─────────┐
 │ Agent 1 │        │ Agent 2 │        │ Agent 3 │
 │         │        │         │        │         │
-│  Ollama │        │  Ollama │        │  Ollama │
+│  LLM runtime │        │  LLM runtime │        │  LLM runtime │
 │  (Auto) │        │  (Auto) │        │  (Auto) │
 └─────────┘        └─────────┘        └─────────┘
 Machine 1          Machine 2          Machine 3
@@ -216,7 +216,7 @@ LLM Router uses a **Proxy Pattern** - clients only need to know the Router URL.
 
 #### Traditional Method (Without Coordinator)
 ```bash
-# Direct access to each Ollama - manual distribution by users
+# Direct access to each LLM runtime - manual distribution by users
 curl http://machine1:11434/api/chat -d '...'
 curl http://machine2:11434/api/chat -d '...'
 curl http://machine3:11434/api/chat -d '...'
@@ -224,7 +224,7 @@ curl http://machine3:11434/api/chat -d '...'
 
 #### With Coordinator (Proxy)
 ```bash
-# Unified access to Coordinator - automatic distribution to optimal Ollama
+# Unified access to Coordinator - automatic distribution to optimal LLM runtime
 curl http://coordinator:8080/api/chat -d '...'
 curl http://coordinator:8080/api/chat -d '...'
 curl http://coordinator:8080/api/chat -d '...'
@@ -241,8 +241,8 @@ curl http://coordinator:8080/api/chat -d '...'
    ```
 
 2. **Coordinator Internal Processing**
-   - Select optimal Agent/Ollama (Load Balancing)
-   - Forward request to selected Agent's Ollama via HTTP client
+   - Select optimal Agent/LLM runtime (Load Balancing)
+   - Forward request to selected Agent's LLM runtime via HTTP client
 
 3. **Coordinator → Agent (Internal Communication)**
    ```
@@ -252,9 +252,9 @@ curl http://coordinator:8080/api/chat -d '...'
    {"model": "llama2", "messages": [...]}
    ```
 
-4. **Agent → Ollama → Agent (Local Processing)**
-   - Agent forwards request to local Ollama instance
-   - Ollama processes LLM and generates response
+4. **Agent → LLM runtime → Agent (Local Processing)**
+   - Agent forwards request to local LLM runtime instance
+   - LLM runtime processes LLM and generates response
 
 5. **Coordinator → Client (Return Response)**
    ```json
@@ -273,15 +273,15 @@ curl http://coordinator:8080/api/chat -d '...'
 > All responses follow the OpenAI Chat Completions API specification.
 
 **From Client's Perspective**:
-- Coordinator appears as the only Ollama API server
-- No need to be aware of multiple internal Ollama instances
+- Coordinator appears as the only LLM runtime API server
+- No need to be aware of multiple internal LLM runtime instances
 - Complete with a single HTTP request
 
 ### Benefits of Proxy Pattern
 
 1. **Unified Endpoint**
    - Clients only need to know the Coordinator URL
-   - No need to know each Agent/Ollama location
+   - No need to know each Agent/LLM runtime location
 
 2. **Transparent Load Balancing**
    - Coordinator automatically selects optimal agent
@@ -315,7 +315,7 @@ llm-router/
 │   │   ├── api/         # REST API handlers
 │   │   │   ├── agent.rs    # Agent registration & list
 │   │   │   ├── health.rs   # Health check receiver
-│   │   │   └── proxy.rs    # Ollama proxy
+│   │   │   └── proxy.rs    # LLM runtime proxy
 │   │   ├── registry/    # Agent state management
 │   │   ├── db/          # Database access
 │   │   └── main.rs
@@ -364,7 +364,7 @@ For a deeper walkthrough, including API references and customisation tips, see [
   - Automatically detected on startup
   - Docker for Mac: Apple Silicon detection supported
 - **Docker memory**: When running via `docker-compose`, allocate at least 16 GiB RAM to the container (`mem_limit: 16g`, `mem_reservation: 13g`, `memswap_limit: 18g`). On Docker Desktop, open **Settings → Resources** and raise the memory slider to ≥16 GiB before running `docker compose up`. Without this, large models such as `gpt-oss:20b` will fail to start with "requires more system memory" errors.
-- **Ollama**: Automatically downloaded and installed when not present
+- **LLM runtime**: Automatically downloaded and installed when not present
   - Progress display during download
   - Automatic retry on network errors
   - SHA256 checksum verification
@@ -373,7 +373,7 @@ For a deeper walkthrough, including API references and customisation tips, see [
   - Memory-based model selection (appropriate model size for available RAM)
   - Real-time progress display with streaming status updates
   - Automatic retry on network errors
-  - Models pulled via Ollama API
+  - Models pulled via LLM runtime API
 - **Management**: Browser-based WebUI dashboard for agent settings and monitoring
 
 ### Coordinator Setup
@@ -406,24 +406,24 @@ ROUTER_URL=http://coordinator-host:8080 ./target/release/llm-node
 ./target/release/llm-node
 ```
 
-**Note**: Ollama is automatically downloaded and installed on first startup if not already present. The agent will:
+**Note**: LLM runtime is automatically downloaded and installed on first startup if not already present. The agent will:
 - Detect the platform (Linux, macOS, Windows)
-- Download the appropriate Ollama binary
+- Download the appropriate LLM runtime binary
 - Verify integrity with SHA256 checksum
-- Install to `~/.ollama-agent/bin/`
+- Install to `~/.runtime-agent/bin/`
 - **Automatically download LLM models**:
   - Memory-based model selection (chooses appropriate model size)
   - Real-time progress display during model download
   - Automatic retry on network errors (configurable via environment variables)
   - Streaming response processing for live status updates
-- Start Ollama and register with the coordinator
+- Start LLM runtime and register with the coordinator
 
-Manual installation is also supported. Download Ollama from [ollama.ai](https://ollama.ai).
+Manual installation is also supported. Download LLM runtime from [runtime.ai](https://runtime.ai).
 
 #### System tray (Windows / macOS)
 
 - On Windows 10+ and macOS 12+, both the **agent** *and* the **coordinator** expose tray / menu bar icons when launched as binaries.
-- The agent tray icon behaves as before: double-click or **Open Settings** to launch the local settings panel, edit coordinator URL / Ollama port / heartbeat interval, and jump to `ROUTER_URL/dashboard`. **Quit Agent** stops the background process. Linux builds continue to run as a headless CLI daemon (settings URL is printed to stdout).
+- The agent tray icon behaves as before: double-click or **Open Settings** to launch the local settings panel, edit coordinator URL / LLM runtime port / heartbeat interval, and jump to `ROUTER_URL/dashboard`. **Quit Agent** stops the background process. Linux builds continue to run as a headless CLI daemon (settings URL is printed to stdout).
 - The coordinator tray icon lets you open the local dashboard (`http://127.0.0.1:<port>/dashboard` by default) or exit the server directly from the system tray. Double-clicking the icon also launches the dashboard in your default browser.
 - Tray icons are derived from [Open Iconic](https://github.com/iconic/open-iconic) (MIT License); a copy of the license is included at `assets/icons/ICON-LICENSE.txt`.
 
@@ -492,7 +492,7 @@ LLM_GPU_COUNT=1 \
    ROUTER_URL=http://coordinator:8080 cargo run --release --bin llm-node
    ```
 
-3. **Use Ollama API Through Coordinator**
+3. **Use LLM runtime API Through Coordinator**
    ```bash
    # Chat API
    curl http://coordinator:8080/api/chat \
@@ -548,7 +548,7 @@ supported but deprecated. A warning is logged when used.
 | `LLM_ROUTER_URL` | `http://127.0.0.1:8080` | Router URL to register with |
 | `LLM_NODE_PORT` | `11435` | Node listen port |
 | `LLM_NODE_IP` | (auto-detected) | Node IP address |
-| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | Model storage directory |
+| `LLM_NODE_MODELS_DIR` | `~/.runtime/models` | Model storage directory |
 | `LLM_NODE_LOG_LEVEL` | `info` | Log level |
 | `LLM_NODE_LOG_DIR` | `~/.llm-node/logs` | Log directory |
 | `LLM_NODE_LOG_RETENTION_DAYS` | `7` | Log retention days |
@@ -729,8 +729,8 @@ Register an agent.
 {
   "machine_name": "my-machine",
   "ip_address": "192.168.1.100",
-  "ollama_version": "0.1.0",
-  "ollama_port": 11434,
+  "runtime_version": "0.1.0",
+  "runtime_port": 11434,
   "gpu_available": true,
   "gpu_devices": [
     { "model": "NVIDIA RTX 4090", "count": 2 }
@@ -756,8 +756,8 @@ Get list of registered agents.
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "machine_name": "my-machine",
     "ip_address": "192.168.1.100",
-    "ollama_version": "0.1.0",
-    "ollama_port": 11434,
+    "runtime_version": "0.1.0",
+    "runtime_port": 11434,
     "status": "online",
     "registered_at": "2025-10-30T12:00:00Z",
     "last_seen": "2025-10-30T12:05:00Z",
@@ -817,7 +817,7 @@ Get list of available models for distribution.
       "description": "Large language model, 20 billion parameters"
     }
   ],
-  "source": "ollama_library"
+  "source": "runtime_library"
 }
 ```
 

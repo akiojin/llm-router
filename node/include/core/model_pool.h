@@ -9,7 +9,7 @@
 
 #include "core/llama_manager.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 class ModelPool {
 public:
@@ -41,4 +41,4 @@ private:
     std::unordered_map<std::thread::id, std::shared_ptr<LlamaContext>> thread_cache_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

@@ -67,9 +67,9 @@ pub struct AgentConfig {
     #[serde(default = "default_router_url")]
     pub router_url: String,
 
-    /// OllamaのURL (デフォルト: "http://localhost:11434")
-    #[serde(default = "default_ollama_url")]
-    pub ollama_url: String,
+    /// ノードランタイムのURL (デフォルト: "http://localhost:11434")
+    #[serde(rename = "runtime_url", default = "default_runtime_url")]
+    pub runtime_url: String,
 
     /// ハートビート送信間隔（秒）(デフォルト: 10)
     #[serde(default = "default_heartbeat_interval")]
@@ -84,7 +84,7 @@ fn default_router_url() -> String {
     "http://localhost:8080".to_string()
 }
 
-fn default_ollama_url() -> String {
+fn default_runtime_url() -> String {
     "http://localhost:11434".to_string()
 }
 
@@ -96,7 +96,7 @@ impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             router_url: default_router_url(),
-            ollama_url: default_ollama_url(),
+            runtime_url: default_runtime_url(),
             heartbeat_interval_secs: default_heartbeat_interval(),
             auto_start: false,
         }
@@ -123,7 +123,7 @@ mod tests {
         let config = AgentConfig::default();
 
         assert_eq!(config.router_url, "http://localhost:8080");
-        assert_eq!(config.ollama_url, "http://localhost:11434");
+        assert_eq!(config.runtime_url, "http://localhost:11434");
         assert_eq!(config.heartbeat_interval_secs, 10);
         assert!(!config.auto_start);
     }
@@ -147,6 +147,6 @@ mod tests {
         assert_eq!(config.router_url, "http://192.168.1.10:8080");
         assert!(config.auto_start);
         // デフォルト値が適用される
-        assert_eq!(config.ollama_url, "http://localhost:11434");
+        assert_eq!(config.runtime_url, "http://localhost:11434");
     }
 }

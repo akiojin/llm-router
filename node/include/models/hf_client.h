@@ -5,7 +5,7 @@
 #include <optional>
 #include <filesystem>
 
-namespace ollama_node {
+namespace llm_node {
 
 struct HfFile {
     std::string name;
@@ -37,4 +37,4 @@ private:
     std::filesystem::path cache_dir_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

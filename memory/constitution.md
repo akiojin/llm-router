@@ -123,7 +123,7 @@
 
 3. **E2E tests** (`tests/e2e/`):
    - エンドツーエンドワークフロー
-   - 実Ollamaノード接続（可能な場合）
+   - 実LLM runtimeノード接続（可能な場合）
    - マルチノードシナリオ
 
 4. **Unit tests** (`tests/unit/` またはモジュール内):

@@ -58,8 +58,8 @@ async fn register_gpu_agent_success() {
     let payload = json!({
         "machine_name": "gpu-node",
         "ip_address": "10.0.0.10",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 4090", "count": 2}
@@ -123,8 +123,8 @@ async fn register_gpu_agent_missing_devices_is_rejected() {
     let payload = json!({
         "machine_name": "cpu-only",
         "ip_address": "10.0.0.20",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": []
     });

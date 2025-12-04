@@ -1,5 +1,5 @@
 // SPEC-dcaeaec4: ModelStorage - Simple model file management
-// Replaces OllamaCompat with simpler directory structure:
+// Replaces legacy compat layer with simpler directory structure:
 // ~/.llm-router/models/<model_name>/model.gguf
 #pragma once
 
@@ -8,7 +8,7 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-namespace ollama_node {
+namespace llm_node {
 
 struct ModelInfo {
     std::string name;       // Model name (e.g., "gpt-oss:20b")
@@ -46,4 +46,4 @@ private:
 };
 
 
-}  // namespace ollama_node
+}  // namespace llm_node

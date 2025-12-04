@@ -69,7 +69,7 @@
 ### Integration Tests (並列実行可能)
 
 - [x] **T014** [P] `coordinator/tests/integration/test_agent_lifecycle.rs` にノードライフサイクル Integration Test (登録→ヘルスチェック→オフライン検知)
-- [x] **T015** [P] `coordinator/tests/integration/test_proxy.rs` にプロキシ Integration Test (リクエスト振り分け→Ollama転送)
+- [x] **T015** [P] `coordinator/tests/integration/test_proxy.rs` にプロキシ Integration Test (リクエスト振り分け→LLM runtime転送)
 - [x] **T016** [P] `coordinator/tests/integration/test_load_balancing.rs` にロードバランシング Integration Test (複数リクエスト分散)
 - [x] **T017** [P] `coordinator/tests/integration/test_health_monitor.rs` にヘルスモニター Integration Test (タイムアウト検知)
 - [x] **T018** [P] `coordinator/tests/integration/test_dashboard.rs` にダッシュボード Integration Test (WebSocket接続)
@@ -117,7 +117,7 @@
 
 ### プロキシAPI (Contract Test T011-T012をGREENに)
 
-- [x] **T036** `coordinator/src/api/proxy.rs` にOllamaプロキシハンドラー実装 (POST /api/chat, /api/generate)
+- [x] **T036** `coordinator/src/api/proxy.rs` にLLM runtimeプロキシハンドラー実装 (POST /api/chat, /api/generate)
 - [x] **T037** `coordinator/src/balancer/mod.rs` にロードバランサーモジュール
 - [x] **T038** `coordinator/src/balancer/round_robin.rs` にRoundRobinBalancer実装 (Atomicカウンター使用)
 - [x] **T039** **検証**: Contract Test T011-T012が合格 (GREEN)
@@ -169,11 +169,11 @@
 - [x] **T058** [P] `agent/src/client/register.rs` に自己登録クライアント実装 (POST /api/agents/register)
 - [x] **T059** [P] `agent/src/client/heartbeat.rs` にハートビートクライアント実装 (POST /api/health、10秒間隔)
 
-### Ollama管理 (並列実行可能)
+### LLM runtime管理 (並列実行可能)
 
-- [x] **T060** [P] `agent/src/ollama/mod.rs` にOllama管理モジュール
-- [x] **T061** [P] `agent/src/ollama/monitor.rs` にOllama状態監視実装 (HTTP APIヘルスチェック)
-- [x] **T062** [P] `agent/src/ollama/proxy.rs` にOllamaプロキシ実装 (Coordinator→Agent→Ollama転送)
+- [x] **T060** [P] `agent/src/runtime/mod.rs` にLLM runtime管理モジュール
+- [x] **T061** [P] `agent/src/runtime/monitor.rs` にLLM runtime状態監視実装 (HTTP APIヘルスチェック)
+- [x] **T062** [P] `agent/src/runtime/proxy.rs` にLLM runtimeプロキシ実装 (Coordinator→Agent→LLM runtime転送)
 
 ### メトリクス収集 (並列実行可能)
 
@@ -207,7 +207,7 @@
 
 ### E2Eテストセットアップ
 
-- [x] **T075** [P] `tests/e2e/setup.rs` にE2Eテスト環境セットアップ (Coordinator起動、Agent起動、モックOllama)
+- [x] **T075** [P] `tests/e2e/setup.rs` にE2Eテスト環境セットアップ (Coordinator起動、Agent起動、モックLLM runtime)
 
 ### ユーザーストーリーE2Eテスト (並列実行可能)
 
@@ -230,7 +230,7 @@
 - [x] **T082** [P] `coordinator/tests/unit/test_load_based.rs` にLoadBasedBalancer Unit Test
 - [x] **T083** [P] `coordinator/tests/unit/test_agent_manager.rs` にAgentRegistryManager Unit Test
 - [x] **T084** [P] `agent/tests/unit/test_metrics_collector.rs` にMetricsCollector Unit Test
-- [x] **T085** [P] `agent/tests/unit/test_ollama_monitor.rs` にOllamaMonitor Unit Test
+- [x] **T085** [P] `agent/tests/unit/test_runtime_monitor.rs` にLLM runtimeMonitor Unit Test
 
 ### パフォーマンステスト
 
@@ -322,11 +322,11 @@ mkdir -p common coordinator agent tests/e2e
 
 ---
 
-## Phase 3.8: Ollama自動ダウンロード機能強化
+## Phase 3.8: LLM runtime自動ダウンロード機能強化
 
 **依存関係**: Agent基本実装完了（T060-T066）
 
-**背景**: 基本的なOllama自動ダウンロード機能は実装済み。以下の4機能を追加実装する。
+**背景**: 基本的なLLM runtime自動ダウンロード機能は実装済み。以下の4機能を追加実装する。
 
 ### Contract Tests (並列実行可能)
 
@@ -358,11 +358,11 @@ mkdir -p common coordinator agent tests/e2e
 
 - [x] **T103** `agent/Cargo.toml` に`backoff`クレート追加（または手動実装用の依存追加）
   - ✅ 手動実装を選択（シンプルさ優先）
-- [x] **T104** `agent/src/ollama.rs` に`retry_with_backoff()`関数実装（指数バックオフ）
+- [x] **T104** `agent/src/runtime.rs` に`retry_with_backoff()`関数実装（指数バックオフ）
   - ✅ `retry_http_request()`として実装
-- [x] **T105** `agent/src/ollama.rs:download()` にリトライロジック統合
+- [x] **T105** `agent/src/runtime.rs:download()` にリトライロジック統合
   - ✅ `download()`メソッドに統合完了
-- [x] **T106** `agent/src/ollama.rs:pull_model()` にリトライロジック統合
+- [x] **T106** `agent/src/runtime.rs:pull_model()` にリトライロジック統合
   - ✅ retry_http_request()を使用してリトライ機能を追加
   - ✅ エラーメッセージにリトライ後の失敗を明記
 - [x] **T107** **検証**: Integration Test T100が合格 (GREEN)
@@ -370,9 +370,9 @@ mkdir -p common coordinator agent tests/e2e
 
 #### P1: プロキシ対応 (FR-016g)
 
-- [x] **T108** `agent/src/ollama.rs` に`build_http_client_with_proxy()`関数実装
+- [x] **T108** `agent/src/runtime.rs` に`build_http_client_with_proxy()`関数実装
   - ✅ 実装完了
-- [x] **T109** `agent/src/ollama.rs:download()` でHTTPクライアント作成時にプロキシ設定適用
+- [x] **T109** `agent/src/runtime.rs:download()` でHTTPクライアント作成時にプロキシ設定適用
   - ✅ `download()`メソッドに統合完了
 - [x] **T110** **検証**: Integration Test T102が合格 (GREEN)
   - ✅ 実装完了（T102はignore状態だが、実装は動作確認済み）
@@ -381,11 +381,11 @@ mkdir -p common coordinator agent tests/e2e
 
 - [x] **T111** `agent/Cargo.toml` に`indicatif`クレート追加
   - ✅ indicatif 0.17を追加
-- [x] **T112** `agent/src/ollama.rs` に`DownloadProgress`構造体定義
+- [x] **T112** `agent/src/runtime.rs` に`DownloadProgress`構造体定義
   - ✅ current/total/percentage()メソッドを実装
-- [x] **T113** `agent/src/ollama.rs:download()` にプログレスバー統合
+- [x] **T113** `agent/src/runtime.rs:download()` にプログレスバー統合
   - ✅ bytes_stream()でチャンク処理、リアルタイム進捗表示
-- [x] **T114** `agent/src/ollama.rs:pull_model()` にモデルプル進捗表示統合
+- [x] **T114** `agent/src/runtime.rs:pull_model()` にモデルプル進捗表示統合
   - ✅ stream: true でストリーミングレスポンス処理
   - ✅ 進捗情報（total/completed）からプログレスバー表示
   - ✅ ステータスメッセージをリアルタイム更新
@@ -396,11 +396,11 @@ mkdir -p common coordinator agent tests/e2e
 
 - [x] **T116** `agent/Cargo.toml` に`sha2`クレート追加
   - ✅ sha2 0.10を追加
-- [x] **T117** `agent/src/ollama.rs` に`verify_checksum()`関数実装
+- [x] **T117** `agent/src/runtime.rs` に`verify_checksum()`関数実装
   - ✅ SHA256ハッシュ計算と比較機能を実装
-- [x] **T118** `agent/src/ollama.rs` に`fetch_checksum_from_url()`関数実装
+- [x] **T118** `agent/src/runtime.rs` に`fetch_checksum_from_url()`関数実装
   - ✅ リトライ付きチェックサムダウンロード機能を実装
-- [x] **T119** `agent/src/ollama.rs:download()` にチェックサム検証統合
+- [x] **T119** `agent/src/runtime.rs:download()` にチェックサム検証統合
   - ✅ OLLAMA_VERIFY_CHECKSUM環境変数で有効化
 - [x] **T120** **検証**: Integration Test T101が合格 (GREEN)
   - ✅ テストテンプレート作成（実装後に有効化予定）
@@ -416,9 +416,9 @@ mkdir -p common coordinator agent tests/e2e
 
 ### E2Eテスト
 
-- [x] **T124** `tests/e2e/scenarios/ollama_auto_download.rs` にOllama自動ダウンロード
-  - ✅ Integration Testで代替（test_ollama_lifecycle.rs）
-  - ✅ test_ollama_ensure_running_auto_download実装済み（#[ignore]）
+- [x] **T124** `tests/e2e/scenarios/runtime_auto_download.rs` にLLM runtime自動ダウンロード
+  - ✅ Integration Testで代替（test_runtime_lifecycle.rs）
+  - ✅ test_runtime_ensure_running_auto_download実装済み（#[ignore]）
   E2Eシナリオ (未インストール環境での起動→ダウンロード→モデルプル→登録)
 
 ### モデルダウンロード機能強化 - 完了状況
@@ -468,9 +468,9 @@ mkdir -p common coordinator agent tests/e2e
 
 ---
 
-**総タスク数**: 126タスク（基本96 + Ollama自動ダウンロード強化28 + リリース配布検証2）
+**総タスク数**: 126タスク（基本96 + LLM runtime自動ダウンロード強化28 + リリース配布検証2）
 **並列実行可能タスク**: 約72タスク（[P]マーク）
-**推定完了時間**: 5-7週間（TDDサイクル遵守、Ollama自動ダウンロード機能強化含む）
+**推定完了時間**: 5-7週間（TDDサイクル遵守、LLM runtime自動ダウンロード機能強化含む）
 
 ---
 

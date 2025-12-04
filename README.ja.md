@@ -1,16 +1,16 @@
 # LLM Router
 
-複数マシンでOllamaインスタンスを管理する中央集権型システム
+複数マシンでLLM runtimeインスタンスを管理する中央集権型システム
 
 [English](./README.md) | 日本語
 
 ## 概要
 
-LLM Routerは、複数のマシン上で動作するOllamaインスタンスを一元管理し、統一されたAPIエンドポイントを提供するシステムです。インテリジェントなロードバランシング、自動障害検知、リアルタイム監視機能を備えています。
+LLM Routerは、複数のマシン上で動作するLLM runtimeインスタンスを一元管理し、統一されたAPIエンドポイントを提供するシステムです。インテリジェントなロードバランシング、自動障害検知、リアルタイム監視機能を備えています。
 
 ## 主な特徴
 
-- **統一APIエンドポイント**: 複数のOllamaインスタンスを単一のURLで利用可能
+- **統一APIエンドポイント**: 複数のLLM runtimeインスタンスを単一のURLで利用可能
 - **自動ロードバランシング**: リクエストを利用可能なノードに自動分散
 - **自動障害検知**: オフラインノードを自動検知して振り分けから除外
 - **リアルタイム監視**: Webダッシュボードで全ノードの状態を可視化
@@ -94,7 +94,7 @@ npm run start:node
 |-----|-----------|------|
 | `LLM_ROUTER_URL` | `http://127.0.0.1:8080` | 登録先ルーターのURL |
 | `LLM_NODE_PORT` | `11435` | ノードのリッスンポート |
-| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | モデル保存ディレクトリ |
+| `LLM_NODE_MODELS_DIR` | `~/.runtime/models` | モデル保存ディレクトリ |
 | `LLM_NODE_ALLOW_NO_GPU` | `false` | GPU無しでの起動を許可 |
 | `LLM_NODE_HEARTBEAT_SECS` | `10` | ハートビート間隔（秒） |
 | `LLM_NODE_LOG_LEVEL` | `info` | ログレベル |
@@ -141,7 +141,7 @@ docker run --rm -p 11435:11435 \
 ┌─────────┐        ┌─────────┐        ┌─────────┐
 │ Agent 1 │        │ Agent 2 │        │ Agent 3 │
 │         │        │         │        │         │
-│  Ollama │        │  Ollama │        │  Ollama │
+│  LLM runtime │        │  LLM runtime │        │  LLM runtime │
 │ (自動管理)│       │ (自動管理)│       │ (自動管理)│
 └─────────┘        └─────────┘        └─────────┘
 Machine 1          Machine 2          Machine 3
@@ -150,8 +150,8 @@ Machine 1          Machine 2          Machine 3
 ### 通信フロー（プロキシパターン・ノード経由のみ）
 
 **要点（2025-11 更新）**
-- ルーターはノードの OpenAI互換API（標準 `ollama_port+1`）のみを叩き、ノード内部の Ollama を直接呼ばない。
-- ノードは対応モデル4件（gpt-oss:20b/120b、gpt-oss-safeguard:20b、qwen3-coder:30b）を起動し、モデルごとに独立した `ollama serve` をポート割り当てして常駐。
+- ルーターはノードの OpenAI互換API（標準 `runtime_port+1`）のみを叩き、ノード内部の LLM runtime を直接呼ばない。
+- ノードは対応モデル4件（gpt-oss:20b/120b、gpt-oss-safeguard:20b、qwen3-coder:30b）を起動し、モデルごとに独立した `runtime serve` をポート割り当てして常駐。
 - 全ノードが `initializing=true` の間、リクエストは待機キュー（上限1024、超過で503）。`ready_models=(n/5)` が進み、全完了で `initializing=false`。
 - 手動配布UI/APIは廃止。 `/v1/models` と UI は常に上記5モデルのみを表示。
 
@@ -159,7 +159,7 @@ LLM Routerは**プロキシパターン**を採用しており、クライアン
 
 #### 従来の方法（Coordinator なし）
 ```bash
-# 各Ollamaに直接アクセス - ユーザーが手動で振り分け
+# 各LLM runtimeに直接アクセス - ユーザーが手動で振り分け
 curl http://machine1:11434/api/chat -d '...'
 curl http://machine2:11434/api/chat -d '...'
 curl http://machine3:11434/api/chat -d '...'
@@ -167,7 +167,7 @@ curl http://machine3:11434/api/chat -d '...'
 
 #### Coordinatorを使う方法（プロキシ）
 ```bash
-# Coordinatorに統一アクセス - 自動的に最適なOllamaへ振り分け
+# Coordinatorに統一アクセス - 自動的に最適なLLM runtimeへ振り分け
 curl http://coordinator:8080/api/chat -d '...'
 curl http://coordinator:8080/api/chat -d '...'
 curl http://coordinator:8080/api/chat -d '...'
@@ -184,8 +184,8 @@ curl http://coordinator:8080/api/chat -d '...'
    ```
 
 2. **Coordinator内部処理**
-   - 最適なAgent/Ollamaを選択（ロードバランシング）
-   - HTTPクライアントで選択されたAgentのOllamaにリクエスト転送
+   - 最適なAgent/LLM runtimeを選択（ロードバランシング）
+   - HTTPクライアントで選択されたAgentのLLM runtimeにリクエスト転送
 
 3. **Coordinator → Agent（内部通信）**
    ```
@@ -195,9 +195,9 @@ curl http://coordinator:8080/api/chat -d '...'
    {"model": "llama2", "messages": [...]}
    ```
 
-4. **Agent → Ollama → Agent（ローカル処理）**
-   - AgentがローカルOllamaインスタンスへリクエスト転送
-   - Ollamaが LLM処理してレスポンス生成
+4. **Agent → LLM runtime → Agent（ローカル処理）**
+   - AgentがローカルLLM runtimeインスタンスへリクエスト転送
+   - LLM runtimeが LLM処理してレスポンス生成
 
 5. **Coordinator → クライアント（レスポンス返却）**
    ```json
@@ -216,15 +216,15 @@ curl http://coordinator:8080/api/chat -d '...'
 > すべてのレスポンスはOpenAI Chat Completions API仕様に準拠します。
 
 **クライアントから見ると**:
-- Coordinatorが唯一のOllama APIサーバーとして見える
-- 内部の複数Ollamaインスタンスを意識する必要がない
+- Coordinatorが唯一のLLM runtime APIサーバーとして見える
+- 内部の複数LLM runtimeインスタンスを意識する必要がない
 - 1回のHTTPリクエストで完結
 
 ### プロキシ方式のメリット
 
 1. **統一エンドポイント**
    - クライアントはCoordinator URLだけ知っていればOK
-   - 各Agent/Ollamaの場所を知る必要なし
+   - 各Agent/LLM runtimeの場所を知る必要なし
 
 2. **透過的なロードバランシング**
    - Coordinatorが自動的に最適なノードを選択
@@ -258,7 +258,7 @@ llm-router/
 │   │   ├── api/         # REST APIハンドラー
 │   │   │   ├── agent.rs    # ノード登録・一覧
 │   │   │   ├── health.rs   # ヘルスチェック受信
-│   │   │   └── proxy.rs    # Ollamaプロキシ
+│   │   │   └── proxy.rs    # LLM runtimeプロキシ
 │   │   ├── registry/    # ノード状態管理
 │   │   ├── db/          # データベースアクセス
 │   │   └── main.rs
@@ -285,7 +285,7 @@ llm-router/
 
 - **Coordinator**: Linux / Windows 10以降 / macOS 12以降、Rust 1.70以降
 - **Agent**: Windows 10以降 / macOS 12以降（CLIベースアプリケーション）、Rust 1.70以降
-- **Ollama**: 未インストールの場合は初回起動時に自動ダウンロード・インストール（進捗表示・再試行・SHA256検証付き）
+- **LLM runtime**: 未インストールの場合は初回起動時に自動ダウンロード・インストール（進捗表示・再試行・SHA256検証付き）
 - **管理**: ブラウザベースのWebUIダッシュボードでノード設定と監視
 
 ### Coordinatorのセットアップ
@@ -318,12 +318,12 @@ ROUTER_URL=http://coordinator-host:8080 ./target/release/llm-router-agent
 ./target/release/llm-router-agent
 ```
 
-**注意**: Agentは起動時にOllamaの存在を確認し、未インストールなら自動的にバイナリをダウンロード・検証・展開してから起動します。手動インストールが必要な場合は[ollama.ai](https://ollama.ai)から取得できます。
+**注意**: Agentは起動時にLLM runtimeの存在を確認し、未インストールなら自動的にバイナリをダウンロード・検証・展開してから起動します。手動インストールが必要な場合は[runtime.ai](https://runtime.ai)から取得できます。
 
 #### システムトレイ（Windows / macOS）
 
 - Windows 10 以降 / macOS 12 以降では、**ノード** と **ルーター** の両方がトレイ（メニューバー）に常駐します。
-- ノード側は従来どおり、ダブルクリックまたは **設定パネルを開く** からローカル設定画面を表示し、ルーターURL / Ollamaポート / ハートビート間隔を編集可能です。**Dashboardを開く** は `ROUTER_URL/dashboard` を開き、**Agentを終了** で常駐プロセスを停止します。Linux 版は CLI 常駐で、設定パネルURLを標準出力に表示します。
+- ノード側は従来どおり、ダブルクリックまたは **設定パネルを開く** からローカル設定画面を表示し、ルーターURL / LLM runtimeポート / ハートビート間隔を編集可能です。**Dashboardを開く** は `ROUTER_URL/dashboard` を開き、**Agentを終了** で常駐プロセスを停止します。Linux 版は CLI 常駐で、設定パネルURLを標準出力に表示します。
 - ルーター側はトレイアイコンからローカルダッシュボード（例: `http://127.0.0.1:8080/dashboard`）を開いたり、**Coordinatorを終了** を選んでサーバーを終了できます。ダブルクリックでもブラウザが起動します。
 - トレイアイコンは [Open Iconic](https://github.com/iconic/open-iconic)（MIT License）をベースにしており、`assets/icons/ICON-LICENSE.txt` にライセンスを同梱しています。
 
@@ -391,7 +391,7 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
    ROUTER_URL=http://coordinator:8080 cargo run --release --bin llm-router-agent
    ```
 
-3. **Coordinatorを通じてOllama APIを利用**
+3. **Coordinatorを通じてLLM runtime APIを利用**
    ```bash
    # Chat API
    curl http://coordinator:8080/api/chat \
@@ -444,7 +444,7 @@ GitHubリリースには各プラットフォーム向けのバイナリを同�
 |---------|-----------|------|
 | `LLM_ROUTER_URL` | `http://127.0.0.1:8080` | ルーターURL |
 | `LLM_NODE_PORT` | `11435` | HTTPサーバーポート |
-| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | モデルディレクトリ |
+| `LLM_NODE_MODELS_DIR` | `~/.runtime/models` | モデルディレクトリ |
 | `LLM_NODE_BIND_ADDRESS` | `0.0.0.0` | バインドアドレス |
 | `LLM_NODE_HEARTBEAT_SECS` | `10` | ハートビート間隔（秒） |
 | `LLM_NODE_ALLOW_NO_GPU` | `false` | GPU必須を無効化 |
@@ -627,8 +627,8 @@ GET /api/dashboard/request-responses/export
 {
   "machine_name": "my-machine",
   "ip_address": "192.168.1.100",
-  "ollama_version": "0.1.0",
-  "ollama_port": 11434,
+  "runtime_version": "0.1.0",
+  "runtime_port": 11434,
   "gpu_available": true,
   "gpu_devices": [
     { "model": "NVIDIA RTX 4090", "count": 2 }
@@ -654,8 +654,8 @@ GET /api/dashboard/request-responses/export
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "machine_name": "my-machine",
     "ip_address": "192.168.1.100",
-    "ollama_version": "0.1.0",
-    "ollama_port": 11434,
+    "runtime_version": "0.1.0",
+    "runtime_port": 11434,
     "status": "online",
     "registered_at": "2025-10-30T12:00:00Z",
     "last_seen": "2025-10-30T12:05:00Z",

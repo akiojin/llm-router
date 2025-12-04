@@ -31,7 +31,7 @@ curl -X POST http://localhost:8080/api/agents \
     "hostname": "server-01",
     "ip_address": "192.168.1.10",
     "port": 11434,
-    "ollama_version": "0.1.23"
+    "runtime_version": "0.1.23"
   }'
 ```
 
@@ -58,7 +58,7 @@ curl http://localhost:8080/api/agents
     "hostname": "server-01",
     "ip_address": "192.168.1.10",
     "port": 11434,
-    "ollama_version": "0.1.23",
+    "runtime_version": "0.1.23",
     "status": "Online",
     "last_heartbeat": "2025-10-30T12:00:00Z",
     "registered_at": "2025-10-30T10:00:00Z"

@@ -76,8 +76,8 @@ async fn test_fallback_to_round_robin_when_all_agents_high_load() {
 //     RegisterRequest {
 //         machine_name: name.to_string(),
 //         ip_address: ip.parse().unwrap(),
-//         ollama_version: "0.1.0".to_string(),
-//         ollama_port: 11434,
+//         runtime_version: "0.1.0".to_string(),
+//         runtime_port: 11434,
 //         gpu_available: true,
 //         gpu_devices: vec![GpuDeviceInfo {
 //             model: "Test GPU".to_string(),

@@ -22,8 +22,8 @@ async fn test_metrics_collection_and_storage() {
     // let agent_req = json!({
     //     "machine_name": "metrics-test-agent",
     //     "ip_address": "192.168.100.50",
-    //     "ollama_version": "0.1.0",
-    //     "ollama_port": 11434,
+    //     "runtime_version": "0.1.0",
+    //     "runtime_port": 11434,
     //     "gpu_available": true,
     //     "gpu_devices": [{
     //         "model": "Test GPU",

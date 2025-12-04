@@ -3,7 +3,6 @@ set(UNIT_TEST_SOURCES
     router_client_test.cpp
     model_sync_test.cpp
     model_downloader_test.cpp
-    ollama_compat_test.cpp
     model_storage_test.cpp
     inference_engine_test.cpp
     model_converter_test.cpp
@@ -19,7 +18,6 @@ set(UNIT_TEST_SOURCES
     ../../src/api/router_client.cpp
     ../../src/models/model_sync.cpp
     ../../src/models/model_downloader.cpp
-    ../../src/models/ollama_compat.cpp
     ../../src/models/model_storage.cpp
     ../../src/models/model_converter.cpp
     ../../src/models/hf_client.cpp

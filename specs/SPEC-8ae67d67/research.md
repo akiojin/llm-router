@@ -8,14 +8,14 @@
 
 ---
 
-## 1. Ollama公式ライブラリAPI調査
+## 1. LLM runtime公式ライブラリAPI調査
 
 ### 調査タスク
-「Ollama Library APIからダウンロード可能なモデル一覧を取得する方法を調査」
+「LLM runtime Library APIからダウンロード可能なモデル一覧を取得する方法を調査」
 
 ### 調査結果
 
-#### Ollamaローカ
+#### LLM runtimeローカ
 
 ルAPI（既存）
 
@@ -47,11 +47,11 @@
 - **認証**: 不要（ローカルAPI）
 - **レート制限**: なし
 
-**既存実装**: `agent/src/ollama.rs` の `list_models()` メソッドで利用可能
+**既存実装**: `agent/src/runtime.rs` の `list_models()` メソッドで利用可能
 
-#### Ollama公式ライブラリWebサイト
+#### LLM runtime公式ライブラリWebサイト
 
-- **URL**: <https://ollama.com/library>
+- **URL**: <https://runtime.com/library>
 - **構造**: 静的なWebページ（モデルカタログ）
 - **API**: 公開APIエンドポイントは提供されていない
 
@@ -68,10 +68,10 @@
 
 3. **手動入力の許可**:
    - ダッシュボードでユーザーが任意のモデル名を入力できる
-   - Ollama Pullエンドポイントが成功すればOK
+   - LLM runtime Pullエンドポイントが成功すればOK
 
 **理由**:
-- Ollama公式ライブラリAPIが公開されていないため
+- LLM runtime公式ライブラリAPIが公開されていないため
 - 実用上、既存ノードからモデル情報を取得することで十分
 - 新しいモデルは手動指定で対応可能
 
@@ -143,7 +143,7 @@
 
 #### 既存のモデルプル実装
 
-`agent/src/ollama.rs` の `pull_model()` メソッド:
+`agent/src/runtime.rs` の `pull_model()` メソッド:
 - **tokio非同期**: `async fn` で実装
 - **ストリーミング**: `response.bytes_stream()` でNDJSON受信
 - **リトライ**: `retry_http_request()` で指数バックオフ
@@ -238,7 +238,7 @@ let register_req = RegisterRequest {
 
 #### 既存のモデルメモリ要件
 
-`agent/src/ollama.rs`:
+`agent/src/runtime.rs`:
 ```rust
 const DEFAULT_MODEL_CANDIDATES: &[&str] =
     &["gpt-oss:20b", "gpt-oss:7b", "gpt-oss:3b", "gpt-oss:1b"];

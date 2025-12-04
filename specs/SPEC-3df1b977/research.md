@@ -11,7 +11,7 @@
 
 - llama.cppの`llama_model_load_from_file()`は破損ファイルで`nullptr`を返す
 - GGUFファイルは固定ヘッダー（マジックナンバー）を持つため、最小限の検証が可能
-- 完全なSHA256検証は既存の`OllamaCompat::validateModel()`で利用可能
+- 完全なSHA256検証は既存の`LLM runtimeCompat::validateModel()`で利用可能
 
 ### 検討した代替案
 
@@ -30,7 +30,7 @@
 
 - `ModelDownloader::downloadBlob()`: リトライ、帯域制御、SHA256検証
 - `ModelSync::downloadWithHint()`: ETagキャッシュ、サイズヒント
-- `OllamaCompat::resolveGguf()`: モデル名→パス解決
+- `LLM runtimeCompat::resolveGguf()`: モデル名→パス解決
 
 ### 既存コードの修正箇所
 

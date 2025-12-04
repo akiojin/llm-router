@@ -59,8 +59,8 @@ async fn test_manual_distribution_to_specific_agent() {
     let register_payload = json!({
         "machine_name": "target-agent",
         "ip_address": "192.168.1.200",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 3090", "count": 1}
@@ -149,8 +149,8 @@ async fn test_bulk_distribution_to_all_agents() {
         let register_payload = json!({
             "machine_name": format!("bulk-agent-{}", i),
             "ip_address": format!("192.168.1.{}", 210 + i),
-            "ollama_version": "0.1.42",
-            "ollama_port": 11434,
+            "runtime_version": "0.1.42",
+            "runtime_port": 11434,
             "gpu_available": true,
             "gpu_devices": [
                 {"model": "NVIDIA RTX 3090", "count": 1}
@@ -229,8 +229,8 @@ async fn test_progress_tracking_multiple_agents() {
         let register_payload = json!({
             "machine_name": format!("progress-agent-{}", i),
             "ip_address": format!("192.168.1.{}", 220 + i),
-            "ollama_version": "0.1.42",
-            "ollama_port": 11434,
+            "runtime_version": "0.1.42",
+            "runtime_port": 11434,
             "gpu_available": true,
             "gpu_devices": [
                 {"model": "NVIDIA RTX 3090", "count": 1}

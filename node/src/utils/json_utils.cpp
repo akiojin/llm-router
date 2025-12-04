@@ -2,7 +2,7 @@
 
 #include <sstream>
 
-namespace ollama_node {
+namespace llm_node {
 
 std::optional<nlohmann::json> parse_json(const std::string& body, std::string* error) {
     try {
@@ -30,4 +30,4 @@ std::string json_to_string(const nlohmann::json& j) {
     return j.dump();
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

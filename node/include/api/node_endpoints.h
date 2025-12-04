@@ -7,7 +7,7 @@
 #include <memory>
 #include "metrics/prometheus_exporter.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 class ModelSync;
 class RouterClient;
@@ -32,4 +32,4 @@ private:
     std::shared_ptr<RouterClient> router_client_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

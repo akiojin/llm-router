@@ -10,7 +10,7 @@
 #include <spdlog/spdlog.h>
 #include "utils/file_lock.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 namespace {
 
@@ -288,4 +288,4 @@ NodeConfig loadNodeConfig() {
     return info.first;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

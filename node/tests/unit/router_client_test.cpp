@@ -6,7 +6,7 @@
 
 #include "api/router_client.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 namespace {
 
@@ -66,8 +66,8 @@ TEST(RouterClientTest, RegisterNodeSuccess) {
     NodeInfo info;
     info.machine_name = "test-host";
     info.ip_address = "127.0.0.1";
-    info.ollama_version = "1.0.0";
-    info.ollama_port = 11434;
+    info.runtime_version = "1.0.0";
+    info.runtime_port = 11434;
     info.gpu_available = true;
     info.gpu_devices = {{.model = "Test GPU", .count = 1, .memory = 8ull * 1024 * 1024 * 1024}};
     info.gpu_count = 1;
@@ -86,8 +86,8 @@ TEST(RouterClientTest, RegisterNodeSuccess) {
     auto body = nlohmann::json::parse(server.last_register_body);
     EXPECT_EQ(body["machine_name"], "test-host");
     EXPECT_EQ(body["ip_address"], "127.0.0.1");
-    EXPECT_EQ(body["ollama_version"], "1.0.0");
-    EXPECT_EQ(body["ollama_port"], 11434);
+    EXPECT_EQ(body["runtime_version"], "1.0.0");
+    EXPECT_EQ(body["runtime_port"], 11434);
     EXPECT_EQ(body["gpu_available"], true);
     EXPECT_EQ(body["gpu_devices"].size(), 1);
     EXPECT_EQ(body["gpu_devices"][0]["model"], "Test GPU");
@@ -103,8 +103,8 @@ TEST(RouterClientTest, RegisterNodeFailureWhenServerReturnsError) {
     NodeInfo info;
     info.machine_name = "test-host";
     info.ip_address = "127.0.0.1";
-    info.ollama_version = "1.0.0";
-    info.ollama_port = 11434;
+    info.runtime_version = "1.0.0";
+    info.runtime_port = 11434;
     info.gpu_available = false;
 
     auto result = client.registerNode(info);

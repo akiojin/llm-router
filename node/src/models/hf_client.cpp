@@ -5,7 +5,7 @@
 
 namespace fs = std::filesystem;
 
-namespace ollama_node {
+namespace llm_node {
 
 namespace {
 std::string make_url(const std::string& repo_id, const std::string& filename) {
@@ -56,4 +56,4 @@ bool HfClient::isDiffusersRepo(const std::string& repo_id) const {
     return repo_id.find("unet") != std::string::npos || repo_id.find("text_encoder") != std::string::npos;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

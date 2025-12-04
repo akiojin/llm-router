@@ -28,18 +28,15 @@ Options:
 Commands:
   model
       Model is a string with an optional prefix of
-      huggingface:// (hf://), ollama://, https:// or file://.
+      huggingface:// (hf://), modelscope:// (ms://), https:// or file://.
       If no protocol is specified and a file exists in the specified
-      path, file:// is assumed, otherwise if a file does not exist in
-      the specified path, ollama:// is assumed. Models that are being
+      path, file:// is assumed. Models that are being
       pulled are downloaded with .partial extension while being
       downloaded and then renamed as the file without the .partial
       extension when complete.
 
 Examples:
   llama-run llama3
-  llama-run ollama://granite-code
-  llama-run ollama://smollm:135m
   llama-run hf://QuantFactory/SmolLM-135M-GGUF/SmolLM-135M.Q2_K.gguf
   llama-run huggingface://bartowski/SmolLM-1.7B-Instruct-v0.2-GGUF/SmolLM-1.7B-Instruct-v0.2-IQ3_M.gguf
   llama-run ms://QuantFactory/SmolLM-135M-GGUF/SmolLM-135M.Q2_K.gguf

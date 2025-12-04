@@ -4,7 +4,7 @@
 #include <string>
 #include <mutex>
 
-namespace ollama_node {
+namespace llm_node {
 
 class ModelRegistry {
 public:
@@ -17,4 +17,4 @@ private:
     std::vector<std::string> models_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

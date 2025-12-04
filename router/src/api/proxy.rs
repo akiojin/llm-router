@@ -1,5 +1,5 @@
-//! Ollamaプロキシ APIハンドラー
-//! Ollamaプロキシ APIハンドラー
+//! LLM runtimeプロキシ APIハンドラー
+//! LLM runtimeプロキシ APIハンドラー
 
 use crate::{api::nodes::AppError, balancer::RequestOutcome, AppState};
 use axum::{
@@ -38,7 +38,7 @@ fn max_waiters() -> usize {
     DEFAULT_MAX_WAITERS
 }
 
-/// POST /api/chat - Ollama Chat APIプロキシ
+/// POST /api/chat - LLM runtime Chat APIプロキシ
 pub async fn proxy_chat(
     ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
@@ -54,7 +54,7 @@ pub async fn proxy_chat(
     .await
 }
 
-/// POST /api/generate - Ollama Generate APIプロキシ
+/// POST /api/generate - LLM runtime Generate APIプロキシ
 pub async fn proxy_generate(
     ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
@@ -107,7 +107,7 @@ where
     let node_id = agent.id;
     let agent_machine_name = agent.machine_name.clone();
     let agent_ip = agent.ip_address;
-    let agent_api_port = agent.ollama_port + 1;
+    let agent_api_port = agent.runtime_port + 1;
 
     state
         .load_manager
@@ -116,13 +116,13 @@ where
         .map_err(AppError::from)?;
 
     let client = reqwest::Client::new();
-    let ollama_url = format!(
+    let runtime_url = format!(
         "http://{}:{}/v1/chat/completions",
         agent.ip_address, agent_api_port
     );
     let start = Instant::now();
 
-    let response = match client.post(&ollama_url).json(&req).send().await {
+    let response = match client.post(&runtime_url).json(&req).send().await {
         Ok(res) => res,
         Err(e) => {
             let duration = start.elapsed();
@@ -341,14 +341,14 @@ where
         .map_err(AppError::from)?;
 
     let client = reqwest::Client::new();
-    let agent_api_port = agent.ollama_port + 1;
-    let ollama_url = format!(
+    let agent_api_port = agent.runtime_port + 1;
+    let runtime_url = format!(
         "http://{}:{}/v1/completions",
         agent.ip_address, agent_api_port
     );
     let start = Instant::now();
 
-    let response = match client.post(&ollama_url).json(&req).send().await {
+    let response = match client.post(&runtime_url).json(&req).send().await {
         Ok(res) => res,
         Err(e) => {
             let duration = start.elapsed();
@@ -716,8 +716,8 @@ mod tests {
         let register_req = RegisterRequest {
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse::<IpAddr>().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -748,8 +748,8 @@ mod tests {
         let register_req1 = RegisterRequest {
             machine_name: "machine1".to_string(),
             ip_address: "192.168.1.100".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -772,8 +772,8 @@ mod tests {
         let register_req2 = RegisterRequest {
             machine_name: "machine2".to_string(),
             ip_address: "192.168.1.101".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -858,12 +858,12 @@ mod tests {
             jwt_secret,
         };
 
-        // register node (ollama_port = APIポート-1として報告)
+        // register node (runtime_port = APIポート-1として報告)
         let register_req = RegisterRequest {
             machine_name: "ready-node".into(),
             ip_address: agent_addr.ip(),
-            ollama_version: "0.0.0-test".into(),
-            ollama_port: agent_addr.port().saturating_sub(1),
+            runtime_version: "0.0.0-test".into(),
+            runtime_port: agent_addr.port().saturating_sub(1),
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),

@@ -28,7 +28,7 @@
 
 - [x] **T0*01** [P] データモデル定義: `coordinator/src/registry/models.rs` に `ModelInfo`, `InstalledModel`, `DownloadTask` 構造体を定義
 - [x] **T0*02** [P] タスク管理モジュール: `coordinator/src/tasks/mod.rs` に `DownloadTaskManager` 構造体を定義
-- [x] **T0*03** [P] Ollama公式API通信モジュール: `coordinator/src/ollama/mod.rs` と `coordinator/src/ollama/client.rs` を作成（構造のみ、実装は後）
+- [x] **T0*03** [P] LLM runtime公式API通信モジュール: `coordinator/src/runtime/mod.rs` と `coordinator/src/runtime/client.rs` を作成（構造のみ、実装は後）
 
 ---
 
@@ -61,7 +61,7 @@
 
 ### Integration Tests - ユーザーストーリー3（可視化）
 
-- [x] **T0*18** [P] Integration test: `coordinator/tests/integration/model_info_test.rs` に `test_list_available_models_from_ollama_library()` を作成
+- [x] **T0*18** [P] Integration test: `coordinator/tests/integration/model_info_test.rs` に `test_list_available_models_from_runtime_library()` を作成
 - [x] **T0*19** [P] Integration test: `coordinator/tests/integration/model_info_test.rs` に `test_list_installed_models_on_agent()` を作成
 - [x] **T0*20** [P] Integration test: `coordinator/tests/integration/model_info_test.rs` に `test_model_matrix_view_multiple_agents()` を作成
 
@@ -84,9 +84,9 @@
   - `create_task()`, `update_progress()`, `get_task()`, `list_tasks()` メソッド
   - `Arc<Mutex<HashMap<Uuid, DownloadTask>>>` でスレッドセーフな状態管理
 
-### Ollama公式API通信実装
+### LLM runtime公式API通信実装
 
-- [x] **T0*25** Ollama通信実装: `coordinator/src/ollama/client.rs` に `OllamaClient` 実装
+- [x] **T0*25** LLM runtime通信実装: `coordinator/src/runtime/client.rs` に `LLM runtimeClient` 実装
   - ノード経由でモデル一覧取得（`GET /api/tags`）
   - 事前定義モデルリスト管理
 

@@ -12,7 +12,7 @@
 
 **説明**: ノード情報を表す構造体（既存の`common/src/types.rs`で定義済み）
 
-> 2025-11-01 追記: `loaded_models: Vec<String>` を追加し、ノードがOllamaにロード済みのモデル一覧を保持する。ダッシュボードの「モデル」列および詳細モーダルで参照する。
+> 2025-11-01 追記: `loaded_models: Vec<String>` を追加し、ノードがLLM runtimeにロード済みのモデル一覧を保持する。ダッシュボードの「モデル」列および詳細モーダルで参照する。
 
 **フィールド**:
 ```rust
@@ -20,7 +20,7 @@ pub struct Agent {
     pub id: Uuid,
     pub machine_name: String,
     pub ip_address: String,
-    pub ollama_version: String,
+    pub runtime_version: String,
     pub status: AgentStatus,
     pub registered_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
@@ -44,7 +44,7 @@ pub struct SystemInfo {
 **検証ルール**:
 - `machine_name`: 空文字列禁止
 - `ip_address`: 有効なIPv4/IPv6アドレス
-- `ollama_version`: セマンティックバージョニング形式
+- `runtime_version`: セマンティックバージョニング形式
 
 **ダッシュボードでの使用**:
 - ノード一覧表示
@@ -92,7 +92,7 @@ pub struct AgentWithUptime {
     pub machine_name: String,
     pub ip_address: String,
     pub status: AgentStatus,
-    pub ollama_version: String,
+    pub runtime_version: String,
     pub registered_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
     pub uptime_seconds: i64,
@@ -122,7 +122,7 @@ impl From<Agent> for AgentWithUptime {
             machine_name: agent.machine_name,
             ip_address: agent.ip_address,
             status: agent.status,
-            ollama_version: agent.ollama_version,
+            runtime_version: agent.runtime_version,
             registered_at: agent.registered_at,
             last_seen: agent.last_seen,
             uptime_seconds,
@@ -280,7 +280,7 @@ coordinator/src/
   "machine_name": "server-01",
   "ip_address": "192.168.1.100",
   "status": "Online",
-  "ollama_version": "0.1.0",
+  "runtime_version": "0.1.0",
   "registered_at": "2025-10-31T10:00:00Z",
   "last_seen": "2025-10-31T12:30:00Z",
   "system_info": {

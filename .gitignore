@@ -94,3 +94,6 @@ Cargo.lock
 *.sdk.tar.xz
 *.sdk.tar.gz
 cookies.txt
+
+# Unity capture / cache (not used in this project)
+.unity/

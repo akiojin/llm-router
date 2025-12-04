@@ -26,11 +26,11 @@
 ### Contract Tests
 
 - [x] **T004** [P] `coordinator/tests/contract/proxy_chat_test.rs` に POST /api/chat のcontract test
-  - リクエスト: ChatRequest（Ollama API互換）
+  - リクエスト: ChatRequest（LLM runtime API互換）
   - 期待レスポンス: 200 OK, ChatResponse
 
 - [x] **T005** [P] `coordinator/tests/contract/proxy_generate_test.rs` に POST /api/generate のcontract test
-  - リクエスト: GenerateRequest（Ollama API互換）
+  - リクエスト: GenerateRequest（LLM runtime API互換）
   - 期待レスポンス: 200 OK, GenerateResponse
 
 ### Integration Tests
@@ -75,11 +75,11 @@
 ### プロキシAPI層
 
 - [x] **T012** [P] `common/src/protocol.rs` にChatRequest/ChatResponse実装
-  - Ollama API互換の型定義
+  - LLM runtime API互換の型定義
   - Derive: Debug, Clone, Serialize, Deserialize
 
 - [x] **T013** [P] `common/src/protocol.rs` にGenerateRequest/GenerateResponse実装
-  - Ollama API互換の型定義
+  - LLM runtime API互換の型定義
   - Derive: Debug, Clone, Serialize, Deserialize
 
 - [x] **T014** `coordinator/src/api/proxy.rs` にproxy_chat()ハンドラー実装
@@ -134,7 +134,7 @@
 
 - [x] **T022** [P] README.md に統一APIプロキシセクション追加
   - 使用例、エンドポイント説明
-  - Ollama API互換性説明
+  - LLM runtime API互換性説明
 
 - [x] **T023** [P] Rustdocコメント追加
   - すべてのpublic関数にドキュメントコメント

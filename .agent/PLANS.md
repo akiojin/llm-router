@@ -2,19 +2,19 @@
 
 ## 概要
 
-Rustノードをllama.cpp統合のC++ノードに置き換える完全実装計画書。Ollamaプロセス依存を排除し、llama.cppを直接統合して高性能なマルチモデルホスティングを実現する。
+Rustノードをllama.cpp統合のC++ノードに置き換える完全実装計画書。LLM runtimeプロセス依存を排除し、llama.cppを直接統合して高性能なマルチモデルホスティングを実現する。
 
 ## 技術選択の根拠
 
 ### なぜC++を選んだか
-- **Rustからollama.cpp使用の課題**: FFI（bindgen/cxx）でC++をラップすることは可能だが、ビルド・ABI・API変更対応などの保守コストが非常に高い
+- **Rustからruntime.cpp使用の課題**: FFI（bindgen/cxx）でC++をラップすることは可能だが、ビルド・ABI・API変更対応などの保守コストが非常に高い
 - **検討した代替案**:
-  - `llama-cpp-rs`: RustからGGUFを直接読むバインディング（ollama.cpp不要）
-  - `ollama-rs`: Ollama HTTPクライアント（Ollamaサーバー依存）
-- **結論**: 「ollama.cppを前提にゴリゴリやるならC++が一番現実的」（GPT-5.1の推奨）
+  - `llama-cpp-rs`: RustからGGUFを直接読むバインディング（runtime.cpp不要）
+  - `runtime-rs`: LLM runtime HTTPクライアント（LLM runtimeサーバー依存）
+- **結論**: 「runtime.cppを前提にゴリゴリやるならC++が一番現実的」（GPT-5.1の推奨）
 
-### ollama.cppの制限事項と対策
-- **制限**: 単体ではOllama互換HTTPAPIを持っていない → **対策**: cpp-httplibで自前実装
+### runtime.cppの制限事項と対策
+- **制限**: 単体ではLLM runtime互換HTTPAPIを持っていない → **対策**: cpp-httplibで自前実装
 - **制限**: Modelfile的なモデル管理機能は限定的 → **対策**: 簡易版を実装、将来的に拡張
 - **制限**: マルチモデル管理や高度なキャッシュ機構なし → **対策**: スレッドプールで独自実装
 
@@ -25,7 +25,7 @@ Rustノードをllama.cpp統合のC++ノードに置き換える完全実装計�
 - **GPU必須**: ノード登録にはGPU検出が必須（GPUなしでは動作不可）
 - **ルーター互換性**: 既存のRustルーターとの完全な互換性
 - **モデル同期**: ルーターの`/v1/models`から自動同期
-- **Ollamaモデル互換**: `~/.ollama/models/`の既存モデルを活用
+- **LLM runtimeモデル互換**: `~/.runtime/models/`の既存モデルを活用
 - **自動リリース**: semantic-releaseによる自動バージョニング
 
 ### 対応モデル（ルーターから同期）
@@ -130,15 +130,15 @@ node/
   - [x] 同期ステータス管理
 - [x] **REFACTOR**: コードクリーンアップ
 
-#### Ollamaモデル互換 (models/) - RED-GREEN-REFACTOR
-- [x] **TEST FIRST**: tests/unit/ollama_compat_test.cpp
+#### LLM runtimeモデル互換 (models/) - RED-GREEN-REFACTOR
+- [x] **TEST FIRST**: tests/unit/runtime_compat_test.cpp
   - [x] マニフェスト解析テスト
   - [x] GGUFパス解決テスト
   - [x] モデル検証テスト
   - [x] エラー処理テスト
-- [x] ollama_compat.h の作成
-- [x] ollama_compat.cpp の実装
-  - [x] ~/.ollama/models/ のマニフェスト解析
+- [x] runtime_compat.h の作成
+- [x] runtime_compat.cpp の実装
+  - [x] ~/.runtime/models/ のマニフェスト解析
   - [x] GGUFファイルパス解決
   - [x] モデルメタデータ読み込み
 - [x] モデル検証
@@ -152,10 +152,10 @@ node/
   - [x] 中断・再開テスト
 - [x] model_downloader.h の作成
 - [x] model_downloader.cpp の実装
-  - [x] Ollamaレジストリ（registry.ollama.ai）通信
+  - [x] LLM runtimeレジストリ（registry.runtime.ai）通信
   - [x] Blobダウンロード（チャンク処理）
   - [x] 進捗報告機能
-  - [x] ~/.ollama/models/ への保存
+  - [x] ~/.runtime/models/ への保存
   - [x] チェックサムの検証
 - [x] **REFACTOR**: コードクリーンアップ
 
@@ -245,8 +245,8 @@ node/
 
 > **実装詳細 (2025-11-25)**:
 > - `llama_manager.cpp`: `#include "llama.h"`を追加、`llama_backend_init()`/`llama_backend_free()`でバックエンド管理
-> - `inference_engine.cpp`: LlamaManager/OllamaCompatへの依存性注入、実際のトークン化・推論ループ実装
-> - `main.cpp`: バックエンド初期化、LlamaManager/OllamaCompat/InferenceEngineの依存性注入
+> - `inference_engine.cpp`: LlamaManager/LLM runtimeCompatへの依存性注入、実際のトークン化・推論ループ実装
+> - `main.cpp`: バックエンド初期化、LlamaManager/LLM runtimeCompat/InferenceEngineの依存性注入
 > - 後方互換性: デフォルトコンストラクタはスタブモード維持（既存テスト互換）
 
 ### Phase 4: API実装（TDD）
@@ -434,7 +434,7 @@ node/
 4. モデル同期（テスト→実装）
 
 ### 📍 必須機能（MVP）
-1. Ollamaモデル読み込み（テスト→実装）
+1. LLM runtimeモデル読み込み（テスト→実装）
 2. llama.cpp統合（テスト→実装）
 3. OpenAI互換API（テスト→実装）
 4. CI/CD設定

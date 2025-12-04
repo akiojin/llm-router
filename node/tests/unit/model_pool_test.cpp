@@ -4,7 +4,7 @@
 
 #include "core/model_pool.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 namespace fs = std::filesystem;
 
 class TempModelPoolDir {

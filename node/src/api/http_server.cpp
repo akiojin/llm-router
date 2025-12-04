@@ -5,7 +5,7 @@
 #include <nlohmann/json.hpp>
 #include "utils/request_id.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 HttpServer::HttpServer(int port, OpenAIEndpoints& openai, NodeEndpoints& node, std::string bind_address)
     : port_(port), bind_address_(std::move(bind_address)), openai_(openai), node_(node) {}
@@ -129,4 +129,4 @@ void HttpServer::stop() {
     running_ = false;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

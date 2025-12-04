@@ -26,7 +26,7 @@ struct common_hf_file_res {
 };
 
 /**
- * Allow getting the HF file from the HF repo with tag (like ollama), for example:
+ * Allow getting the HF file from the HF repo with tag (docker-style), for example:
  * - bartowski/Llama-3.2-3B-Instruct-GGUF:q4
  * - bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
  * - bartowski/Llama-3.2-3B-Instruct-GGUF:q5_k_s
@@ -34,7 +34,7 @@ struct common_hf_file_res {
  *
  * Return pair of <repo, file> (with "repo" already having tag removed)
  *
- * Note: we use the Ollama-compatible HF API, but not using the blobId. Instead, we use the special "ggufFile" field which returns the value for "hf_file". This is done to be backward-compatible with existing cache files.
+ * Note: we reuse the registry-style HF API, without the blobId. Instead, we use the special "ggufFile" field which returns the value for "hf_file". This is done to be backward-compatible with existing cache files.
  */
 common_hf_file_res common_get_hf_file(
     const std::string & hf_repo_with_tag,

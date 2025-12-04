@@ -8,7 +8,7 @@
 #import <Metal/Metal.h>
 #endif
 
-namespace ollama_node {
+namespace llm_node {
 
 GpuDetector::GpuDetector() {
     // Constructor
@@ -147,6 +147,6 @@ void GpuDetector::setDetectedDevicesForTest(std::vector<GpuDevice> devices) {
 }
 #endif
 
-} // namespace ollama_node
+} // namespace llm_node
 
 #endif // __APPLE__

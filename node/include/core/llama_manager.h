@@ -13,7 +13,7 @@
 struct llama_model;
 struct llama_context;
 
-namespace ollama_node {
+namespace llm_node {
 
 /// llama.cpp モデルとコンテキストを保持する構造体
 struct LlamaContext {
@@ -122,4 +122,4 @@ private:
     void updateAccessTime(const std::string& model_path);
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

@@ -1,5 +1,5 @@
 // SPEC-dcaeaec4: ModelStorage implementation
-// Simple model file management without Ollama dependency
+// Simple model file management without LLM runtime dependency
 #include "models/model_storage.h"
 
 #include <filesystem>
@@ -10,7 +10,7 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace ollama_node {
+namespace llm_node {
 
 ModelStorage::ModelStorage(std::string models_dir) : models_dir_(std::move(models_dir)) {}
 
@@ -114,4 +114,4 @@ bool ModelStorage::validateModel(const std::string& model_name) const {
     return fs::exists(gguf_path) && fs::is_regular_file(gguf_path);
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

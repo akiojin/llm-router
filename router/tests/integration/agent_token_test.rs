@@ -62,8 +62,8 @@ async fn test_agent_registration_token_issuance() {
     let register_payload = json!({
         "machine_name": "test-agent",
         "ip_address": "192.168.1.100",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 3090", "count": 1}
@@ -119,8 +119,8 @@ async fn test_health_check_with_valid_token() {
     let register_payload = json!({
         "machine_name": "health-check-agent",
         "ip_address": "192.168.1.101",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 3090", "count": 1}
@@ -261,8 +261,8 @@ async fn test_health_check_without_token_rejected() {
     let register_payload = json!({
         "machine_name": "to-be-deleted-agent",
         "ip_address": "192.168.1.102",
-        "ollama_version": "0.1.42",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.42",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "NVIDIA RTX 3090", "count": 1}

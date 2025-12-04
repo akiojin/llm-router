@@ -43,7 +43,7 @@ async fn test_agents_list_with_agents() {
     //     assert!(agent["id"].is_string());
     //     assert!(agent["machine_name"].is_string());
     //     assert!(agent["ip_address"].is_string());
-    //     assert!(agent["ollama_version"].is_string());
+    //     assert!(agent["runtime_version"].is_string());
     //     assert!(agent["status"].is_string());
     //     assert!(agent["registered_at"].is_string());
     //     assert!(agent["last_seen"].is_string());

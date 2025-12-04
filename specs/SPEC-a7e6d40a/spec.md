@@ -223,7 +223,7 @@ Web UIからの登録に加えて、CLIからの一括登録やスクリプト�
 | `LLM_ROUTER_URL` | ルーターURL | `http://127.0.0.1:8080` |
 | `LLM_NODE_PORT` | 待受ポート | 11435 |
 | `LLM_NODE_IP` | ノードIP | (自動検出) |
-| `LLM_NODE_MODELS_DIR` | モデル保存先 | `~/.ollama/models` |
+| `LLM_NODE_MODELS_DIR` | モデル保存先 | `~/.runtime/models` |
 | `LLM_NODE_LOG_LEVEL` | ログレベル | info |
 | `LLM_NODE_LOG_DIR` | ログディレクトリ | `~/.llm-node/logs` |
 | `LLM_NODE_HEARTBEAT_SECS` | ハートビート間隔 | 10 |

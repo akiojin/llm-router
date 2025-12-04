@@ -9,7 +9,7 @@
 
 #include "models/model_downloader.h"
 
-namespace ollama_node {
+namespace llm_node {
 
 enum class SyncState {
     Idle,
@@ -110,4 +110,4 @@ private:
     SyncStatusInfo status_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

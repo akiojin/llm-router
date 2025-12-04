@@ -6,7 +6,7 @@
 #include <vector>
 #include <functional>
 
-namespace ollama_node {
+namespace llm_node {
 
 class OpenAIEndpoints;
 class NodeEndpoints;
@@ -49,4 +49,4 @@ private:
     Logger logger_{};
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

@@ -1,6 +1,31 @@
 # CLAUDE.md
 
 このファイルは、このリポジトリでコードを扱う際のガイダンスを提供します。
+短く「何を・どこを見るか」を示し、詳細は既存ドキュメントに段階的に委譲します
+（参考: [Writing a good CLAUDE.md](https://www.humanlayer.dev/blog/writing-a-good-claude-md)）。
+
+## まず読む 90秒版
+
+- 何を作る: Rust 製ルーター（`router/`）＋ llama.cpp ベースの C++ ノード（`node/`）。Ollama は一切使わない／復活させない。
+- どこを見る: `README.md`（全体像）→ `DEVELOPMENT.md`（セットアップ）→ `specs/`（要件とタスク）。
+- 守る: ブランチ／worktree 作成・切替禁止、作業ディレクトリ移動禁止、GPU 非搭載ノード登録禁止、必ずローカルで全テスト実行。
+- まず実行: `make quality-checks`（時間がない場合でも個別コマンドを全て回すこと）。
+- 迷ったら: `memory/constitution.md` とこのファイル後半の詳細ルールを再確認。
+
+## 参照リンク（詳細はここで確認）
+
+- プロジェクト概要とセットアップ: `README.md`, `README.ja.md`, `DEVELOPMENT.md`
+- 仕様とタスク: `specs/` 配下の `spec.md` / `plan.md` / `tasks.md`
+- 品質基準と憲章: `memory/constitution.md`
+- CLI とモデル管理: `router/src/cli/`
+- テスト＆CIワークフロー: `.specify/scripts/checks/`, `make quality-checks`, `make openai-tests`
+
+## よくあるNG（必ず回避）
+
+- Ollama を再導入する変更
+- ブランチ／worktree操作・`cd` での作業ディレクトリ移動
+- テストをスキップしたコミット／プッシュ
+- Spec を書かずに新機能を実装すること
 
 ## 現在の目的
 

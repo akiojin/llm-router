@@ -6,7 +6,7 @@
 #include <openssl/sha.h>
 #include <fstream>
 
-namespace ollama_node {
+namespace llm_node {
 
 inline std::string sha256_file(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
@@ -33,4 +33,4 @@ inline std::string sha256_file(const std::filesystem::path& path) {
     return hexout;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

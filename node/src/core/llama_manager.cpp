@@ -7,7 +7,7 @@
 
 namespace fs = std::filesystem;
 
-namespace ollama_node {
+namespace llm_node {
 
 // LlamaContext デストラクタ: リソース解放
 LlamaContext::~LlamaContext() {
@@ -79,9 +79,9 @@ std::string LlamaManager::canonicalizePath(const std::string& path) const {
     return fs::weakly_canonical(p).string();
 }
 
-// Ollamaのblobファイル名かどうかを判定
-static bool isOllamaBlobFile(const std::string& filename) {
-    // Ollama blob format: sha256-<64 hex chars>
+// LLM runtimeのblobファイル名かどうかを判定
+static bool is_llm_runtime_blob_file(const std::string& filename) {
+    // LLM runtime blob format: sha256-<64 hex chars>
     if (filename.length() < 7) return false;
     if (filename.substr(0, 7) != "sha256-") return false;
     // 残りが16進数文字のみかチェック
@@ -98,11 +98,11 @@ static bool isOllamaBlobFile(const std::string& filename) {
 bool LlamaManager::loadModel(const std::string& model_path) {
     std::string canonical = canonicalizePath(model_path);
 
-    // 拡張子チェック（.ggufまたはOllama blobファイル形式を許可）
+    // 拡張子チェック（.ggufまたはLLM runtime blobファイル形式を許可）
     fs::path p(canonical);
     std::string filename = p.filename().string();
-    if (p.extension() != ".gguf" && !isOllamaBlobFile(filename)) {
-        spdlog::error("Invalid model file (expected .gguf or Ollama blob): {}", canonical);
+    if (p.extension() != ".gguf" && !is_llm_runtime_blob_file(filename)) {
+        spdlog::error("Invalid model file (expected .gguf or LLM runtime blob): {}", canonical);
         return false;
     }
 
@@ -413,4 +413,4 @@ std::optional<std::string> LlamaManager::getLeastRecentlyUsedModel() const {
     return oldest_model;
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

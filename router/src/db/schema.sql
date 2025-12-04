@@ -3,8 +3,8 @@ CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
     machine_name TEXT NOT NULL,
     ip_address TEXT NOT NULL,
-    ollama_version TEXT NOT NULL,
-    ollama_port INTEGER NOT NULL,
+    runtime_version TEXT NOT NULL,
+    runtime_port INTEGER NOT NULL,
     status TEXT NOT NULL CHECK(status IN ('online', 'offline')),
     registered_at TEXT NOT NULL,
     last_seen TEXT NOT NULL

@@ -22,7 +22,7 @@ RUN cmake -S /src -B /build \
     -DBUILD_WITH_CUDA=$([ "$CUDA" = "cuda" ] && echo ON || echo OFF) && \
     cmake --build /build --config Release && \
     cmake --install /build --prefix /usr/local && \
-    strip /usr/local/bin/ollama-node || true
+    strip /usr/local/bin/llm-node || true
 
 # Runtime images
 FROM debian:bookworm-slim AS runtime-cpu
@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 FROM runtime-${CUDA} AS runtime
 
-ENV LLM_MODELS_DIR=/var/lib/ollama/models
+ENV LLM_MODELS_DIR=/var/lib/runtime/models
 ENV LLM_ROUTER_URL=http://router:8080
 ENV LLM_NODE_PORT=11435
 
@@ -45,6 +45,6 @@ WORKDIR /app
 COPY --from=build /usr/local /usr/local
 
 EXPOSE 11435
-VOLUME ["/var/lib/ollama/models"]
+VOLUME ["/var/lib/runtime/models"]
 
-ENTRYPOINT ["/usr/local/bin/ollama-node"]
+ENTRYPOINT ["/usr/local/bin/llm-node"]

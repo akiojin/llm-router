@@ -276,18 +276,15 @@ class Opt {
             "Commands:\n"
             "  model\n"
             "      Model is a string with an optional prefix of \n"
-            "      huggingface:// (hf://), modelscope:// (ms://), ollama://, https:// or file://.\n"
+            "      huggingface:// (hf://), modelscope:// (ms://), https:// or file://.\n"
             "      If no protocol is specified and a file exists in the specified\n"
-            "      path, file:// is assumed, otherwise if a file does not exist in\n"
-            "      the specified path, ollama:// is assumed. Models that are being\n"
+            "      path, file:// is assumed. Models that are being\n"
             "      pulled are downloaded with .partial extension while being\n"
             "      downloaded and then renamed as the file without the .partial\n"
             "      extension when complete.\n"
             "\n"
             "Examples:\n"
             "  llama-run llama3\n"
-            "  llama-run ollama://granite-code\n"
-            "  llama-run ollama://smollm:135m\n"
             "  llama-run hf://QuantFactory/SmolLM-135M-GGUF/SmolLM-135M.Q2_K.gguf\n"
             "  llama-run "
             "huggingface://bartowski/SmolLM-1.7B-Instruct-v0.2-GGUF/SmolLM-1.7B-Instruct-v0.2-IQ3_M.gguf\n"
@@ -865,32 +862,6 @@ class LlamaData {
         return dl_from_endpoint(model_endpoint, model, bn);
     }
 
-    int ollama_dl(std::string & model, const std::string & bn) {
-        const std::vector<std::string> headers = { "Accept: application/vnd.docker.distribution.manifest.v2+json" };
-        if (model.find('/') == std::string::npos) {
-            model = "library/" + model;
-        }
-
-        auto [model_name, manifest_url] = extract_model_and_tag(model, "https://registry.ollama.ai/v2/");
-        nlohmann::json manifest;
-        int            ret = download_and_parse_manifest(manifest_url, {}, manifest);
-        if (ret) {
-            return ret;
-        }
-
-        std::string layer;
-        for (const auto & l : manifest["layers"]) {
-            if (l["mediaType"] == "application/vnd.ollama.image.model") {
-                layer = l["digest"];
-                break;
-            }
-        }
-
-        std::string blob_url = "https://registry.ollama.ai/v2/" + model_name + "/blobs/" + layer;
-
-        return download(blob_url, bn, true, headers);
-    }
-
     int github_dl(const std::string & model, const std::string & bn) {
         std::string  repository = model;
         std::string  branch     = "main";
@@ -985,8 +956,7 @@ class LlamaData {
         } else if (string_starts_with(model_, "ms://") || string_starts_with(model_, "modelscope://")) {
             rm_until_substring(model_, "://");
             ret = modelscope_dl(model_, bn);
-        } else if ((string_starts_with(model_, "https://") || string_starts_with(model_, "http://")) &&
-                   !string_starts_with(model_, "https://ollama.com/library/")) {
+        } else if (string_starts_with(model_, "https://") || string_starts_with(model_, "http://")) {
             ret = download(model_, bn, true);
         } else if (string_starts_with(model_, "github:") || string_starts_with(model_, "github://")) {
             rm_until_substring(model_, "github:");
@@ -995,10 +965,9 @@ class LlamaData {
         } else if (string_starts_with(model_, "s3://")) {
             rm_until_substring(model_, "://");
             ret = s3_dl(model_, bn);
-        } else {  // ollama:// or nothing
-            rm_until_substring(model_, "ollama.com/library/");
-            rm_until_substring(model_, "://");
-            ret = ollama_dl(model_, bn);
+        } else {
+            printe("Unsupported model URI scheme. Use hf://, modelscope://, github://, s3://, https://, http:// or file://\n");
+            ret = 1;
         }
 
         model_ = bn;

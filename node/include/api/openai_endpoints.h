@@ -5,7 +5,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 
-namespace ollama_node {
+namespace llm_node {
 
 class ModelRegistry;
 class InferenceEngine;
@@ -25,4 +25,4 @@ private:
     bool validateModel(const std::string& model, httplib::Response& res);
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

@@ -1,11 +1,11 @@
-// prometheus_exporter.h - minimal Prometheus text exporter for ollama-node
+// prometheus_exporter.h - minimal Prometheus text exporter for llm-node
 #pragma once
 
 #include <string>
 #include <vector>
 #include <mutex>
 
-namespace ollama_node::metrics {
+namespace llm_node::metrics {
 
 struct Gauge {
     std::string name;
@@ -31,4 +31,4 @@ class PrometheusExporter {
     std::vector<Counter> counters_;
 };
 
-}  // namespace ollama_node::metrics
+}  // namespace llm_node::metrics

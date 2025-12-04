@@ -64,7 +64,7 @@ cmake --build build --config Release
 |---------|-----------|------|
 | `LLM_ROUTER_URL` | `http://127.0.0.1:11434` | ルーターURL |
 | `LLM_NODE_PORT` | `11435` | HTTPサーバーポート |
-| `LLM_NODE_MODELS_DIR` | `~/.ollama/models` | モデルディレクトリ |
+| `LLM_NODE_MODELS_DIR` | `~/.runtime/models` | モデルディレクトリ |
 | `LLM_NODE_BIND_ADDRESS` | `0.0.0.0` | バインドアドレス |
 | `LLM_NODE_HEARTBEAT_SECS` | `10` | ハートビート間隔（秒） |
 | `LLM_NODE_ALLOW_NO_GPU` | `false` | GPU必須を無効化 |

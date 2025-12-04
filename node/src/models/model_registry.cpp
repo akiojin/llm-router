@@ -1,7 +1,7 @@
 #include "models/model_registry.h"
 #include <algorithm>
 
-namespace ollama_node {
+namespace llm_node {
 
 void ModelRegistry::setModels(std::vector<std::string> models) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -18,4 +18,4 @@ bool ModelRegistry::hasModel(const std::string& id) const {
     return std::find(models_.begin(), models_.end(), id) != models_.end();
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

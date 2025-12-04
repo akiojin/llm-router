@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
-  title: Ollama Coordinator Dashboard API
+  title: LLM runtime Coordinator Dashboard API
   description: |
     管理ダッシュボードのREST API仕様。
     エージェント情報とシステム統計をJSON形式で提供します。
   version: 1.0.0
   contact:
-    name: Ollama Coordinator Team
+    name: LLM runtime Coordinator Team
 servers:
   - url: http://localhost:8080
     description: Local development server
@@ -64,7 +64,7 @@ paths:
                       machine_name: "server-01"
                       ip_address: "192.168.1.100"
                       status: "Online"
-                      ollama_version: "0.1.0"
+                      runtime_version: "0.1.0"
                       registered_at: "2025-10-31T10:00:00Z"
                       last_seen: "2025-10-31T12:30:00Z"
                       uptime_seconds: 9000
@@ -72,7 +72,7 @@ paths:
                       machine_name: "server-02"
                       ip_address: "192.168.1.101"
                       status: "Online"
-                      ollama_version: "0.1.0"
+                      runtime_version: "0.1.0"
                       registered_at: "2025-10-31T09:00:00Z"
                       last_seen: "2025-10-31T12:30:00Z"
                       uptime_seconds: 12600
@@ -174,7 +174,7 @@ components:
         - machine_name
         - ip_address
         - status
-        - ollama_version
+        - runtime_version
         - registered_at
         - last_seen
         - uptime_seconds
@@ -200,9 +200,9 @@ components:
           enum: [Online, Offline]
           description: エージェントステータス
           example: "Online"
-        ollama_version:
+        runtime_version:
           type: string
-          description: Ollamaバージョン（セマンティックバージョニング）
+          description: LLM runtimeバージョン（セマンティックバージョニング）
           example: "0.1.0"
           pattern: "^\\d+\\.\\d+\\.\\d+$"
         registered_at:

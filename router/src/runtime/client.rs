@@ -1,4 +1,4 @@
-//! Ollamaクライアント
+//! ノードランタイムクライアント（llama.cpp）
 //!
 //! ノード経由でモデル情報を取得し、事前定義リストと統合
 
@@ -10,20 +10,20 @@ use serde::Deserialize;
 use std::time::Duration;
 use tracing::{debug, warn};
 
-/// Ollamaクライアント
-pub struct OllamaClient {
+/// ノードランタイムクライアント
+pub struct RuntimeClient {
     http_client: Client,
 }
 
-/// Ollama APIのモデル一覧レスポンス
+/// ノードAPIのモデル一覧レスポンス
 #[derive(Debug, Deserialize)]
-struct OllamaTagsResponse {
-    models: Vec<OllamaModel>,
+struct RuntimeModelsResponse {
+    models: Vec<RuntimeModel>,
 }
 
-/// Ollamaモデル情報
+/// ノードランタイムから返されるモデル情報
 #[derive(Debug, Deserialize)]
-struct OllamaModel {
+struct RuntimeModel {
     name: String,
     #[serde(default)]
     size: u64,
@@ -31,20 +31,20 @@ struct OllamaModel {
     #[allow(dead_code)] // 将来の使用のために保持
     digest: Option<String>,
     #[serde(default)]
-    details: Option<OllamaModelDetails>,
+    details: Option<RuntimeModelDetails>,
 }
 
-/// Ollamaモデル詳細
+/// ノードランタイムのモデル詳細
 #[derive(Debug, Deserialize)]
-struct OllamaModelDetails {
+struct RuntimeModelDetails {
     #[serde(default)]
     parameter_size: Option<String>,
     #[serde(default)]
     quantization_level: Option<String>,
 }
 
-impl OllamaClient {
-    /// 新しいOllamaClientを作成
+impl RuntimeClient {
+    /// 新しいRuntimeClientを作成
     pub fn new() -> RouterResult<Self> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(10))
@@ -77,26 +77,26 @@ impl OllamaClient {
             )));
         }
 
-        let tags_response: OllamaTagsResponse = response.json().await.map_err(|e| {
+        let tags_response: RuntimeModelsResponse = response.json().await.map_err(|e| {
             RouterError::Internal(format!("Failed to parse models response: {}", e))
         })?;
 
         let models = tags_response
             .models
             .into_iter()
-            .map(|m| self.convert_ollama_model(m))
+            .map(|m| self.convert_runtime_model(m))
             .collect();
 
         Ok(models)
     }
 
-    /// ノード側のOllamaが起動しているか簡易ヘルスチェック
-    pub async fn check_ollama_health(&self, agent_base_url: &str) -> RouterResult<()> {
+    /// ノード側のランタイムが起動しているか簡易ヘルスチェック
+    pub async fn check_runtime_health(&self, agent_base_url: &str) -> RouterResult<()> {
         let url = format!("{}/api/version", agent_base_url);
-        debug!("Checking ollama health: {}", url);
+        debug!("Checking runtime health: {}", url);
 
         let response = self.http_client.get(&url).send().await.map_err(|e| {
-            RouterError::Internal(format!("Failed to connect to agent ollama: {}", e))
+            RouterError::Internal(format!("Failed to connect to agent runtime: {}", e))
         })?;
 
         if response.status() == StatusCode::NOT_FOUND {
@@ -106,7 +106,7 @@ impl OllamaClient {
 
         if !response.status().is_success() {
             return Err(RouterError::Internal(format!(
-                "Node ollama health check failed: HTTP {}",
+                "Node runtime health check failed: HTTP {}",
                 response.status()
             )));
         }
@@ -191,9 +191,9 @@ impl OllamaClient {
         Ok(all_models)
     }
 
-    /// OllamaModelをModelInfoに変換
-    fn convert_ollama_model(&self, ollama_model: OllamaModel) -> ModelInfo {
-        let description = if let Some(details) = &ollama_model.details {
+    /// ランタイムモデルをModelInfoに変換
+    fn convert_runtime_model(&self, runtime_model: RuntimeModel) -> ModelInfo {
+        let description = if let Some(details) = &runtime_model.details {
             format!(
                 "{} ({})",
                 details.parameter_size.as_deref().unwrap_or("unknown size"),
@@ -207,11 +207,11 @@ impl OllamaClient {
         };
 
         // モデルサイズから必要メモリを推定（1.5倍）
-        let required_memory = (ollama_model.size as f64 * 1.5) as u64;
+        let required_memory = (runtime_model.size as f64 * 1.5) as u64;
 
         ModelInfo::new(
-            ollama_model.name,
-            ollama_model.size,
+            runtime_model.name,
+            runtime_model.size,
             description,
             required_memory,
             vec!["llm".to_string()],
@@ -219,7 +219,7 @@ impl OllamaClient {
     }
 }
 
-impl Default for OllamaClient {
+impl Default for RuntimeClient {
     fn default() -> Self {
         Self::new().unwrap()
     }
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_get_predefined_models() {
-        let client = OllamaClient::new().unwrap();
+        let client = RuntimeClient::new().unwrap();
         let models = client.get_predefined_models();
 
         assert!(!models.is_empty());
@@ -243,20 +243,20 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_ollama_model() {
-        let client = OllamaClient::new().unwrap();
+    fn test_convert_runtime_model() {
+        let client = RuntimeClient::new().unwrap();
 
-        let ollama_model = OllamaModel {
+        let runtime_model = RuntimeModel {
             name: "test-model:latest".to_string(),
             size: 5_000_000_000,
             digest: Some("abc123".to_string()),
-            details: Some(OllamaModelDetails {
+            details: Some(RuntimeModelDetails {
                 parameter_size: Some("7B".to_string()),
                 quantization_level: Some("Q4_K_M".to_string()),
             }),
         };
 
-        let model_info = client.convert_ollama_model(ollama_model);
+        let model_info = client.convert_runtime_model(runtime_model);
 
         assert_eq!(model_info.name, "test-model:latest");
         assert_eq!(model_info.size, 5_000_000_000);

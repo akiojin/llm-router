@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace ollama_node {
+namespace llm_node {
 
 // Parse JSON string; returns std::nullopt on error and fills error message if provided.
 std::optional<nlohmann::json> parse_json(const std::string& body, std::string* error = nullptr);
@@ -31,4 +31,4 @@ bool has_required_keys(const nlohmann::json& j,
 // Compact JSON to string (no indentation).
 std::string json_to_string(const nlohmann::json& j);
 
-}  // namespace ollama_node
+}  // namespace llm_node

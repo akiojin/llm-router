@@ -6,7 +6,7 @@
 
 #include "utils/config.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 namespace fs = std::filesystem;
 
 class EnvGuard {

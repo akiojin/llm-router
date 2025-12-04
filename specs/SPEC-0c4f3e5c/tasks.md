@@ -1,4 +1,4 @@
-# Ollamaモデルストレージ形式サポート タスク一覧
+# LLM runtimeモデルストレージ形式サポート タスク一覧
 
 ## Setup
 
@@ -8,12 +8,12 @@
 
 ## Test (TDD Red)
 
-- [x] isOllamaBlobFile関数のテスト作成
+- [x] isLLM runtimeBlobFile関数のテスト作成
 - [x] loadModel関数のblobサポートテスト作成
 
 ## Core (TDD Green)
 
-- [x] isOllamaBlobFile関数実装
+- [x] isLLM runtimeBlobFile関数実装
 - [x] loadModel関数のblobサポート実装
 
 ## Polish

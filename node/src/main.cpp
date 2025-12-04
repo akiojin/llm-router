@@ -26,22 +26,22 @@
 #include "runtime/state.h"
 #include "utils/logger.h"
 
-int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
-    ollama_node::g_running_flag.store(true);
+int run_node(const llm_node::NodeConfig& cfg, bool single_iteration) {
+    llm_node::g_running_flag.store(true);
 
     bool server_started = false;
     bool llama_backend_initialized = false;
     std::thread heartbeat_thread;
 
     try {
-        ollama_node::logger::init_from_env();
-        ollama_node::set_ready(false);
+        llm_node::logger::init_from_env();
+        llm_node::set_ready(false);
         std::string router_url = cfg.router_url;
         int node_port = cfg.node_port;
 
         // Initialize llama.cpp backend
         spdlog::info("Initializing llama.cpp backend...");
-        ollama_node::LlamaManager::initBackend();
+        llm_node::LlamaManager::initBackend();
         llama_backend_initialized = true;
 
         spdlog::info("Router URL: {}", router_url);
@@ -49,7 +49,7 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
 
         // GPU detection
         std::cout << "Detecting GPUs..." << std::endl;
-        ollama_node::GpuDetector gpu_detector;
+        llm_node::GpuDetector gpu_detector;
         auto gpus = gpu_detector.detect();
         if (cfg.require_gpu && !gpu_detector.hasGpu()) {
             std::cerr << "Error: No GPU detected. GPU is required for node operation." << std::endl;
@@ -60,10 +60,10 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         std::cout << "GPU detected: devices=" << gpus.size() << " total_mem=" << total_mem << " bytes" << std::endl;
 
         // Build GPU device info for router
-        std::vector<ollama_node::GpuDeviceInfoForRouter> gpu_devices;
+        std::vector<llm_node::GpuDeviceInfoForRouter> gpu_devices;
         for (const auto& gpu : gpus) {
             if (gpu.is_available) {
-                ollama_node::GpuDeviceInfoForRouter device;
+                llm_node::GpuDeviceInfoForRouter device;
                 device.model = gpu.name;
                 device.count = 1;
                 device.memory = gpu.memory_bytes;
@@ -78,7 +78,7 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         std::string bind_address = cfg.bind_address.empty() ? std::string("0.0.0.0") : cfg.bind_address;
 
         // Initialize model registry (empty for now, will sync after registration)
-        ollama_node::ModelRegistry registry;
+        llm_node::ModelRegistry registry;
 
         // Determine models directory
         std::string models_dir = cfg.models_dir.empty()
@@ -86,8 +86,8 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
                                      : cfg.models_dir;
 
         // Initialize LlamaManager and ModelStorage for inference engine
-        ollama_node::LlamaManager llama_manager(models_dir);
-        ollama_node::ModelStorage model_storage(models_dir);
+        llm_node::LlamaManager llama_manager(models_dir);
+        llm_node::ModelStorage model_storage(models_dir);
 
         // Set GPU layers based on detection (use all layers on GPU if available)
         if (!gpu_devices.empty()) {
@@ -120,47 +120,47 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         }
 
         // Initialize auto-repair (if enabled)
-        std::unique_ptr<ollama_node::ModelSync> model_sync_ptr;
-        std::unique_ptr<ollama_node::ModelDownloader> model_downloader_ptr;
-        std::unique_ptr<ollama_node::ModelRepair> model_repair_ptr;
+        std::unique_ptr<llm_node::ModelSync> model_sync_ptr;
+        std::unique_ptr<llm_node::ModelDownloader> model_downloader_ptr;
+        std::unique_ptr<llm_node::ModelRepair> model_repair_ptr;
 
         if (cfg.auto_repair) {
             spdlog::info("Auto-repair enabled, initializing ModelRepair...");
-            model_sync_ptr = std::make_unique<ollama_node::ModelSync>(router_url, models_dir);
-            model_downloader_ptr = std::make_unique<ollama_node::ModelDownloader>(router_url, models_dir);
-            model_repair_ptr = std::make_unique<ollama_node::ModelRepair>(
+            model_sync_ptr = std::make_unique<llm_node::ModelSync>(router_url, models_dir);
+            model_downloader_ptr = std::make_unique<llm_node::ModelDownloader>(router_url, models_dir);
+            model_repair_ptr = std::make_unique<llm_node::ModelRepair>(
                 *model_sync_ptr, *model_downloader_ptr, model_storage);
             model_repair_ptr->setDefaultTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::seconds(cfg.repair_timeout_secs)));
         }
 
         // Initialize inference engine with dependencies
-        ollama_node::InferenceEngine engine = cfg.auto_repair && model_repair_ptr
-            ? ollama_node::InferenceEngine(llama_manager, model_storage, *model_repair_ptr)
-            : ollama_node::InferenceEngine(llama_manager, model_storage);
+        llm_node::InferenceEngine engine = cfg.auto_repair && model_repair_ptr
+            ? llm_node::InferenceEngine(llama_manager, model_storage, *model_repair_ptr)
+            : llm_node::InferenceEngine(llama_manager, model_storage);
         spdlog::info("InferenceEngine initialized with llama.cpp support{}", cfg.auto_repair ? " (auto-repair enabled)" : "");
 
         // Create shared router client for both registration and progress reporting
-        auto router_client = std::make_shared<ollama_node::RouterClient>(router_url);
+        auto router_client = std::make_shared<llm_node::RouterClient>(router_url);
 
         // Create model_sync early so pull endpoint is ready for auto-distribution
-        auto model_sync = std::make_shared<ollama_node::ModelSync>(router_url, models_dir);
+        auto model_sync = std::make_shared<llm_node::ModelSync>(router_url, models_dir);
 
         // Start HTTP server BEFORE registration (router checks /v1/models endpoint)
-        ollama_node::OpenAIEndpoints openai(registry, engine);
-        ollama_node::NodeEndpoints node_endpoints;
+        llm_node::OpenAIEndpoints openai(registry, engine);
+        llm_node::NodeEndpoints node_endpoints;
         node_endpoints.setGpuInfo(gpus.size(), total_mem, capability);
         node_endpoints.setRouterClient(router_client);
         node_endpoints.setModelSync(model_sync);
-        ollama_node::HttpServer server(node_port, openai, node_endpoints, bind_address);
+        llm_node::HttpServer server(node_port, openai, node_endpoints, bind_address);
         std::cout << "Starting HTTP server on port " << node_port << "..." << std::endl;
         server.start();
         server_started = true;
 
         // Register with router (retry)
         std::cout << "Registering with router..." << std::endl;
-        ollama_node::RouterClient router(router_url);
-        ollama_node::NodeInfo info;
+        llm_node::RouterClient router(router_url);
+        llm_node::NodeInfo info;
         info.machine_name = hostname_buf;
         // Use configured IP, or extract host from router URL, or fallback to hostname
         if (!cfg.ip_address.empty()) {
@@ -188,16 +188,16 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
             }
         }
         spdlog::info("Node IP address: {}", info.ip_address);
-        info.ollama_version = "1.0.0";  // llm-node version
-        // Router calculates API port as ollama_port + 1, so report node_port - 1
-        info.ollama_port = static_cast<uint16_t>(node_port > 0 ? node_port - 1 : 11434);
+        info.runtime_version = "1.0.0";  // llm-node version
+        // Router calculates API port as runtime_port + 1, so report node_port - 1
+        info.runtime_port = static_cast<uint16_t>(node_port > 0 ? node_port - 1 : 11434);
         info.gpu_available = !gpu_devices.empty();
         info.gpu_devices = gpu_devices;
         if (!gpu_devices.empty()) {
             info.gpu_count = static_cast<uint32_t>(gpu_devices.size());
             info.gpu_model = gpu_devices[0].model;
         }
-        ollama_node::NodeRegistrationResult reg;
+        llm_node::NodeRegistrationResult reg;
         const int reg_max = 3;
         for (int attempt = 0; attempt < reg_max; ++attempt) {
             reg = router.registerNode(info);
@@ -228,13 +228,13 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         registry.setModels(local_model_names);
         spdlog::info("Registered {} local models", local_model_names.size());
 
-        ollama_node::set_ready(true);
+        llm_node::set_ready(true);
 
         // Heartbeat thread
         std::cout << "Starting heartbeat thread..." << std::endl;
         std::string agent_token = reg.agent_token;
         heartbeat_thread = std::thread([&router, node_id = reg.node_id, agent_token, &cfg]() {
-            while (ollama_node::is_running()) {
+            while (llm_node::is_running()) {
                 router.sendHeartbeat(node_id, agent_token);
                 std::this_thread::sleep_for(std::chrono::seconds(cfg.heartbeat_interval_sec));
             }
@@ -245,9 +245,9 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         // Main loop
         if (single_iteration) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            ollama_node::request_shutdown();
+            llm_node::request_shutdown();
         }
-        while (ollama_node::is_running()) {
+        while (llm_node::is_running()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
 
@@ -261,17 +261,17 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
         // Free llama.cpp backend
         if (llama_backend_initialized) {
             spdlog::info("Freeing llama.cpp backend...");
-            ollama_node::LlamaManager::freeBackend();
+            llm_node::LlamaManager::freeBackend();
         }
 
     } catch (const std::exception& e) {
         std::cerr << "Fatal error: " << e.what() << std::endl;
         if (heartbeat_thread.joinable()) {
-            ollama_node::request_shutdown();
+            llm_node::request_shutdown();
             heartbeat_thread.join();
         }
         if (llama_backend_initialized) {
-            ollama_node::LlamaManager::freeBackend();
+            llm_node::LlamaManager::freeBackend();
         }
         if (server_started) {
             // best-effort stop
@@ -285,13 +285,13 @@ int run_node(const ollama_node::NodeConfig& cfg, bool single_iteration) {
 
 void signalHandler(int signal) {
     std::cout << "Received signal " << signal << ", shutting down..." << std::endl;
-    ollama_node::request_shutdown();
+    llm_node::request_shutdown();
 }
 
 #ifndef LLM_NODE_TESTING
 int main(int argc, char* argv[]) {
     // Parse CLI arguments first
-    auto cli_result = ollama_node::parseCliArgs(argc, argv);
+    auto cli_result = llm_node::parseCliArgs(argc, argv);
     if (cli_result.should_exit) {
         std::cout << cli_result.output;
         return cli_result.exit_code;
@@ -303,14 +303,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << "llm-node v" << LLM_NODE_VERSION << " starting..." << std::endl;
 
-    auto cfg = ollama_node::loadNodeConfig();
+    auto cfg = llm_node::loadNodeConfig();
     return run_node(cfg, /*single_iteration=*/false);
 }
 #endif
 
 #ifdef LLM_NODE_TESTING
-extern "C" int ollama_node_run_for_test() {
-    auto cfg = ollama_node::loadNodeConfig();
+extern "C" int llm_node_run_for_test() {
+    auto cfg = llm_node::loadNodeConfig();
     // short intervals for tests
     cfg.heartbeat_interval_sec = 1;
     cfg.require_gpu = false;

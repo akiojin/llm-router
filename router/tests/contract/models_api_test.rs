@@ -91,8 +91,8 @@ async fn test_get_available_models_contract() {
     );
     let source = body["source"].as_str().expect("'source' must be a string");
     assert!(
-        ["ollama_library", "nodes"].contains(&source),
-        "'source' must be 'ollama_library' or 'nodes'"
+        ["builtin", "nodes", "hf"].contains(&source),
+        "'source' must be 'builtin', 'nodes', or 'hf'"
     );
 
     // models配列の各要素の検証
@@ -181,8 +181,8 @@ async fn test_get_agent_models_contract() {
     let register_payload = json!({
         "machine_name": "test-node",
         "ip_address": "127.0.0.1",
-        "ollama_version": "0.1.0",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.0",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "Test GPU", "count": 1}
@@ -263,8 +263,8 @@ async fn test_pull_model_contract() {
     let register_payload = json!({
         "machine_name": "test-node",
         "ip_address": "127.0.0.1",
-        "ollama_version": "0.1.0",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.0",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "Test GPU", "count": 1}
@@ -345,8 +345,8 @@ async fn test_get_task_progress_contract() {
     let register_payload = json!({
         "machine_name": "test-node",
         "ip_address": "127.0.0.1",
-        "ollama_version": "0.1.0",
-        "ollama_port": 11434,
+        "runtime_version": "0.1.0",
+        "runtime_port": 11434,
         "gpu_available": true,
         "gpu_devices": [
             {"model": "Test GPU", "count": 1}

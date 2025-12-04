@@ -28,11 +28,11 @@ pub struct Agent {
     /// IPアドレス
     pub ip_address: String,
 
-    /// Ollamaポート番号
+    /// LLM runtimeポート番号
     pub port: u16,
 
-    /// Ollamaバージョン
-    pub ollama_version: String,
+    /// LLM runtimeバージョン
+    pub runtime_version: String,
 
     /// 現在のステータス
     pub status: AgentStatus,
@@ -50,7 +50,7 @@ pub struct Agent {
 - `hostname`: 空文字列不可
 - `ip_address`: 有効なIPv4/IPv6アドレス
 - `port`: 1-65535
-- `ollama_version`: 空文字列不可
+- `runtime_version`: 空文字列不可
 - `last_heartbeat <= Utc::now()`
 - `registered_at <= Utc::now()`
 
@@ -102,7 +102,7 @@ pub struct RegisterRequest {
     pub hostname: String,
     pub ip_address: String,
     pub port: u16,
-    pub ollama_version: String,
+    pub runtime_version: String,
 }
 ```
 
@@ -147,7 +147,7 @@ pub struct HeartbeatRequest {
     "hostname": "server-01",
     "ip_address": "192.168.1.10",
     "port": 11434,
-    "ollama_version": "0.1.23",
+    "runtime_version": "0.1.23",
     "status": "Online",
     "last_heartbeat": "2025-10-30T12:00:00Z",
     "registered_at": "2025-10-30T10:00:00Z"
@@ -170,7 +170,7 @@ pub struct HeartbeatRequest {
 │ hostname: String        │
 │ ip_address: String      │
 │ port: u16               │
-│ ollama_version: String  │
+│ runtime_version: String  │
 │ status: AgentStatus ◄───┼──┐
 │ last_heartbeat: DateTime│  │
 │ registered_at: DateTime │  │

@@ -7,13 +7,13 @@
 ## 調査目的
 
 LLM RouterのAgentが起動時にGPUを自動検出する方法を確立する。
-当初実装した `ollama ps` ベースの検出が、モデル非実行時にはGPU情報を返さないことが判明したため、代替手段を検証する。
+当初実装した `runtime ps` ベースの検出が、モデル非実行時にはGPU情報を返さないことが判明したため、代替手段を検証する。
 
 ## 問題の発見
 
-### ollama psコマンドの制限
+### runtime psコマンドの制限
 
-`ollama ps` コマンドは、モデルが実行中の場合のみPROCESSOR列にGPU情報を表示する。
+`runtime ps` コマンドは、モデルが実行中の場合のみPROCESSOR列にGPU情報を表示する。
 Agent起動時にはモデルが実行されていないため、以下のように空の出力が返される：
 
 ```
@@ -21,19 +21,19 @@ NAME    ID    SIZE    PROCESSOR    CONTEXT    UNTIL
 
 ```
 
-この制限により、`ollama ps` ベースのGPU検出は起動時の自動検出に使用できないことが確認された。
+この制限により、`runtime ps` ベースのGPU検出は起動時の自動検出に使用できないことが確認された。
 
 ### 環境変数アプローチの却下
 
 環境変数 (`OLLAMA_GPU_AVAILABLE`, `OLLAMA_GPU_MODEL` など) を必須とするアプローチは、ユーザーの設定負担が大きいため却下された。
 
-## Ollama実装の調査
+## LLM runtime実装の調査
 
-Ollamaのソースコードを参照し、各GPUベンダーの検出方法を調査した。
+LLM runtimeのソースコードを参照し、各GPUベンダーの検出方法を調査した。
 
 ### NVIDIA GPU検出
 
-Ollamaの実装 (`/gpu/gpu_linux.go`):
+LLM runtimeの実装 (`/gpu/gpu_linux.go`):
 
 1. **ライブラリ検索**: 複数のパスで `libnvidia-ml.so*` を探索
    ```
@@ -50,7 +50,7 @@ Ollamaの実装 (`/gpu/gpu_linux.go`):
 
 ### AMD GPU検出
 
-Ollamaの実装 (`/gpu/amd_linux.go`, v0.1.29+):
+LLM runtimeの実装 (`/gpu/amd_linux.go`, v0.1.29+):
 
 1. **sysfs KFD Topology** (推奨方法):
    - `/sys/class/kfd/kfd/topology/nodes/*/properties` を読み取り
@@ -65,7 +65,7 @@ Ollamaの実装 (`/gpu/amd_linux.go`, v0.1.29+):
 
 ### Apple Silicon検出
 
-Ollamaの実装 (`/gpu/cpu_common.go`):
+LLM runtimeの実装 (`/gpu/cpu_common.go`):
 
 1. **sysctl (macOSネイティブ)**:
    - `hw.perflevel0.physicalcpu` でパフォーマンスコア数を取得
@@ -146,7 +146,7 @@ Ollamaの実装 (`/gpu/cpu_common.go`):
    - ユーザーの設定作業を削減
    - Docker環境でも自動的にGPUを認識
 
-3. **Ollamaの実装パターンが有効**
+3. **LLM runtimeの実装パターンが有効**
    - sysfsベースの検出（AMD）
    - デバイスファイルベースの検出（NVIDIA）
    - システムコマンド/proc読み取り（Apple Silicon）
@@ -159,8 +159,8 @@ Ollamaの実装 (`/gpu/cpu_common.go`):
 
 ### 変更内容
 
-1. **OllamaPsGpuCollectorの削除**
-   - `ollama ps` ベースの検出を完全に削除
+1. **LLM runtimePsGpuCollectorの削除**
+   - `runtime ps` ベースの検出を完全に削除
    - 関連するテストも削除
 
 2. **各GPUコレクタの強化**
@@ -211,7 +211,7 @@ Ollamaの実装 (`/gpu/cpu_common.go`):
 
 ## 参考資料
 
-- [Ollama GitHub Repository](https://github.com/ollama/ollama)
+- [LLM runtime GitHub Repository](https://github.com/runtime/runtime)
   - `gpu/gpu_linux.go` (NVIDIA)
   - `gpu/amd_linux.go` (AMD)
   - `gpu/cpu_common.go` (Apple Silicon)
@@ -221,7 +221,7 @@ Ollamaの実装 (`/gpu/cpu_common.go`):
 
 ## 次のステップ
 
-1. `agent/src/metrics.rs` から `OllamaPsGpuCollector` を削除
+1. `agent/src/metrics.rs` から `LLM runtimePsGpuCollector` を削除
 2. PoCで検証した検出ロジックを各GPUコレクタに統合
 3. テストの更新と実行
 4. ドキュメントの更新

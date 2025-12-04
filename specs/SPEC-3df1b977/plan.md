@@ -35,7 +35,7 @@
 
 **言語/バージョン**: C++17
 **主要依存関係**: llama.cpp, httplib, spdlog, nlohmann/json
-**ストレージ**: ファイルシステム（Ollama形式）
+**ストレージ**: ファイルシステム（LLM runtime形式）
 **テスト**: Google Test (gtest)
 **対象プラットフォーム**: Linux (Docker), macOS
 **プロジェクトタイプ**: single
@@ -61,7 +61,7 @@
   - `core/llama_manager`: モデル管理・ロード
   - `core/inference_engine`: 推論実行
   - `models/model_sync`: モデル同期・ダウンロード
-  - `models/ollama_compat`: Ollama互換レイヤー
+  - `models/runtime_compat`: LLM runtime互換レイヤー
 - ライブラリごとのCLI: N/A (組み込みライブラリ)
 - ライブラリドキュメント: quickstart.md作成済み
 
@@ -194,7 +194,7 @@ public:
 class ModelRepair {
 public:
     ModelRepair(ModelSync& sync, ModelDownloader& downloader,
-                OllamaCompat& compat);
+                LLM runtimeCompat& compat);
 
     // モデルを修復（再ダウンロード）
     RepairResult repair(const std::string& model_name,

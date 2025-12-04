@@ -1,4 +1,4 @@
-//! Contract Test: Ollama Generate APIプロキシ (POST /api/generate)
+//! Contract Test: LLM runtime Generate APIプロキシ (POST /api/generate)
 //!
 //! `/api/generate` を実ポートで起動したスタブノードに中継し、
 //! OpenAI互換のレスポンス/エラーハンドリングを検証する。

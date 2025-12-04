@@ -56,7 +56,7 @@
 
 ### C002: RegisterRequest構造体定義 ✅
 - **説明**: ノード登録リクエストの型定義
-- **詳細**: machine_name, ip_address, ollama_version, system_info
+- **詳細**: machine_name, ip_address, runtime_version, system_info
 - **完了条件**: コンパイル成功
 - **実行時間**: 5分
 - **コミット**: feat: RegisterRequest定義

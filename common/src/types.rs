@@ -35,10 +35,12 @@ pub struct Node {
     pub machine_name: String,
     /// IPアドレス
     pub ip_address: IpAddr,
-    /// Ollamaバージョン
-    pub ollama_version: String,
-    /// Ollamaポート番号
-    pub ollama_port: u16,
+    /// ランタイムバージョン（llama.cpp）
+    #[serde(rename = "runtime_version", alias = "runtime_version")]
+    pub runtime_version: String,
+    /// ランタイムポート番号（推論用）
+    #[serde(rename = "runtime_port", alias = "runtime_port")]
+    pub runtime_port: u16,
     /// 状態（オンライン/オフライン）
     pub status: NodeStatus,
     /// 登録日時
@@ -80,7 +82,7 @@ pub struct Node {
     /// GPU能力スコア (0-10000)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_capability_score: Option<u32>,
-    /// OpenAI互換APIポート（標準は ollama_port+1）
+    /// OpenAI互換APIポート（標準は runtime_port+1）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_api_port: Option<u16>,
     /// モデル起動中フラグ（全対応モデルが揃うまで true）
@@ -207,8 +209,8 @@ mod tests {
             id: Uuid::new_v4(),
             machine_name: "test-machine".to_string(),
             ip_address: "192.168.1.100".parse().unwrap(),
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: 11434,
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: 11434,
             status: NodeStatus::Online,
             registered_at: Utc::now(),
             last_seen: Utc::now(),
@@ -245,8 +247,8 @@ mod tests {
             "id": "00000000-0000-0000-0000-000000000000",
             "machine_name": "machine",
             "ip_address": "127.0.0.1",
-            "ollama_version": "0.1.0",
-            "ollama_port": 11434,
+            "runtime_version": "0.1.0",
+            "runtime_port": 11434,
             "status": "online",
             "registered_at": "2025-10-31T00:00:00Z",
             "last_seen": "2025-10-31T00:00:00Z",
@@ -266,6 +268,25 @@ mod tests {
         assert!(agent.gpu_compute_capability.is_none());
         assert!(agent.gpu_capability_score.is_none());
         assert!(agent.online_since.is_none());
+    }
+
+    #[test]
+    fn test_agent_runtime_fields() {
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000000",
+            "machine_name": "machine",
+            "ip_address": "127.0.0.1",
+            "runtime_version": "0.1.0",
+            "runtime_port": 11434,
+            "status": "online",
+            "registered_at": "2025-10-31T00:00:00Z",
+            "last_seen": "2025-10-31T00:00:00Z",
+            "gpu_available": false
+        }"#;
+
+        let agent: Node = serde_json::from_str(json).unwrap();
+        assert_eq!(agent.runtime_version, "0.1.0");
+        assert_eq!(agent.runtime_port, 11434);
     }
 
     #[test]

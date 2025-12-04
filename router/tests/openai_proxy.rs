@@ -43,9 +43,9 @@ async fn build_state_with_mock(mock: &MockServer) -> (AppState, String) {
         .register(llm_router_common::protocol::RegisterRequest {
             machine_name: "mock-agent".into(),
             ip_address: mock.address().ip(),
-            ollama_version: "0.0.0".into(),
-            // APIポート=ollama_port+1 となる仕様のため、実際のモックポートに合わせて -1 する
-            ollama_port: mock.address().port().saturating_sub(1),
+            runtime_version: "0.0.0".into(),
+            // APIポート=runtime_port+1 となる仕様のため、実際のモックポートに合わせて -1 する
+            runtime_port: mock.address().port().saturating_sub(1),
             gpu_available: true,
             gpu_devices: vec![GpuDeviceInfo {
                 model: "Test GPU".to_string(),
@@ -788,7 +788,7 @@ async fn test_openai_models_list_success() {
             "data": [{
                 "id": "gpt-oss:20b",
                 "object": "model",
-                "owned_by": "ollama"
+                "owned_by": "runtime"
             }]
         })))
         .mount(&mock_server)
@@ -828,7 +828,7 @@ async fn test_openai_model_detail_success() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "id": "gpt-oss:20b",
             "object": "model",
-            "owned_by": "ollama"
+            "owned_by": "runtime"
         })))
         .mount(&mock_server)
         .await;

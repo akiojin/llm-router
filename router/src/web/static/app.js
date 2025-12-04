@@ -74,7 +74,7 @@ const modalRefs = {
   delete: null,
   machineName: null,
   ipAddress: null,
-  ollamaVersion: null,
+  runtimeVersion: null,
   loadedModels: null,
   uptime: null,
   status: null,
@@ -165,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ok: modalOk,
     machineName: document.getElementById("detail-machine-name"),
     ipAddress: document.getElementById("detail-ip-address"),
-    ollamaVersion: document.getElementById("detail-ollama-version"),
+    runtimeVersion: document.getElementById("detail-runtime-version"),
     loadedModels: document.getElementById("detail-loaded-models"),
     uptime: document.getElementById("detail-uptime"),
     status: document.getElementById("detail-status"),
@@ -828,7 +828,7 @@ function buildNodeRow(node, row = document.createElement("tr")) {
   const displayName = getDisplayName(node);
   const secondaryName = node.custom_name
     ? node.machine_name
-    : node.ollama_version || node.machine_name;
+    : node.runtime_version || node.machine_name;
 
   const statusLabel =
     node.status === "online"
@@ -884,7 +884,7 @@ function buildNodeRow(node, row = document.createElement("tr")) {
     </td>
     <td>
       <div class="cell-title">${escapeHtml(node.ip_address)}</div>
-      <div class="cell-sub">Port ${Number.isFinite(node.ollama_port) ? escapeHtml(node.ollama_port) : "-"}</div>
+      <div class="cell-sub">Port ${Number.isFinite(node.runtime_port) ? escapeHtml(node.runtime_port) : "-"}</div>
       ${readyText}
     </td>
     <td>${statusLabel}</td>
@@ -939,7 +939,7 @@ function getNodeSignature(node) {
     node.machine_name ?? "",
     node.custom_name ?? "",
     node.ip_address ?? "",
-    node.ollama_version ?? "",
+    node.runtime_version ?? "",
     node.status ?? "",
     node.uptime_seconds ?? 0,
     node.cpu_usage ?? 0,
@@ -1082,7 +1082,7 @@ function openNodeModal(node) {
 
   modalRefs.machineName.textContent = node.machine_name ?? "-";
   modalRefs.ipAddress.textContent = node.ip_address ?? "-";
-  modalRefs.ollamaVersion.textContent = node.ollama_version ?? "-";
+  modalRefs.runtimeVersion.textContent = node.runtime_version ?? "-";
   if (modalRefs.loadedModels) {
     const models = Array.isArray(node.loaded_models) ? node.loaded_models : [];
 
@@ -1480,7 +1480,7 @@ function downloadCsv(data, filename) {
     "display_name",
     "machine_name",
     "ip_address",
-    "ollama_version",
+    "runtime_version",
     "status",
     "cpu_usage",
     "memory_usage",
@@ -1497,7 +1497,7 @@ function downloadCsv(data, filename) {
       getDisplayName(node),
       node.machine_name ?? "",
       node.ip_address ?? "",
-      node.ollama_version ?? "",
+      node.runtime_version ?? "",
       node.status ?? "",
       node.cpu_usage ?? "",
       node.memory_usage ?? "",

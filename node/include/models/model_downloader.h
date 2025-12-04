@@ -4,7 +4,7 @@
 #include <functional>
 #include <chrono>
 
-namespace ollama_node {
+namespace llm_node {
 
 using ProgressCallback = std::function<void(size_t downloaded, size_t total)>;
 
@@ -42,4 +42,4 @@ private:
     std::string log_source_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

@@ -77,7 +77,7 @@ pub async fn get_node_logs(
     }
 
     let limit = clamp_limit(query.limit);
-    let node_api_port = node.ollama_port.saturating_add(1); // APIポートはOllamaポート+1
+    let node_api_port = node.runtime_port.saturating_add(1); // APIポートはLLM runtimeポート+1
     let url = format!(
         "http://{}:{}/api/logs?tail={}",
         node.ip_address, node_api_port, limit
@@ -247,8 +247,8 @@ mod tests {
         let register_req = RegisterRequest {
             machine_name: "node-1".to_string(),
             ip_address: node_ip,
-            ollama_version: "0.1.0".to_string(),
-            ollama_port: node_port.saturating_sub(1),
+            runtime_version: "0.1.0".to_string(),
+            runtime_port: node_port.saturating_sub(1),
             gpu_available: true,
             gpu_devices: sample_gpu_devices(),
             gpu_count: Some(1),

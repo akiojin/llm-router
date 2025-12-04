@@ -66,7 +66,7 @@
      - ✅ マシン名（例: server-01）
      - ✅ IPアドレス（例: 192.168.1.100）
      - ✅ ステータス（Online/Offline）
-     - ✅ Ollamaバージョン（例: 0.1.0）
+     - ✅ LLM runtimeバージョン（例: 0.1.0）
      - ✅ 稼働時間（例: 2h 30m）
 
 ### 検証ポイント
@@ -188,7 +188,7 @@
      -d '{
        "machine_name": "test-agent",
        "ip_address": "127.0.0.1",
-       "ollama_version": "0.1.0"
+       "runtime_version": "0.1.0"
      }'
    ```
 

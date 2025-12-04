@@ -1,16 +1,16 @@
-//! Integration Test: Ollamaプロキシ
+//! Integration Test: LLM runtimeプロキシ
 //!
-//! リクエスト振り分け → Ollama転送 → レスポンス返却
+//! リクエスト振り分け → LLM runtime転送 → レスポンス返却
 //! このテストはRED状態であることが期待されます（T036-T039で実装後にGREENになる）
 
 use serde_json::json;
 
 #[tokio::test]
 async fn test_proxy_request_to_single_agent() {
-    // Arrange: Coordinatorサーバー起動、1台のノード登録、モックOllama起動
+    // Arrange: Coordinatorサーバー起動、1台のノード登録、モックLLM runtime起動
     // let coordinator = start_test_coordinator().await;
-    // let mock_ollama = start_mock_ollama().await;
-    // register_test_agent(&coordinator, mock_ollama.url()).await;
+    // let mock_runtime = start_mock_runtime().await;
+    // register_test_agent(&coordinator, mock_runtime.url()).await;
 
     // Act: チャットリクエスト送信
     // let request = json!({
@@ -25,7 +25,7 @@ async fn test_proxy_request_to_single_agent() {
     // assert!(body["message"].is_object());
 
     // TODO: T036-T039で実装後にアンコメント
-    panic!("RED: Ollamaプロキシが未実装");
+    panic!("RED: LLM runtimeプロキシが未実装");
 }
 
 #[tokio::test]
@@ -44,5 +44,5 @@ async fn test_proxy_no_agents_returns_503() {
     // assert_eq!(response.status(), 503);
 
     // TODO: T036-T039で実装後にアンコメント
-    panic!("RED: Ollamaプロキシが未実装");
+    panic!("RED: LLM runtimeプロキシが未実装");
 }

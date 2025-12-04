@@ -1,5 +1,5 @@
 {
-  "title": "Ollama Node CPP",
+  "title": "LLM runtime Node CPP",
   "editable": true,
   "schemaVersion": 39,
   "panels": [
@@ -8,7 +8,7 @@
       "title": "Uptime (s)",
       "targets": [
         {
-          "expr": "ollama_node_uptime_seconds",
+          "expr": "runtime_node_uptime_seconds",
           "legendFormat": "uptime",
           "refId": "A"
         }
@@ -20,7 +20,7 @@
       "title": "Pulls Total",
       "targets": [
         {
-          "expr": "ollama_node_pulls_total",
+          "expr": "runtime_node_pulls_total",
           "legendFormat": "pulls",
           "refId": "A"
         }
@@ -32,7 +32,7 @@
       "title": "Pulls per minute",
       "targets": [
         {
-          "expr": "rate(ollama_node_pulls_total[5m])",
+          "expr": "rate(runtime_node_pulls_total[5m])",
           "legendFormat": "pulls/min",
           "refId": "A"
         }

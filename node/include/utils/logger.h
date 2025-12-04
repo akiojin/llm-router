@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ollama_node::logger {
+namespace llm_node::logger {
 
 // Convert textual level to spdlog level (case-insensitive). Unknown -> info.
 spdlog::level::level_enum parse_level(const std::string& level_text);
@@ -36,4 +36,4 @@ void init(const std::string& level = "info",
 // Legacy: LOG_LEVEL, LOG_FILE are still supported for backward compatibility.
 void init_from_env();
 
-}  // namespace ollama_node::logger
+}  // namespace llm_node::logger

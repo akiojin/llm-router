@@ -4,7 +4,7 @@
 
 #include "models/model_converter.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 namespace fs = std::filesystem;
 
 class TempDir {

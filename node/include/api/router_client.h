@@ -5,7 +5,7 @@
 #include <vector>
 #include <chrono>
 
-namespace ollama_node {
+namespace llm_node {
 
 /// GPU device info for registration (matches router protocol)
 struct GpuDeviceInfoForRouter {
@@ -18,8 +18,8 @@ struct GpuDeviceInfoForRouter {
 struct NodeInfo {
     std::string machine_name;    // Machine name
     std::string ip_address;      // IP address
-    std::string ollama_version;  // Ollama version (e.g., "0.1.0")
-    uint16_t ollama_port;        // Ollama port (default: 11434)
+    std::string runtime_version;  // LLM runtime version (e.g., "0.1.0")
+    uint16_t runtime_port;        // LLM runtime port (default: 11434)
     bool gpu_available{true};    // GPU available flag
     std::vector<GpuDeviceInfoForRouter> gpu_devices;  // GPU device list
     std::optional<uint32_t> gpu_count;   // Total GPU count (optional)
@@ -63,4 +63,4 @@ private:
     std::chrono::milliseconds timeout_;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

@@ -8,7 +8,7 @@
 #include "core/inference_engine.h"
 #include "runtime/state.h"
 
-using namespace ollama_node;
+using namespace llm_node;
 
 TEST(NodeEndpointsTest, PullAndHealth) {
     ModelRegistry registry;
@@ -54,7 +54,7 @@ TEST(NodeEndpointsTest, LogLevelGetAndSet) {
 }
 
 TEST(NodeEndpointsTest, StartupProbeReflectsReadyFlag) {
-    ollama_node::set_ready(false);
+    llm_node::set_ready(false);
     ModelRegistry registry;
     InferenceEngine engine;
     OpenAIEndpoints openai(registry, engine);
@@ -67,7 +67,7 @@ TEST(NodeEndpointsTest, StartupProbeReflectsReadyFlag) {
     ASSERT_TRUE(not_ready);
     EXPECT_EQ(not_ready->status, 503);
 
-    ollama_node::set_ready(true);
+    llm_node::set_ready(true);
     auto ready = cli.Get("/startup");
     ASSERT_TRUE(ready);
     EXPECT_EQ(ready->status, 200);

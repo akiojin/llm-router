@@ -6,14 +6,14 @@ llama.cppが`gptoss`アーキテクチャ名（ハイフンなし）を認識で
 
 ## ビジネス価値
 
-- Ollamaでプルしたgpt-ossモデルをC++ Nodeで使用できる
+- LLM runtimeでプルしたgpt-ossモデルをC++ Nodeで使用できる
 - ユーザーがモデル変換等の追加作業なしで推論を実行できる
 
 ## ユーザーストーリー
 
 ### US-1: gpt-ossモデルを使用したい
 
-ユーザーとして、`ollama pull gpt-oss:20b`でダウンロードしたモデルを
+ユーザーとして、`runtime pull gpt-oss:20b`でダウンロードしたモデルを
 C++ Nodeでそのまま使用できる。
 
 **受け入れ条件**:
@@ -44,7 +44,7 @@ C++ Nodeでそのまま使用できる。
 
 ### 問題の原因
 
-Ollamaが生成するGGUFファイルは以下の形式を使用する:
+LLM runtimeが生成するGGUFファイルは以下の形式を使用する:
 
 - アーキテクチャ名: `general.architecture = "gptoss"`
 - ハイパーパラメータキー: `gptoss.context_length`, `gptoss.embedding_length`等

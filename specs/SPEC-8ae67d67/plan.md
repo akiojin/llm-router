@@ -18,12 +18,12 @@
 
 ## 概要
 
-ルーターから各ノードのOllamaモデルダウンロードを一元制御する機能を実装します。ノード登録時にGPU能力に応じた自動配布、ダッシュボードからの手動配布、モデル情報の可視化を提供し、運用効率を向上させます。
+ルーターから各ノードのLLM runtimeモデルダウンロードを一元制御する機能を実装します。ノード登録時にGPU能力に応じた自動配布、ダッシュボードからの手動配布、モデル情報の可視化を提供し、運用効率を向上させます。
 
 **主要要件**:
 - ノード登録時のGPU能力ベース自動モデル配布
 - ダッシュボードからの個別/一括モデル配布
-- Ollama公式ライブラリAPIからのモデル一覧取得
+- LLM runtime公式ライブラリAPIからのモデル一覧取得
 - リアルタイム進捗表示
 - 既存のノード自律ダウンロード機能との独立併存
 
@@ -42,7 +42,7 @@
 - 進捗更新: <5秒間隔
 - 同時ダウンロードタスク: 10個
 **制約**:
-- Ollama公式ライブラリAPIへのインターネット接続必須
+- LLM runtime公式ライブラリAPIへのインターネット接続必須
 - ノード側ディスク容量依存
 - ネットワーク安定性必須（リアルタイム進捗更新）
 **スケール/スコープ**: 10-50ノード、数十～数百のモデル
@@ -60,7 +60,7 @@
 - ライブラリリスト:
   - `coordinator::registry`: ノード管理
   - `coordinator::api`: REST APIハンドラー
-  - `agent::ollama`: Ollama通信
+  - `agent::runtime`: LLM runtime通信
 - ライブラリごとのCLI:
   - `llm-router --help/--version`
   - `llm-node --help/--version`
@@ -71,7 +71,7 @@
 - Gitコミットはテストが実装より先に表示? Yes ✅
 - 順序: Contract→Integration→E2E→Unitを厳密に遵守? Yes ✅
 - 実依存関係を使用? Yes (実HTTPエンドポイント、実ファイルI/O) ✅
-- Integration testの対象: 新API、Ollama通信、ダッシュボード連携 ✅
+- Integration testの対象: 新API、LLM runtime通信、ダッシュボード連携 ✅
 - 禁止: テスト前の実装、REDフェーズのスキップ ✅
 
 **可観測性**:
@@ -114,8 +114,8 @@ coordinator/
 │   ├── registry/
 │   │   ├── mod.rs        # 既存: ノードレジストリ
 │   │   └── models.rs     # 新規: モデル状態管理
-│   ├── ollama/
-│   │   ├── mod.rs        # 新規: Ollama公式ライブラリAPI通信
+│   ├── runtime/
+│   │   ├── mod.rs        # 新規: LLM runtime公式ライブラリAPI通信
 │   │   └── client.rs     # 新規: HTTPクライアント
 │   └── main.rs           # 既存: メインエントリーポイント
 ├── tests/
@@ -136,7 +136,7 @@ coordinator/
 
 agent/
 ├── src/
-│   ├── ollama.rs         # 既存拡張: モデルプル機能拡張
+│   ├── runtime.rs         # 既存拡張: モデルプル機能拡張
 │   └── main.rs           # 既存: メインエントリーポイント
 └── tests/
     └── integration/
@@ -149,14 +149,14 @@ agent/
 
 **リサーチタスク**:
 
-1. **Ollama公式ライブラリAPI調査**:
-   - タスク: "Research Ollama Library API for model listing"
+1. **LLM runtime公式ライブラリAPI調査**:
+   - タスク: "Research LLM runtime Library API for model listing"
    - 調査項目:
-     - APIエンドポイント（<https://ollama.com/library> または <https://ollama.ai/library>）
+     - APIエンドポイント（<https://runtime.com/library> または <https://runtime.ai/library>）
      - レスポンス形式（JSON構造）
      - 認証の有無
      - レート制限
-     - 代替手段（ollama list コマンド経由）
+     - 代替手段（runtime list コマンド経由）
    - 決定事項:
      - 使用するAPIエンドポイント
      - フォールバック戦略
@@ -206,7 +206,7 @@ agent/
   - 新規フィールド: `downloading_models: Vec<DownloadTask>`
 
 **新規エンティティ**:
-- `ModelInfo`: Ollamaモデル情報
+- `ModelInfo`: LLM runtimeモデル情報
   - `name: String`
   - `size: u64` (bytes)
   - `description: String`
@@ -252,7 +252,7 @@ agent/
                   items: ModelInfo
                 source:
                   type: string
-                  enum: [ollama_library, agents]
+                  enum: [runtime_library, agents]
 
 /api/models/distribute:
   post:
@@ -362,7 +362,7 @@ agent/
 
 **ユーザーストーリー3 → 統合テスト**:
 `tests/integration/model_info_test.rs`:
-- `test_list_available_models_from_ollama_library()`
+- `test_list_available_models_from_runtime_library()`
 - `test_list_installed_models_on_agent()`
 - `test_model_matrix_view_multiple_agents()`
 
@@ -423,8 +423,8 @@ agent/
 ### 主要コンポーネント
 - coordinator/src/api/models.rs: モデル管理API
 - coordinator/src/registry/models.rs: モデル状態管理
-- coordinator/src/ollama/mod.rs: Ollama公式API通信
-- agent/src/ollama.rs: モデルプル機能拡張
+- coordinator/src/runtime/mod.rs: LLM runtime公式API通信
+- agent/src/runtime.rs: モデルプル機能拡張
 
 ### API エンドポイント
 - GET /api/models/available
@@ -462,7 +462,7 @@ agent/
    - 各統合テスト → 実装タスク
 
 4. **Phase 0リサーチからタスク生成**:
-   - Ollama公式API調査 → 実装タスク
+   - LLM runtime公式API調査 → 実装タスク
    - 進捗更新方式 → 実装タスク
    - タスクキュー → 実装タスク
 
@@ -471,7 +471,7 @@ agent/
 1. **Setup Phase** (並列可能):
    - データモデル定義 [P]
    - API契約定義 [P]
-   - Ollama公式API通信モジュール [P]
+   - LLM runtime公式API通信モジュール [P]
 
 2. **Test Phase** (TDD順序):
    - Contract tests (RED)

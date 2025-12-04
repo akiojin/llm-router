@@ -18,7 +18,7 @@
 
 ## 概要
 
-複数マシンで動作するOllamaインスタンスを中央集権的に管理するシステム。Coordinatorサーバー（中央管理）とAgentアプリ（各マシン）で構成され、統一APIエンドポイント、ロードバランシング、ヘルスチェック、リアルタイムダッシュボードを提供する。Rustで実装し、高いパフォーマンスとメモリ効率を追求する。
+複数マシンで動作するLLM runtimeインスタンスを中央集権的に管理するシステム。Coordinatorサーバー（中央管理）とAgentアプリ（各マシン）で構成され、統一APIエンドポイント、ロードバランシング、ヘルスチェック、リアルタイムダッシュボードを提供する。Rustで実装し、高いパフォーマンスとメモリ効率を追求する。
 
 **主要コンポーネント**:
 - **Coordinator**: Axum（高速非同期Webフレームワーク）ベースのサーバー
@@ -52,9 +52,9 @@
 **アーキテクチャ**:
 - すべての機能をライブラリとして? ✅
 - ライブラリリスト:
-  - `ollama_coordinator_common`: 共通型定義、プロトコル、設定、エラー型
-  - `ollama_coordinator_coordinator`: Coordinatorサーバー本体（バイナリ + ライブラリ）
-  - `ollama_coordinator_agent`: Agentアプリ本体（バイナリ + ライブラリ）
+  - `runtime_coordinator_common`: 共通型定義、プロトコル、設定、エラー型
+  - `runtime_coordinator_coordinator`: Coordinatorサーバー本体（バイナリ + ライブラリ）
+  - `runtime_coordinator_agent`: Agentアプリ本体（バイナリ + ライブラリ）
 - ライブラリごとのCLI:
   - `coordinator`: `--help`, `--version`, `--config`, `--port` オプション
   - `agent`: `--help`, `--version`, `--config`, `--coordinator-url` オプション
@@ -64,7 +64,7 @@
 - Gitコミットはテストが実装より先に表示? ✅ (コミット履歴で検証)
 - 順序: Contract→Integration→E2E→Unit を厳密に遵守? ✅
   - Contract tests: API契約テスト（エンドポイント定義）
-  - Integration tests: Coordinator↔Agent通信、Coordinator↔Ollama通信、DB永続化
+  - Integration tests: Coordinator↔Agent通信、Coordinator↔LLM runtime通信、DB永続化
   - E2E tests: エンドツーエンドシナリオ（ノード登録→リクエスト振り分け→レスポンス）
   - Unit tests: 個別関数（ロードバランサーロジック、ヘルスチェックロジック）
 - 実依存関係を使用? ✅ (実SQLite DB、モックではない)
@@ -125,7 +125,7 @@ llm-router/
 │   │   │   ├── mod.rs
 │   │   │   ├── agents.rs       # ノード登録・一覧
 │   │   │   ├── health.rs       # ヘルスチェック受信
-│   │   │   ├── proxy.rs        # Ollama統一APIプロキシ
+│   │   │   ├── proxy.rs        # LLM runtime統一APIプロキシ
 │   │   │   └── dashboard.rs    # ダッシュボードAPI (WebSocket)
 │   │   ├── balancer/           # ロードバランサー
 │   │   │   ├── mod.rs
@@ -160,10 +160,10 @@ llm-router/
 │   │   │   ├── mod.rs
 │   │   │   ├── register.rs     # 自己登録
 │   │   │   └── heartbeat.rs    # ヘルスチェック送信
-│   │   ├── ollama/             # Ollama管理
+│   │   ├── runtime/             # LLM runtime管理
 │   │   │   ├── mod.rs
-│   │   │   ├── monitor.rs      # Ollama状態監視
-│   │   │   └── proxy.rs        # Ollamaプロキシ
+│   │   │   ├── monitor.rs      # LLM runtime状態監視
+│   │   │   └── proxy.rs        # LLM runtimeプロキシ
 │   │   └── metrics/            # メトリクス収集
 │   │       ├── mod.rs
 │   │       └── collector.rs    # CPU/メモリ監視
@@ -205,8 +205,8 @@ llm-router/
    - 非同期チャネル (`tokio::sync::mpsc`) でのタスク間通信
    - タイムアウトとキャンセレーション (`tokio::time::timeout`, `tokio::select!`)
 
-4. **Ollama API統合**:
-   - Ollama HTTP API仕様 (`/api/chat`, `/api/generate`, `/api/tags`)
+4. **LLM runtime API統合**:
+   - LLM runtime HTTP API仕様 (`/api/chat`, `/api/generate`, `/api/tags`)
    - ストリーミングレスポンスの処理 (Server-Sent Events)
    - エラーハンドリングと再試行戦略
 
@@ -234,8 +234,8 @@ pub struct Agent {
     pub id: Uuid,                  // 一意識別子
     pub machine_name: String,      // マシン名
     pub ip_address: IpAddr,        // IPアドレス
-    pub ollama_version: String,    // Ollamaバージョン
-    pub ollama_port: u16,          // Ollamaポート番号
+    pub runtime_version: String,    // LLM runtimeバージョン
+    pub runtime_port: u16,          // LLM runtimeポート番号
     pub status: AgentStatus,       // オンライン/オフライン
     pub registered_at: DateTime<Utc>,  // 登録日時
     pub last_seen: DateTime<Utc>,      // 最終ヘルスチェック時刻
@@ -294,7 +294,7 @@ pub struct CoordinatorConfig {
 ```rust
 pub struct AgentConfig {
     pub coordinator_url: String,   // "http://coordinator:8080"
-    pub ollama_url: String,        // "http://localhost:11434"
+    pub runtime_url: String,        // "http://localhost:11434"
     pub heartbeat_interval_secs: u64,  // 10秒
     pub auto_start: bool,          // Windows起動時の自動起動
 }
@@ -309,7 +309,7 @@ openapi: 3.0.3
 info:
   title: LLM Router API
   version: 0.1.0
-  description: 複数Ollamaインスタンスを管理する中央集権型システム
+  description: 複数LLM runtimeインスタンスを管理する中央集権型システム
 
 servers:
   - url: http://localhost:8080
@@ -366,7 +366,7 @@ paths:
 
   /api/chat:
     post:
-      summary: Ollama Chat API プロキシ
+      summary: LLM runtime Chat API プロキシ
       operationId: proxyChat
       requestBody:
         required: true
@@ -386,7 +386,7 @@ paths:
 
   /api/generate:
     post:
-      summary: Ollama Generate API プロキシ
+      summary: LLM runtime Generate API プロキシ
       operationId: proxyGenerate
       requestBody:
         required: true
@@ -422,15 +422,15 @@ components:
   schemas:
     RegisterRequest:
       type: object
-      required: [machine_name, ip_address, ollama_version, ollama_port]
+      required: [machine_name, ip_address, runtime_version, runtime_port]
       properties:
         machine_name:
           type: string
         ip_address:
           type: string
-        ollama_version:
+        runtime_version:
           type: string
-        ollama_port:
+        runtime_port:
           type: integer
 
     RegisterResponse:
@@ -453,7 +453,7 @@ components:
           type: string
         ip_address:
           type: string
-        ollama_version:
+        runtime_version:
           type: string
         status:
           type: string
@@ -528,9 +528,9 @@ components:
 
 3. **リクエスト振り分け**:
    - Client → Coordinator: `POST /api/chat` or `POST /api/generate`
-   - Coordinator → Agent: HTTP Proxy (選択されたノードのOllama URLへ転送)
-   - Agent → Ollama: ローカルOllama APIへ転送
-   - Ollama → Agent → Coordinator → Client: レスポンス返却
+   - Coordinator → Agent: HTTP Proxy (選択されたノードのLLM runtime URLへ転送)
+   - Agent → LLM runtime: ローカルLLM runtime APIへ転送
+   - LLM runtime → Agent → Coordinator → Client: レスポンス返却
 
 4. **ノード切断検知**:
    - Coordinator: 60秒以上ヘルスチェックがないノードを「オフライン」とマーク
@@ -556,7 +556,7 @@ components:
    - ノード終了 → 60秒後にタイムアウト → オフライン状態に変更
 
 2. **P2: 統一APIプロキシ** (`tests/integration/test_proxy.rs`):
-   - リクエスト送信 → ノード選択 → Ollamaへ転送 → レスポンス返却
+   - リクエスト送信 → ノード選択 → LLM runtimeへ転送 → レスポンス返却
    - ノード0台 → 503エラー
 
 3. **P3: ロードバランシング** (`tests/integration/test_load_balancing.rs`):
@@ -612,7 +612,7 @@ components:
 
 5. **Agent実装** (依存関係順):
    - Coordinator通信クライアント → Integration Test
-   - Ollama監視 → Unit Test
+   - LLM runtime監視 → Unit Test
    - メトリクス収集 → Unit Test
    - GUI（Tauri） → 手動テスト
    - システムトレイ統合 → 手動テスト
@@ -639,15 +639,15 @@ components:
 
 **重要**: このフェーズは `/speckit.tasks` コマンドで実行
 
-## Ollama自動ダウンロード機能強化（追加要件）
+## LLM runtime自動ダウンロード機能強化（追加要件）
 
-**背景**: 基本的なOllama自動ダウンロード・インストール機能は実装済み（`agent/src/ollama.rs:download()`）。以下の4つの機能強化を追加実装する。
+**背景**: 基本的なLLM runtime自動ダウンロード・インストール機能は実装済み（`agent/src/runtime.rs:download()`）。以下の4つの機能強化を追加実装する。
 
 ### 新機能要件と技術設計
 
 #### 1. ダウンロード進捗表示（FR-016d）
 
-**目的**: ユーザーがOllamaバイナリ/モデルのダウンロード状況を把握できるようにする
+**目的**: ユーザーがLLM runtimeバイナリ/モデルのダウンロード状況を把握できるようにする
 
 **技術アプローチ**:
 - **依存クレート**: `indicatif` (プログレスバー表示)
@@ -655,9 +655,9 @@ components:
   - `reqwest`の`Response::bytes_stream()`でチャンク単位でダウンロード
   - `Content-Length`ヘッダーから総サイズを取得
   - `ProgressBar`で進捗率（パーセンテージ）、ダウンロード速度、ETA（推定残り時間）を表示
-  - モデルプル時はOllama APIの進捗情報をパース
+  - モデルプル時はLLM runtime APIの進捗情報をパース
 
-**実装場所**: `agent/src/ollama.rs:download()`, `agent/src/ollama.rs:pull_model()`
+**実装場所**: `agent/src/runtime.rs:download()`, `agent/src/runtime.rs:pull_model()`
 
 **環境変数**: `OLLAMA_DOWNLOAD_PROGRESS=false` で進捗表示を無効化可能
 
@@ -683,7 +683,7 @@ components:
   - HTTP 4xx系エラー（404, 403など）
   - ディスク容量不足エラー
 
-**実装場所**: `agent/src/ollama.rs:download()`, `agent/src/ollama.rs:pull_model()`
+**実装場所**: `agent/src/runtime.rs:download()`, `agent/src/runtime.rs:pull_model()`
 
 **環境変数**:
 - `OLLAMA_DOWNLOAD_MAX_RETRIES=5` (デフォルト: 5)
@@ -696,7 +696,7 @@ components:
 **技術アプローチ**:
 - **依存クレート**: `sha2` (SHA256ハッシュ計算)
 - **チェックサム取得**:
-  - GitHub Releases APIから`ollama-{platform}-{arch}.sha256`ファイルをダウンロード
+  - GitHub Releases APIから`runtime-{platform}-{arch}.sha256`ファイルをダウンロード
   - または`OLLAMA_CHECKSUM`環境変数で直接指定
 - **検証フロー**:
   1. バイナリダウンロード完了後、ファイル全体のSHA256を計算
@@ -705,7 +705,7 @@ components:
   4. 一致の場合は展開・インストール継続
 - **フォールバック**: チェックサムファイルが取得できない場合は警告表示のみ（検証スキップ）
 
-**実装場所**: `agent/src/ollama.rs:download()` 内に`verify_checksum()`関数を追加
+**実装場所**: `agent/src/runtime.rs:download()` 内に`verify_checksum()`関数を追加
 
 **環境変数**:
 - `OLLAMA_CHECKSUM=<sha256>` (手動チェックサム指定)
@@ -725,7 +725,7 @@ components:
   - `http://user:pass@proxy.example.com:8080` 形式をサポート
 - **プロキシ除外**: `NO_PROXY`環境変数で除外ホストを指定可能
 
-**実装場所**: `agent/src/ollama.rs:download()` でHTTPクライアント作成時にプロキシ設定
+**実装場所**: `agent/src/runtime.rs:download()` でHTTPクライアント作成時にプロキシ設定
 
 **環境変数**:
 - `HTTP_PROXY=http://proxy.example.com:8080`

@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace ollama_node {
+namespace llm_node {
 
 // Generate a random 16-hex-character request id.
 std::string generate_request_id();
@@ -12,4 +12,4 @@ std::string generate_request_id();
 std::string generate_trace_id();
 std::string generate_span_id();
 
-}  // namespace ollama_node
+}  // namespace llm_node

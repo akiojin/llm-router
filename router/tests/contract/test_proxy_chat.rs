@@ -1,4 +1,4 @@
-//! Contract Test: Chat APIプロキシ (POST /api/chat)
+//! Contract Test: LLM runtime Chat APIプロキシ (POST /api/chat)
 //!
 //! 実際にHTTPで待ち受けるスタブノードとルーターを起動し、
 //! OpenAI互換の正常系/異常系を確認する。

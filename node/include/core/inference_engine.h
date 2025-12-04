@@ -6,7 +6,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace ollama_node {
+namespace llm_node {
 
 // 前方宣言
 class LlamaManager;
@@ -115,4 +115,4 @@ private:
     std::string buildChatPrompt(const std::vector<ChatMessage>& messages) const;
 };
 
-}  // namespace ollama_node
+}  // namespace llm_node

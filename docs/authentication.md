@@ -48,7 +48,7 @@ external application integration.
                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                          Agents                              │
-│           (Registered Ollama instances)                      │
+│           (Registered LLM runtime instances)                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,7 +58,7 @@ external application integration.
 |------|---------|--------------|------------|---------|
 | **JWT** | Admin dashboard access | `eyJhbGci...` | 24 hours | Client-side |
 | **API Key** | External app integration | `sk_...` | Configurable | App config |
-| **Agent Token** | Agent authentication | `at_...` | Never | `~/.ollama-agent/token` |
+| **Agent Token** | Agent authentication | `at_...` | Never | `~/.runtime-agent/token` |
 
 ## Authentication Types
 
@@ -122,7 +122,7 @@ scripts, and third-party integrations.
 API keys can be used for:
 
 - OpenAI-compatible endpoints (`/v1/chat/completions`, `/v1/completions`)
-- Ollama proxy endpoints (`/api/chat`, `/api/generate`)
+- LLM runtime proxy endpoints (`/api/chat`, `/api/generate`)
 
 **Note**: API keys cannot be used for administrative operations
 (user management, API key management, etc.)
@@ -140,7 +140,7 @@ Agent tokens secure communication between agents and the coordinator.
 #### Token Lifecycle
 
 1. **Registration**: Agent registers → Receives `agent_token` in response
-2. **Storage**: Token saved to `~/.ollama-agent/token`
+2. **Storage**: Token saved to `~/.runtime-agent/token`
 3. **Usage**: Token automatically included in all agent requests
 4. **Re-registration**: Existing token used for re-registration
    (no new token issued)
@@ -395,7 +395,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
     ]
   }'
 
-# Ollama endpoint
+# LLM runtime endpoint
 curl -X POST http://localhost:8080/api/chat \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -454,8 +454,8 @@ curl -X POST http://localhost:8080/api/agents \
   -d '{
     "machine_name": "my-machine",
     "ip_address": "192.168.1.100",
-    "ollama_version": "0.1.0",
-    "ollama_port": 11434,
+    "runtime_version": "0.1.0",
+    "runtime_port": 11434,
     "gpu_available": true,
     "gpu_devices": [
       {"model": "NVIDIA RTX 4090", "count": 2}
@@ -477,8 +477,8 @@ curl -X POST http://localhost:8080/api/agents \
 
 The agent automatically saves the token to:
 
-- **Linux/macOS**: `~/.ollama-agent/token`
-- **Windows**: `%USERPROFILE%\.ollama-agent\token`
+- **Linux/macOS**: `~/.runtime-agent/token`
+- **Windows**: `%USERPROFILE%\.runtime-agent\token`
 
 ### Using Agent Token
 
@@ -575,7 +575,7 @@ curl -X POST http://localhost:8080/api/agents \
 
 1. **File Permissions**
    - Agent token file should be readable only by agent user
-   - `chmod 600 ~/.ollama-agent/token` (Linux/macOS)
+   - `chmod 600 ~/.runtime-agent/token` (Linux/macOS)
 
 2. **Network Security**
    - Use HTTPS/TLS for production deployments
@@ -677,7 +677,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 1. **Delete token file and re-register:**
 
    ```bash
-   rm ~/.ollama-agent/token
+   rm ~/.runtime-agent/token
    # Re-run the node
    npm run start:node
    ```

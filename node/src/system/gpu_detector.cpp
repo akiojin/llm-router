@@ -15,7 +15,7 @@
 // Metal implementation is in gpu_detector.mm for macOS
 #ifndef __APPLE__
 
-namespace ollama_node {
+namespace llm_node {
 
 GpuDetector::GpuDetector() {
     // Constructor
@@ -240,6 +240,6 @@ void GpuDetector::setDetectedDevicesForTest(std::vector<GpuDevice> devices) {
 }
 #endif
 
-} // namespace ollama_node
+} // namespace llm_node
 
 #endif // !__APPLE__

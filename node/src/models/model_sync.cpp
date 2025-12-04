@@ -16,7 +16,7 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace ollama_node {
+namespace llm_node {
 
 namespace {
 }  // namespace
@@ -478,4 +478,4 @@ bool ModelSync::downloadModel(ModelDownloader& downloader,
     }
 }
 
-}  // namespace ollama_node
+}  // namespace llm_node

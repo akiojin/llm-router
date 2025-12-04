@@ -4,16 +4,16 @@
 
 llm-nodeがモデルファイルを `~/.llm-router/models/` 配下から読み込むことを基本としつつ、
 ルーターが返す配布情報（共有パス or ダウンロードURL）を優先利用する。
-Ollama固有ストレージへの暗黙フォールバックは撤廃する。
+LLM runtime固有のストレージ形式への暗黙フォールバックは撤廃する。
 
 ## 背景と動機
 
 ### 現状の問題
 
-1. **Ollama依存**: 現在のOllamaCompatクラスはOllamaのストレージ形式に依存している
-   - `~/.ollama/models/manifests/registry.ollama.ai/library/<name>/<tag>`
-   - `~/.ollama/models/blobs/<sha256-digest>`
-2. **複雑なパス解決**: Ollamaのmanifest→blob形式は本プロジェクトには過剰
+1. **LLM runtime依存**: 現在のLLM runtimeCompatクラスはLLM runtimeのストレージ形式に依存している
+   - `~/.runtime/models/manifests/registry.runtime.ai/library/<name>/<tag>`
+   - `~/.runtime/models/blobs/<sha256-digest>`
+2. **複雑なパス解決**: LLM runtimeのmanifest→blob形式は本プロジェクトには過剰
 3. **混乱**: ユーザーがモデルをどこに配置すべきか分かりにくい
 
 ### 解決策
@@ -73,7 +73,7 @@ Ollama固有ストレージへの暗黙フォールバックは撤廃する。
 
 #### NFR-2: シンプルさと安全性
 
-- Ollamaのmanifest/blob形式のサポートは削除（他アプリの資産に依存しない）
+- LLM runtimeのmanifest/blob形式のサポートは削除（他アプリの資産に依存しない）
 - 参照パスは `~/.llm-router/models` とルーターが明示的に返す `path`/`download_url` のみ
 
 ## ディレクトリ構造の例
@@ -96,16 +96,16 @@ Ollama固有ストレージへの暗黙フォールバックは撤廃する。
 
 ### 変更対象ファイル
 
-1. `node/src/models/ollama_compat.cpp` → `model_storage.cpp` にリネーム
-2. `node/include/models/ollama_compat.h` → `model_storage.h` にリネーム
+1. `node/src/models/runtime_compat.cpp` → `model_storage.cpp` にリネーム
+2. `node/include/models/runtime_compat.h` → `model_storage.h` にリネーム
 3. `node/src/utils/config.cpp` - デフォルトパス変更
 4. `node/src/utils/cli.cpp` - ヘルプメッセージ更新
 5. `node/src/main.cpp` - クラス名変更に対応
 
 ### 削除される機能
 
-- Ollamaのmanifest/blob解析ロジック
-- `registry.ollama.ai` パス構造のサポート
+- LLM runtimeのmanifest/blob解析ロジック
+- `registry.runtime.ai` パス構造のサポート
 
 ## 受け入れ基準
 

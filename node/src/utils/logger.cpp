@@ -11,7 +11,7 @@
 
 namespace fs = std::filesystem;
 
-namespace ollama_node::logger {
+namespace llm_node::logger {
 
 namespace {
     constexpr const char* LOG_FILE_BASE = "llm-node.jsonl";
@@ -209,4 +209,4 @@ void init_from_env() {
     spdlog::info("Node logs initialized: {}", log_path);
 }
 
-}  // namespace ollama_node::logger
+}  // namespace llm_node::logger

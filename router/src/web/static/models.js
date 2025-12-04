@@ -356,7 +356,7 @@ function updateModelsCount(count) {
 function translateSourceLabel(source) {
   if (!source) return 'Source: -';
   const map = {
-    ollama_library: 'Source: Ollama Official Library',
+    builtin: 'Source: Built-in Model List',
     registry: 'Source: Registry',
     cache: 'Source: Cache',
   };
