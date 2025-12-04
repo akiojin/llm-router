@@ -29,16 +29,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # NOTE: GitHub CLI extensions are installed at runtime in entrypoint.sh
 # (requires authentication which is not available during build)
 
-# Install .NET 9 SDK (for C# LSP build) via official install script
-ENV DOTNET_ROOT=/usr/share/dotnet
-ENV PATH="${DOTNET_ROOT}:${PATH}"
-RUN set -eux; \
-    curl -fsSL -o /tmp/dotnet-install.sh https://dot.net/v1/dotnet-install.sh; \
-    chmod +x /tmp/dotnet-install.sh; \
-    /tmp/dotnet-install.sh --channel 9.0 --install-dir "$DOTNET_ROOT"; \
-    ln -sf "$DOTNET_ROOT/dotnet" /usr/bin/dotnet; \
-    dotnet --info
-
 # Install Rust toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
@@ -61,9 +51,6 @@ RUN npm i -g \
     npm@latest \
     pnpm@latest \
     bun@latest \
-    typescript@latest \
-    eslint@latest \
-    prettier@latest \
     @commitlint/cli@latest \
     @commitlint/config-conventional@latest
 

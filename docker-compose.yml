@@ -41,28 +41,6 @@ services:
     tty: true
     working_dir: /llm-router
 
-  llm-node:
-    build:
-      context: ./node
-      dockerfile: Dockerfile
-      args:
-        CUDA: ${LLM_CPP_CUDA:-cpu} # cpu | cuda
-    container_name: llm-node
-    depends_on:
-      - llm-router
-    environment:
-      - LLM_ROUTER_URL=http://llm-router:8080
-      - LLM_MODELS_DIR=/models
-      - LLM_NODE_PORT=11435
-      - LLM_ALLOW_NO_GPU=1
-      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-}
-    runtime: ${DOCKER_RUNTIME:-runc} # set to nvidia when using GPU
-    volumes:
-      - ./node/models:/models
-    ports:
-      - "11435:11435"
-    restart: unless-stopped
-
 volumes:
   bash-history: {}
   claude-config: {}

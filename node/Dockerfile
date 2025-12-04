@@ -22,7 +22,7 @@ RUN cmake -S /src -B /build \
     -DBUILD_WITH_CUDA=$([ "$CUDA" = "cuda" ] && echo ON || echo OFF) && \
     cmake --build /build --config Release && \
     cmake --install /build --prefix /usr/local && \
-    strip /usr/local/bin/runtime-node || true
+    strip /usr/local/bin/llm-node || true
 
 # Runtime images
 FROM debian:bookworm-slim AS runtime-cpu
@@ -47,4 +47,4 @@ COPY --from=build /usr/local /usr/local
 EXPOSE 11435
 VOLUME ["/var/lib/runtime/models"]
 
-ENTRYPOINT ["/usr/local/bin/runtime-node"]
+ENTRYPOINT ["/usr/local/bin/llm-node"]
