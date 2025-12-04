@@ -24,6 +24,11 @@ fi
 # GitHub CLIの認証（GITHUB_TOKENが設定されている場合）
 if [ -n "$GITHUB_TOKEN" ] && command -v gh &> /dev/null; then
     echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null || true
+
+    # Install GitHub CLI extensions (requires authentication)
+    if ! gh extension list | grep -q "twelvelabs/gh-repo-config"; then
+        gh extension install twelvelabs/gh-repo-config 2>/dev/null || true
+    fi
 fi
 
 # .codexディレクトリのセットアップ
