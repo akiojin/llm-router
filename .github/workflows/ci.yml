@@ -58,7 +58,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libssl-dev clang-tidy cppcheck
+          sudo apt-get install -y build-essential cmake libssl-dev libcurl4-openssl-dev clang-tidy cppcheck
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -125,7 +125,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libssl-dev gcovr
+          sudo apt-get install -y build-essential cmake libssl-dev libcurl4-openssl-dev gcovr
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
