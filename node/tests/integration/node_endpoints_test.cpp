@@ -19,7 +19,7 @@ TEST(NodeEndpointsTest, PullAndHealth) {
     server.start();
 
     httplib::Client cli("127.0.0.1", 18088);
-    auto pull = cli.Post("/pull", R"({"model":"test-model"})", "application/json");
+    auto pull = cli.Post("/pull", R"({"model":"dummy","task_id":"t-1"})", "application/json");
     ASSERT_TRUE(pull);
     EXPECT_EQ(pull->status, 200);
     EXPECT_EQ(pull->get_header_value("Content-Type"), "application/json");
