@@ -34,7 +34,7 @@ gh repo-config apply
 ### main
 
 - **PR必須**: 直接プッシュ禁止
-- **Required Checks**: なし（developで検証済みのため）
+- **Required Checks**: 全てのCIチェック必須
 - **承認**: 0人（自動マージ用）
 
 ### develop
