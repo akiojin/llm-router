@@ -5,7 +5,6 @@ set(INTEGRATION_TEST_SOURCES
     node_prometheus_test.cpp
     main_test.cpp
     model_sync_download_test.cpp
-    auto_repair_test.cpp
     model_lifecycle_test.cpp
     ../../src/main.cpp
     ../../src/runtime/state.cpp
@@ -17,7 +16,6 @@ set(INTEGRATION_TEST_SOURCES
     ../../src/models/model_sync.cpp
     ../../src/models/model_downloader.cpp
     ../../src/models/model_storage.cpp
-    ../../src/models/model_repair.cpp
     ../../src/metrics/prometheus_exporter.cpp
     ../../src/core/inference_engine.cpp
     ../../src/core/llama_manager.cpp

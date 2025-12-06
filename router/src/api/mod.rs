@@ -145,6 +145,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/models/loaded", get(models::get_loaded_models))
         .route("/api/models/distribute", post(models::distribute_models))
         .route("/api/models/download", post(models::distribute_models))
+        // モデルファイル配信API (SPEC-48678000)
+        .route("/api/models/blob/:model_name", get(models::get_model_blob))
         .route("/api/nodes/:node_id/models", get(models::get_node_models))
         .route(
             "/api/nodes/:node_id/models/pull",

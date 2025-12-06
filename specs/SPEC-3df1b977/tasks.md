@@ -3,6 +3,9 @@
 **入力**: `/specs/SPEC-3df1b977/`の設計ドキュメント
 **前提条件**: plan.md (必須), research.md, data-model.md, quickstart.md
 
+> **注記**: この機能は廃止されました（SPEC-48678000に置換）。
+> 以下のタスクは「機能削除により不要」として完了扱いとします。
+
 ## フォーマット: `[ID] [P?] 説明`
 
 - **[P]**: 並列実行可能 (異なるファイル、依存関係なし)
@@ -10,9 +13,9 @@
 
 ## Phase 3.1: セットアップ
 
-- [ ] T001 `node/include/models/model_repair.h` にModelRepairクラスのヘッダー作成
-- [ ] T002 `node/src/models/model_repair.cpp` に空の実装ファイル作成
-- [ ] T003 `node/CMakeLists.txt` にmodel_repair.cppを追加
+- [x] T001 `node/include/models/model_repair.h` にModelRepairクラスのヘッダー作成（機能削除により不要）
+- [x] T002 `node/src/models/model_repair.cpp` に空の実装ファイル作成（機能削除により不要）
+- [x] T003 `node/CMakeLists.txt` にmodel_repair.cppを追加（機能削除により不要）
 
 ## Phase 3.2: テストファースト (TDD) - 3.3の前に完了必須
 
@@ -20,53 +23,53 @@
 
 ### ユニットテスト (破損検出)
 
-- [ ] T004 [P] `node/tests/unit/model_repair_test.cpp` に破損ファイル検出テスト
+- [x] T004 [P] `node/tests/unit/model_repair_test.cpp` に破損ファイル検出テスト（機能削除により不要）
   - needsRepair()がゼロサイズファイルでtrue返却
   - needsRepair()が無効GGUFヘッダーでtrue返却
   - needsRepair()が正常ファイルでfalse返却
-- [ ] T005 [P] `node/tests/unit/llama_manager_test.cpp` にModelLoadError列挙テスト追加
+- [x] T005 [P] `node/tests/unit/llama_manager_test.cpp` にModelLoadError列挙テスト追加（機能削除により不要）
   - loadModel()が存在しないファイルでFileNotFoundを返却
   - loadModel()が破損ファイルでCorruptedを返却
 
 ### 統合テスト (自動修復フロー)
 
-- [ ] T006 [P] `node/tests/integration/auto_repair_test.cpp` に自動修復成功テスト
+- [x] T006 [P] `node/tests/integration/auto_repair_test.cpp` に自動修復成功テスト（機能削除により不要）
   - 破損モデルでリクエスト → 自動再ダウンロード → 成功
-- [ ] T007 [P] `node/tests/integration/auto_repair_test.cpp` に修復失敗テスト
+- [x] T007 [P] `node/tests/integration/auto_repair_test.cpp` に修復失敗テスト（機能削除により不要）
   - ネットワーク障害時に適切なエラーメッセージ返却
-- [ ] T008 [P] `node/tests/integration/auto_repair_test.cpp` に重複修復防止テスト
+- [x] T008 [P] `node/tests/integration/auto_repair_test.cpp` に重複修復防止テスト（機能削除により不要）
   - 同時リクエストで修復が1回のみ実行
-- [ ] T009 `node/tests/integration/auto_repair_test.cpp` にタイムアウトテスト
+- [x] T009 `node/tests/integration/auto_repair_test.cpp` にタイムアウトテスト（機能削除により不要）
   - 修復タイムアウト時に504エラー返却
 
 ## Phase 3.3: コア実装 (テストが失敗した後のみ)
 
 ### データ型定義
 
-- [ ] T010 `node/include/core/llama_manager.h` にModelLoadError列挙型を追加
-- [ ] T011 `node/include/models/model_repair.h` にRepairStatus, RepairResult構造体を追加
+- [x] T010 `node/include/core/llama_manager.h` にModelLoadError列挙型を追加（機能削除により不要）
+- [x] T011 `node/include/models/model_repair.h` にRepairStatus, RepairResult構造体を追加（機能削除により不要）
 
 ### 破損検出実装
 
-- [ ] T012 `node/src/models/model_repair.cpp` にneedsRepair()を実装
+- [x] T012 `node/src/models/model_repair.cpp` にneedsRepair()を実装（機能削除により不要）
   - ファイルサイズチェック
   - GGUFマジックナンバー検証
-- [ ] T013 `node/src/core/llama_manager.cpp` にloadModel()のエラー種別返却を実装
+- [x] T013 `node/src/core/llama_manager.cpp` にloadModel()のエラー種別返却を実装（機能削除により不要）
   - 戻り値を`std::pair<bool, ModelLoadError>`に変更
 
 ### 修復ロジック実装
 
-- [ ] T014 `node/src/models/model_repair.cpp` にrepair()を実装
+- [x] T014 `node/src/models/model_repair.cpp` にrepair()を実装（機能削除により不要）
   - ModelDownloaderを使用した再ダウンロード
   - 進捗ログ出力
-- [ ] T015 `node/src/models/model_repair.cpp` に重複修復防止を実装
+- [x] T015 `node/src/models/model_repair.cpp` に重複修復防止を実装（機能削除により不要）
   - std::condition_variableで待機
   - repairing_models_マップで進行中追跡
 
 ### 設定実装
 
-- [ ] T016 `node/src/core/llama_manager.cpp` にsetAutoRepair(), setRepairTimeout()を実装
-- [ ] T017 `node/src/runtime/config.cpp` に環境変数読み込みを追加
+- [x] T016 `node/src/core/llama_manager.cpp` にsetAutoRepair(), setRepairTimeout()を実装（機能削除により不要）
+- [x] T017 `node/src/runtime/config.cpp` に環境変数読み込みを追加（機能削除により不要）
   - LLM_AUTO_REPAIR
   - LLM_REPAIR_TIMEOUT_SECS
 

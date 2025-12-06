@@ -14,7 +14,6 @@
 #include "models/model_downloader.h"
 #include "models/model_registry.h"
 #include "models/model_storage.h"
-#include "models/model_repair.h"
 #include "core/llama_manager.h"
 #include "core/inference_engine.h"
 #include "api/openai_endpoints.h"
@@ -119,26 +118,9 @@ int run_node(const llm_node::NodeConfig& cfg, bool single_iteration) {
             }
         }
 
-        // Initialize auto-repair (if enabled)
-        std::unique_ptr<llm_node::ModelSync> model_sync_ptr;
-        std::unique_ptr<llm_node::ModelDownloader> model_downloader_ptr;
-        std::unique_ptr<llm_node::ModelRepair> model_repair_ptr;
-
-        if (cfg.auto_repair) {
-            spdlog::info("Auto-repair enabled, initializing ModelRepair...");
-            model_sync_ptr = std::make_unique<llm_node::ModelSync>(router_url, models_dir);
-            model_downloader_ptr = std::make_unique<llm_node::ModelDownloader>(router_url, models_dir);
-            model_repair_ptr = std::make_unique<llm_node::ModelRepair>(
-                *model_sync_ptr, *model_downloader_ptr, model_storage);
-            model_repair_ptr->setDefaultTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::seconds(cfg.repair_timeout_secs)));
-        }
-
         // Initialize inference engine with dependencies
-        llm_node::InferenceEngine engine = cfg.auto_repair && model_repair_ptr
-            ? llm_node::InferenceEngine(llama_manager, model_storage, *model_repair_ptr)
-            : llm_node::InferenceEngine(llama_manager, model_storage);
-        spdlog::info("InferenceEngine initialized with llama.cpp support{}", cfg.auto_repair ? " (auto-repair enabled)" : "");
+        llm_node::InferenceEngine engine(llama_manager, model_storage);
+        spdlog::info("InferenceEngine initialized with llama.cpp support");
 
         // Create shared router client for both registration and progress reporting
         auto router_client = std::make_shared<llm_node::RouterClient>(router_url);

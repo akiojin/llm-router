@@ -46,7 +46,6 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
 
             // optional fields from request
             std::string path = j.value("path", "");
-            std::string download_url = j.value("download_url", "");
             std::string chat_template = j.value("chat_template", "");
 
             // helper: model name -> dir (colon to underscore, append _latest when tagなし)
@@ -59,9 +58,9 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
                 return dir;
             };
 
-            std::thread([sync, client, model_name, task_id, path, download_url, chat_template, modelNameToDir]() {
-                spdlog::info("Starting model pull: model={}, task_id={}, path='{}', download_url='{}'",
-                              model_name, task_id, path, download_url);
+            std::thread([sync, client, model_name, task_id, path, chat_template, modelNameToDir]() {
+                spdlog::info("Starting model pull: model={}, task_id={}, path='{}'",
+                              model_name, task_id, path);
 
                 const std::string models_dir = sync->getModelsDir();
                 const std::string dir_name = modelNameToDir(model_name);
@@ -77,23 +76,31 @@ void NodeEndpoints::registerRoutes(httplib::Server& server) {
                     }
                 };
 
-                // 1) shared path copy
+                // 1) 共有パスがあれば直接参照（シンボリックリンク）
                 if (!path.empty()) {
                     std::error_code ec;
                     if (std::filesystem::exists(path, ec) && std::filesystem::is_regular_file(path, ec)) {
                         std::filesystem::create_directories(target_dir, ec);
                         if (!ec) {
-                            std::filesystem::copy_file(path, target_path, std::filesystem::copy_options::overwrite_existing, ec);
-                            if (!ec) success = true;
+                            // 既存のファイル/シンボリックリンクを削除
+                            std::filesystem::remove(target_path, ec);
+                            // シンボリックリンクを作成（コピーなし）
+                            std::filesystem::create_symlink(path, target_path, ec);
+                            if (!ec) {
+                                spdlog::info("Created symlink to shared path: {} -> {}", target_path.string(), path);
+                                success = true;
+                            }
                         }
                     }
                 }
 
-                // 2) download if needed
-                if (!success && !download_url.empty()) {
+                // 2) 共有パスが利用不可ならルーターHTTP API経由でダウンロード
+                if (!success) {
+                    std::string router_blob_url = sync->getBaseUrl() + "/api/models/blob/" + model_name;
+                    spdlog::info("Shared path unavailable, downloading from Router API: {}", router_blob_url);
                     ModelDownloader downloader(sync->getBaseUrl(), models_dir, std::chrono::milliseconds(30000));
                     std::string filename = dir_name + "/model.gguf";
-                    auto out = downloader.downloadBlob(download_url, filename, progress_cb);
+                    auto out = downloader.downloadBlob(router_blob_url, filename, progress_cb);
                     success = !out.empty();
                 }
 

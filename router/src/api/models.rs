@@ -939,6 +939,87 @@ pub async fn update_progress(
     Ok(StatusCode::OK)
 }
 
+/// GET /api/models/blob/{model_name} - モデルファイル（GGUF）をストリーミング配信
+///
+/// ノードがルーターからモデルファイルをHTTP経由でダウンロードするためのエンドポイント。
+/// 共有パスにアクセスできない環境でのフォールバック用。
+pub async fn get_model_blob(Path(model_name): Path<String>) -> axum::response::Response {
+    use axum::body::Body;
+    use axum::response::Response;
+    use tokio_util::io::ReaderStream;
+
+    // モデル名のバリデーション
+    if let Err(e) = validate_model_name(&model_name) {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(format!("{{\"error\": \"{}\"}}", e)))
+            .unwrap();
+    }
+
+    // モデルファイルのパスを取得
+    let model_path = match router_model_path(&model_name) {
+        Some(path) => path,
+        None => {
+            tracing::warn!("Model not found: {}", model_name);
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from(format!(
+                    "{{\"error\": \"Model not found: {}\"}}",
+                    model_name
+                )))
+                .unwrap();
+        }
+    };
+
+    // ファイルを開く
+    let file = match tokio::fs::File::open(&model_path).await {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::error!("Failed to open model file {:?}: {}", model_path, e);
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(format!(
+                    "{{\"error\": \"Failed to open model file: {}\"}}",
+                    e
+                )))
+                .unwrap();
+        }
+    };
+
+    // ファイルサイズを取得
+    let file_size = match file.metadata().await {
+        Ok(m) => m.len(),
+        Err(e) => {
+            tracing::error!("Failed to get file metadata: {}", e);
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(format!(
+                    "{{\"error\": \"Failed to get file metadata: {}\"}}",
+                    e
+                )))
+                .unwrap();
+        }
+    };
+
+    // ストリーミングレスポンスを構築
+    let stream = ReaderStream::new(file);
+    let body = Body::from_stream(stream);
+
+    tracing::info!(
+        "Streaming model blob: model={}, size={}",
+        model_name,
+        file_size
+    );
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/octet-stream")
+        .header("content-length", file_size.to_string())
+        .header("content-disposition", "attachment; filename=\"model.gguf\"")
+        .body(body)
+        .unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1101,5 +1182,46 @@ mod tests {
         assert_eq!(view.display_name, Some("GPT-OSS 7B".to_string()));
         assert!((view.size_gb.unwrap() - 4.0).abs() < 0.001);
         assert!((view.required_memory_gb.unwrap() - 6.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_get_model_blob_returns_file_when_exists() {
+        use tempfile::tempdir;
+
+        // テンポラリディレクトリにモデルファイルを作成
+        // router_models_dir() は ~/.llm-router/models を返すため、
+        // temp_dir/.llm-router/models/gpt-oss_7b/model.gguf の構造が必要
+        let temp_dir = tempdir().expect("temp dir");
+        let models_dir = temp_dir.path().join(".llm-router").join("models");
+        let model_dir = models_dir.join("gpt-oss_7b");
+        std::fs::create_dir_all(&model_dir).expect("create model dir");
+
+        // テスト用のGGUFファイルを作成（GGUFマジックナンバー付き）
+        let model_path = model_dir.join("model.gguf");
+        let gguf_header = b"GGUF\x03\x00\x00\x00"; // GGUF magic + version
+        std::fs::write(&model_path, gguf_header).expect("write test file");
+
+        // 環境変数を設定してモデルディレクトリを指定
+        std::env::set_var("HOME", temp_dir.path());
+
+        // router_model_path が正しいパスを返すことを確認
+        let result = router_model_path("gpt-oss:7b");
+        assert!(result.is_some(), "router_model_path should return Some");
+        assert!(result.unwrap().exists(), "model file should exist");
+    }
+
+    #[tokio::test]
+    async fn test_get_model_blob_returns_none_when_not_found() {
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().expect("temp dir");
+        std::env::set_var("HOME", temp_dir.path());
+
+        // 存在しないモデルの場合はNoneを返す
+        let result = router_model_path("nonexistent-model:7b");
+        assert!(
+            result.is_none(),
+            "router_model_path should return None for nonexistent model"
+        );
     }
 }

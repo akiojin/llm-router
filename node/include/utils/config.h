@@ -27,8 +27,6 @@ struct NodeConfig {
     bool require_gpu{true};
     std::string bind_address{"0.0.0.0"};
     std::string ip_address;  // Empty means auto-detect
-    bool auto_repair{false};
-    int repair_timeout_secs{300};
 };
 
 NodeConfig loadNodeConfig();
