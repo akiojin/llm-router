@@ -5,137 +5,137 @@
 use thiserror::Error;
 use uuid::Uuid;
 
-/// Common層のエラー型
+/// Common layer error type
 #[derive(Debug, Error)]
 pub enum CommonError {
-    /// 設定エラー
-    #[error("設定エラー: {0}")]
+    /// Configuration error
+    #[error("Configuration error: {0}")]
     Config(String),
 
-    /// シリアライゼーションエラー
-    #[error("シリアライゼーションエラー: {0}")]
+    /// Serialization error
+    #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
-    /// UUID解析エラー
-    #[error("UUID解析エラー: {0}")]
+    /// UUID parse error
+    #[error("UUID parse error: {0}")]
     UuidParse(#[from] uuid::Error),
 
-    /// IPアドレス解析エラー
-    #[error("IPアドレス解析エラー: {0}")]
+    /// IP address parse error
+    #[error("IP address parse error: {0}")]
     IpAddrParse(#[from] std::net::AddrParseError),
 
-    /// 検証エラー
-    #[error("検証エラー: {0}")]
+    /// Validation error
+    #[error("Validation error: {0}")]
     Validation(String),
 }
 
-/// Coordinatorエラー型
+/// Router error type
 #[derive(Debug, Error)]
 pub enum RouterError {
-    /// Common層エラー
+    /// Common layer error
     #[error(transparent)]
     Common(#[from] CommonError),
 
-    /// ノード未登録
-    #[error("ノードが見つかりません: {0}")]
+    /// Node not found
+    #[error("Node not found: {0}")]
     AgentNotFound(Uuid),
 
-    /// 利用可能なノードがない
-    #[error("利用可能なノードがありません")]
+    /// No available nodes
+    #[error("No available nodes")]
     NoAgentsAvailable,
 
-    /// データベースエラー
-    #[error("データベースエラー: {0}")]
+    /// Database error
+    #[error("Database error: {0}")]
     Database(String),
 
-    /// HTTPクライアントエラー
-    #[error("HTTPクライアントエラー: {0}")]
+    /// HTTP client error
+    #[error("HTTP client error: {0}")]
     Http(String),
 
-    /// タイムアウトエラー
-    #[error("タイムアウトエラー: {0}")]
+    /// Timeout error
+    #[error("Timeout error: {0}")]
     Timeout(String),
 
-    /// サービス利用不可（初期化中など）
-    #[error("サービス利用不可: {0}")]
+    /// Service unavailable (e.g., during initialization)
+    #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
 
-    /// 内部エラー
-    #[error("内部エラー: {0}")]
+    /// Internal error
+    #[error("Internal error: {0}")]
     Internal(String),
 
-    /// ノードがオフライン
-    #[error("ノード {0} はオフラインです")]
+    /// Node is offline
+    #[error("Node {0} is offline")]
     AgentOffline(Uuid),
 
-    /// 無効なモデル名
-    #[error("無効なモデル名: {0}")]
+    /// Invalid model name
+    #[error("Invalid model name: {0}")]
     InvalidModelName(String),
 
-    /// ストレージ容量不足
-    #[error("ストレージ容量不足: {0}")]
+    /// Insufficient storage
+    #[error("Insufficient storage: {0}")]
     InsufficientStorage(String),
 
-    /// パスワードハッシュエラー
-    #[error("パスワードハッシュエラー: {0}")]
+    /// Password hash error
+    #[error("Password hash error: {0}")]
     PasswordHash(String),
 
-    /// JWT エラー
-    #[error("JWT エラー: {0}")]
+    /// JWT error
+    #[error("JWT error: {0}")]
     Jwt(String),
 
-    /// 認証エラー
-    #[error("認証エラー: {0}")]
+    /// Authentication error
+    #[error("Authentication error: {0}")]
     Authentication(String),
 
-    /// 認可エラー
-    #[error("認可エラー: {0}")]
+    /// Authorization error
+    #[error("Authorization error: {0}")]
     Authorization(String),
 }
 
-/// Nodeエラー型
+/// Node error type
 #[derive(Debug, Error)]
 pub enum NodeError {
-    /// Common層エラー
+    /// Common layer error
     #[error(transparent)]
     Common(#[from] CommonError),
 
-    /// Coordinatorへの接続エラー
-    #[error("Coordinatorへの接続に失敗しました: {0}")]
+    /// Coordinator connection error
+    #[error("Failed to connect to Coordinator: {0}")]
     CoordinatorConnection(String),
 
-    /// LLM runtimeへの接続エラー
-    #[error("LLM runtimeへの接続に失敗しました: {0}")]
+    /// LLM runtime connection error
+    #[error("Failed to connect to LLM runtime: {0}")]
     RuntimeConnection(String),
 
-    /// 登録エラー
-    #[error("ノード登録に失敗しました: {0}")]
+    /// Registration error
+    #[error("Node registration failed: {0}")]
     Registration(String),
 
-    /// ヘルスチェック送信エラー
-    #[error("ヘルスチェック送信に失敗しました: {0}")]
+    /// Health check send error
+    #[error("Failed to send health check: {0}")]
     Heartbeat(String),
 
-    /// メトリクス収集エラー
-    #[error("メトリクス収集に失敗しました: {0}")]
+    /// Metrics collection error
+    #[error("Failed to collect metrics: {0}")]
     Metrics(String),
 
-    /// GUI エラー
-    #[error("GUIエラー: {0}")]
+    /// GUI error
+    #[error("GUI error: {0}")]
     Gui(String),
 
-    /// 内部エラー
-    #[error("内部エラー: {0}")]
+    /// Internal error
+    #[error("Internal error: {0}")]
     Internal(String),
 }
 
-/// Result型エイリアス（Common）
+/// Result type alias (Common)
 pub type CommonResult<T> = Result<T, CommonError>;
 
-/// Result型エイリアス（Coordinator）
+/// Result type alias (Router)
 pub type RouterResult<T> = Result<T, RouterError>;
 
-/// Result型エイリアス（Node）
+/// Result type alias (Node)
 pub type NodeResult<T> = Result<T, NodeError>;
 
 #[cfg(test)]
@@ -144,8 +144,8 @@ mod tests {
 
     #[test]
     fn test_common_error_display() {
-        let error = CommonError::Config("テスト設定エラー".to_string());
-        assert_eq!(error.to_string(), "設定エラー: テスト設定エラー");
+        let error = CommonError::Config("test config error".to_string());
+        assert_eq!(error.to_string(), "Configuration error: test config error");
     }
 
     #[test]
@@ -158,15 +158,15 @@ mod tests {
     #[test]
     fn test_coordinator_error_no_agents() {
         let error = RouterError::NoAgentsAvailable;
-        assert_eq!(error.to_string(), "利用可能なノードがありません");
+        assert_eq!(error.to_string(), "No available nodes");
     }
 
     #[test]
     fn test_agent_error_coordinator_connection() {
-        let error = NodeError::CoordinatorConnection("タイムアウト".to_string());
+        let error = NodeError::CoordinatorConnection("timeout".to_string());
         assert_eq!(
             error.to_string(),
-            "Coordinatorへの接続に失敗しました: タイムアウト"
+            "Failed to connect to Coordinator: timeout"
         );
     }
 

@@ -21,7 +21,7 @@
    }
    ```
 
-   成功時は `status: "registered"` が返り、`GET /api/agents` のレスポンスに `gpu_devices` が含まれる。`gpu_devices: []` などGPU情報が欠損したリクエストは 403 と `{"error":"検証エラー: GPU hardware is required"}` を返す。
+   成功時は `status: "registered"` が返り、`GET /api/agents` のレスポンスに `gpu_devices` が含まれる。`gpu_devices: []` などGPU情報が欠損したリクエストは 403 と `{"error":"Validation error: GPU hardware is required"}` を返す。
 
 3. **ストレージクリーンアップを確認する**
 

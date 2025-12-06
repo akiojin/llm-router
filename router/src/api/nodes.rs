@@ -564,7 +564,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        let expected = "検証エラー: GPU hardware is required for agent registration. gpu_available must be true.";
+        let expected = "Validation error: GPU hardware is required for agent registration. gpu_available must be true.";
         assert_eq!(body["error"], expected);
     }
 
@@ -592,7 +592,7 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(
             body["error"],
-            "検証エラー: GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
+            "Validation error: GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
         );
     }
 

@@ -147,6 +147,6 @@ async fn register_gpu_agent_missing_devices_is_rejected() {
     let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(
         error["error"],
-        "検証エラー: GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
+        "Validation error: GPU hardware is required for agent registration. No GPU devices detected in gpu_devices array."
     );
 }
