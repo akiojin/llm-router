@@ -19,7 +19,7 @@
         <p class="subtitle">Real-time monitoring of node status and system statistics</p>
       </div>
       <div class="header-controls">
-        <button id="chat-open" class="refresh-button" type="button">Playground</button>
+        <button id="playground-open" class="refresh-button" type="button">Playground</button>
         <button id="api-keys-button" class="refresh-button" type="button">
           API Keys
         </button>
@@ -561,23 +561,23 @@
     </div>
 
     <!-- Fullscreen chat console (embedded /chat) -->
-    <div id="chat-modal" class="chat-modal hidden" role="dialog" aria-modal="true" aria-label="Playground console">
-      <div class="chat-modal__backdrop" data-chat-close></div>
-      <div class="chat-modal__content">
-        <header class="chat-modal__header">
+    <div id="playground-modal" class="playground-modal hidden" role="dialog" aria-modal="true" aria-label="Playground console">
+      <div class="playground-modal__backdrop" data-playground-close></div>
+      <div class="playground-modal__content">
+        <header class="playground-modal__header">
           <div>
             <p class="eyebrow">Playground Console</p>
-            <p class="chat-modal__title">Playground console for /api/chat</p>
+            <p class="playground-modal__title">Playground console for /api/chat</p>
           </div>
-          <div class="chat-modal__actions">
-            <button type="button" id="chat-close" class="modal__close" aria-label="Close">×</button>
+          <div class="playground-modal__actions">
+            <button type="button" id="playground-close" class="modal__close" aria-label="Close">×</button>
           </div>
         </header>
         <iframe
-          id="chat-iframe"
+          id="playground-iframe"
           src="/chat"
           title="Playground console"
-          class="chat-modal__iframe"
+          class="playground-modal__iframe"
           loading="lazy"
           referrerpolicy="same-origin"
         ></iframe>

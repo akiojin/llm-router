@@ -53,14 +53,17 @@ async fn dashboard_contains_chat_modal() {
     let html = String::from_utf8(bytes.to_vec()).expect("dashboard html should be utf-8");
 
     assert!(
-        html.contains("id=\"chat-open\""),
-        "chat open button not found"
+        html.contains("id=\"playground-open\""),
+        "playground open button not found"
     );
     assert!(
-        html.contains("id=\"chat-modal\""),
-        "chat modal container not found"
+        html.contains("id=\"playground-modal\""),
+        "playground modal container not found"
     );
-    assert!(html.contains("id=\"chat-iframe\""), "chat iframe not found");
+    assert!(
+        html.contains("id=\"playground-iframe\""),
+        "playground iframe not found"
+    );
     assert!(
         html.contains("src=\"/chat\""),
         "chat iframe src should point to /chat"

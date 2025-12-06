@@ -1368,8 +1368,8 @@ body {
   color: var(--text-subtle);
 }
 
-/* Chat modal */
-.chat-modal {
+/* Playground modal */
+.playground-modal {
   position: fixed;
   inset: 0;
   z-index: 999;
@@ -1378,18 +1378,18 @@ body {
   align-items: stretch;
 }
 
-.chat-modal.hidden {
+.playground-modal.hidden {
   display: none;
 }
 
-.chat-modal__backdrop {
+.playground-modal__backdrop {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(6px);
 }
 
-.chat-modal__content {
+.playground-modal__content {
   position: relative;
   margin: 24px;
   border-radius: 18px;
@@ -1402,7 +1402,7 @@ body {
   min-height: calc(100vh - 48px);
 }
 
-.chat-modal__header {
+.playground-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1412,19 +1412,19 @@ body {
   background: linear-gradient(120deg, rgba(56, 189, 248, 0.14), rgba(15, 23, 42, 0.85));
 }
 
-.chat-modal__title {
+.playground-modal__title {
   margin: 4px 0 0;
   color: var(--text);
   font-weight: 700;
 }
 
-.chat-modal__actions {
+.playground-modal__actions {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.chat-modal__iframe {
+.playground-modal__iframe {
   flex: 1;
   border: none;
   width: 100%;
@@ -1469,7 +1469,7 @@ body {
     width: 100%;
   }
 
-  .chat-modal__content {
+  .playground-modal__content {
     margin: 8px;
     min-height: calc(100vh - 16px);
   }

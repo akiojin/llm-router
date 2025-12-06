@@ -124,10 +124,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalSave = document.getElementById("node-modal-save");
   const modalDelete = document.getElementById("node-modal-delete");
   const modalDisconnect = document.getElementById("node-modal-disconnect");
-  const chatOpen = document.getElementById("chat-open");
-  const chatModal = document.getElementById("chat-modal");
-  const chatClose = document.getElementById("chat-close");
-  const chatIframe = document.getElementById("chat-iframe");
+  const playgroundOpen = document.getElementById("playground-open");
+  const playgroundModal = document.getElementById("playground-modal");
+  const playgroundClose = document.getElementById("playground-close");
+  const playgroundIframe = document.getElementById("playground-iframe");
   const tbody = document.getElementById("nodes-body");
 
   // リロード直後に詳細モーダルが開いたままにならないよう、確実に非表示へ初期化
@@ -198,25 +198,25 @@ document.addEventListener("DOMContentLoaded", () => {
     state.currentPage = 1;
     renderAgents();
   });
-  chatOpen?.addEventListener("click", () => {
-    if (!chatModal) return;
-    chatModal.classList.remove("hidden");
+  playgroundOpen?.addEventListener("click", () => {
+    if (!playgroundModal) return;
+    playgroundModal.classList.remove("hidden");
     document.body.classList.add("body--modal-open");
-    chatIframe?.focus();
+    playgroundIframe?.focus();
   });
-  const closeChat = () => {
-    chatModal?.classList.add("hidden");
+  const closePlayground = () => {
+    playgroundModal?.classList.add("hidden");
     document.body.classList.remove("body--modal-open");
   };
-  chatClose?.addEventListener("click", closeChat);
-  chatModal?.addEventListener("click", (event) => {
-    if (event.target?.dataset?.chatClose !== undefined) {
-      closeChat();
+  playgroundClose?.addEventListener("click", closePlayground);
+  playgroundModal?.addEventListener("click", (event) => {
+    if (event.target?.dataset?.playgroundClose !== undefined) {
+      closePlayground();
     }
   });
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !chatModal?.classList.contains("hidden")) {
-      closeChat();
+    if (event.key === "Escape" && !playgroundModal?.classList.contains("hidden")) {
+      closePlayground();
     }
   });
   let queryDebounce = null;
