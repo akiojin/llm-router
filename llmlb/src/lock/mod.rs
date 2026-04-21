@@ -177,11 +177,9 @@ pub fn list_all_locks() -> Vec<LockInfo> {
                     if let Ok(port) = port_str.parse::<u16>() {
                         // ロック情報を読み取り
                         match read_lock_info(port) {
-                            Ok(Some(info)) => {
-                                // PIDが生存中のもののみ追加
-                                if is_process_running(info.pid) {
-                                    locks.push(info);
-                                }
+                            // PIDが生存中のもののみ追加
+                            Ok(Some(info)) if is_process_running(info.pid) => {
+                                locks.push(info);
                             }
                             // Windowsでファイルがロック中の場合
                             Err(LockError::FileLocked { port }) => {

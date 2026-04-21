@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [5.7.2](https://github.com/akiojin/llmlb/compare/v5.7.1...v5.7.2) (2026-04-21)
+
+### Fixed
+
+- Anthropic: `/v1/messages` でエンドポイント向けモデル名を書き換えて upstream エラーを解消
+- Lint: clippy 1.95.0 の lint 違反を 3 箇所修正
+
+### Security
+
+- rustls-webpki を 0.103.12 に更新し脆弱性 2 件を解消
+
+### Test
+
+- Anthropic: `/v1/messages` の model 書き換え契約テストを追加
+
+### Docs
+
+- API Clients: Claude Code からの接続手順を追記
+
+### Chore
+
+- Skills: 統合された gwt-manage-pr に伴う旧スキルディレクトリを削除
+
 ## [5.7.1](https://github.com/akiojin/llmlb/compare/v5.7.0...v5.7.1) (2026-04-15)
 
 ### Fixed

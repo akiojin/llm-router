@@ -119,12 +119,10 @@ impl StreamingTokenAccumulator {
                             self.accumulated_content.push_str(delta);
                         }
                     }
-                    "response.output_text.done" => {
-                        // deltaイベントが欠落している場合のみdone.textを利用
-                        if self.accumulated_content.is_empty() {
-                            if let Some(text) = json.get("text").and_then(|t| t.as_str()) {
-                                self.accumulated_content.push_str(text);
-                            }
+                    // deltaイベントが欠落している場合のみdone.textを利用
+                    "response.output_text.done" if self.accumulated_content.is_empty() => {
+                        if let Some(text) = json.get("text").and_then(|t| t.as_str()) {
+                            self.accumulated_content.push_str(text);
                         }
                     }
                     _ => {}

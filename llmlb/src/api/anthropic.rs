@@ -4,6 +4,7 @@
 //! routed through the existing OpenAI-compatible local endpoint path.
 
 use crate::api::error::AppError;
+use crate::api::model_name::rewrite_payload_model_for_endpoint;
 use crate::api::models::load_registered_model;
 use crate::api::proxy::{
     forward_streaming_response, forward_to_endpoint, record_endpoint_request_stats,
@@ -286,13 +287,31 @@ async fn proxy_local_anthropic_messages(
     client_ip: Option<IpAddr>,
     api_key_id: Option<Uuid>,
 ) -> Result<Response, AppError> {
+    let resolved_model = {
+        let found = state.endpoint_registry.find_by_model(&model).await;
+        if found.is_empty() {
+            if let Some(canonical) = crate::models::mapping::resolve_canonical_any(&model) {
+                let canonical_found = state.endpoint_registry.find_by_model(canonical).await;
+                if !canonical_found.is_empty() {
+                    canonical.to_string()
+                } else {
+                    model.clone()
+                }
+            } else {
+                model.clone()
+            }
+        } else {
+            model.clone()
+        }
+    };
+
     if state
         .endpoint_registry
-        .find_by_model(&model)
+        .find_by_model(&resolved_model)
         .await
         .is_empty()
     {
-        let is_registered = load_registered_model(&state.db_pool, &model).await?;
+        let is_registered = load_registered_model(&state.db_pool, &resolved_model).await?;
         if is_registered.is_none() {
             return Ok(anthropic_error_response(
                 StatusCode::NOT_FOUND,
@@ -310,7 +329,7 @@ async fn proxy_local_anthropic_messages(
     let endpoint = match select_available_endpoint_with_queue_for_model(
         state,
         queue_config,
-        &model,
+        &resolved_model,
         tps_api_kind,
     )
     .await
@@ -401,7 +420,30 @@ async fn proxy_local_anthropic_messages(
         .begin_request(endpoint_id)
         .await
         .map_err(AppError::from)?;
-    let body_bytes = serde_json::to_vec(&converted.openai_payload).map_err(|err| {
+    let endpoint_models = match state.endpoint_registry.list_models(endpoint_id).await {
+        Ok(models) => models,
+        Err(error) => {
+            tracing::warn!(
+                endpoint_id = %endpoint_id,
+                model = %resolved_model,
+                error = %error,
+                "Failed to load endpoint models for Anthropic request rewrite; falling back to static mapping"
+            );
+            Vec::new()
+        }
+    };
+    let ConvertedAnthropicRequest {
+        openai_payload,
+        request_text,
+        stream,
+    } = converted;
+    let outbound_payload = rewrite_payload_model_for_endpoint(
+        openai_payload,
+        &resolved_model,
+        &endpoint_type,
+        &endpoint_models,
+    );
+    let body_bytes = serde_json::to_vec(&outbound_payload).map_err(|err| {
         AppError::from(LbError::Http(format!(
             "Failed to serialize translated OpenAI payload: {}",
             err
@@ -414,7 +456,7 @@ async fn proxy_local_anthropic_messages(
         &endpoint,
         "/v1/chat/completions",
         body_bytes,
-        converted.stream,
+        stream,
     )
     .await
     {
@@ -463,7 +505,7 @@ async fn proxy_local_anthropic_messages(
         }
     };
 
-    if converted.stream {
+    if stream {
         let duration = started.elapsed();
         let upstream_status =
             StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -535,7 +577,7 @@ async fn proxy_local_anthropic_messages(
             model.clone(),
             endpoint_type,
             started,
-            estimate_tokens(&converted.request_text, &model),
+            estimate_tokens(&request_text, &model),
             state.endpoint_registry.clone(),
             state.load_manager.clone(),
             state.event_bus.clone(),
@@ -624,7 +666,7 @@ async fn proxy_local_anthropic_messages(
             let response_text = extract_openai_response_text(&body);
             let token_usage = extract_or_estimate_tokens(
                 &body,
-                Some(&converted.request_text),
+                Some(&request_text),
                 Some(&response_text),
                 &model,
             );
@@ -1715,6 +1757,59 @@ fn update_inference_latency(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::test_utils::{TestAppStateBuilder, TEST_LOCK};
+    use crate::types::endpoint::{
+        Endpoint, EndpointModel, EndpointStatus, EndpointType, SupportedAPI,
+    };
+    use crate::AppState;
+    use axum::body::to_bytes;
+    use axum::http::{HeaderMap, HeaderValue};
+    use serial_test::serial;
+    use tempfile::tempdir;
+    use wiremock::matchers::{body_partial_json, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    async fn create_local_state() -> AppState {
+        TestAppStateBuilder::new().await.build().await
+    }
+
+    async fn create_state_with_tempdir() -> (AppState, tempfile::TempDir) {
+        let dir = tempdir().expect("temp dir");
+        std::env::set_var("LLMLB_DATA_DIR", dir.path());
+        let state = create_local_state().await;
+        (state, dir)
+    }
+
+    async fn add_online_chat_endpoint_with_model(
+        state: &AppState,
+        endpoint_name: &str,
+        base_url: String,
+        endpoint_type: EndpointType,
+        model_id: &str,
+        canonical_name: Option<&str>,
+    ) {
+        let mut endpoint = Endpoint::new(endpoint_name.to_string(), base_url, endpoint_type);
+        endpoint.status = EndpointStatus::Online;
+        let endpoint_id = endpoint.id;
+        state
+            .endpoint_registry
+            .add(endpoint)
+            .await
+            .expect("add endpoint");
+        state
+            .endpoint_registry
+            .add_model(&EndpointModel {
+                endpoint_id,
+                model_id: model_id.to_string(),
+                capabilities: None,
+                max_tokens: None,
+                last_checked: None,
+                supported_apis: vec![SupportedAPI::ChatCompletions],
+                canonical_name: canonical_name.map(str::to_string),
+            })
+            .await
+            .expect("add endpoint model");
+    }
 
     #[test]
     fn anthropic_request_to_openai_maps_system_and_messages() {
@@ -1967,5 +2062,133 @@ mod tests {
         // Test that streaming tool call events are properly transformed
         // This test is a placeholder for streaming transformation logic
         // TODO: Implement streaming transformation and associated tests
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn canonical_model_routes_to_ollama_alias_backed_endpoint() {
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .and(body_partial_json(json!({"model": "gpt-oss:20b"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "chatcmpl-alias",
+                "object": "chat.completion",
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        add_online_chat_endpoint_with_model(
+            &state,
+            "ollama-alias",
+            server.uri(),
+            EndpointType::Ollama,
+            "gpt-oss:20b",
+            Some("openai/gpt-oss-20b"),
+        )
+        .await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
+        let payload = json!({
+            "model": "openai/gpt-oss-20b",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hello"}]
+        });
+
+        let response = handle_messages(
+            std::net::SocketAddr::from(([127, 0, 0, 1], 8080)),
+            headers,
+            state.clone(),
+            None,
+            payload,
+        )
+        .await
+        .expect("Anthropic request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1_000_000)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(json["model"], "openai/gpt-oss-20b");
+        assert_eq!(json["content"][0]["text"], "ok");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn canonical_model_routes_to_lmstudio_endpoint_without_alias_rewrite() {
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .and(body_partial_json(json!({"model": "openai/gpt-oss-20b"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "chatcmpl-canonical",
+                "object": "chat.completion",
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        add_online_chat_endpoint_with_model(
+            &state,
+            "lmstudio-canonical",
+            server.uri(),
+            EndpointType::LmStudio,
+            "openai/gpt-oss-20b",
+            Some("openai/gpt-oss-20b"),
+        )
+        .await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
+        let payload = json!({
+            "model": "openai/gpt-oss-20b",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hello"}]
+        });
+
+        let response = handle_messages(
+            std::net::SocketAddr::from(([127, 0, 0, 1], 8080)),
+            headers,
+            state.clone(),
+            None,
+            payload,
+        )
+        .await
+        .expect("Anthropic request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1_000_000)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(json["model"], "openai/gpt-oss-20b");
+        assert_eq!(json["content"][0]["text"], "ok");
     }
 }

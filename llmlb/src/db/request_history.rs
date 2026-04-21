@@ -1200,7 +1200,7 @@ impl RequestHistoryStorage {
             .collect();
 
         // リクエスト数降順ソート
-        rankings.sort_by(|a, b| b.request_count.cmp(&a.request_count));
+        rankings.sort_by_key(|r| std::cmp::Reverse(r.request_count));
 
         let total_count = rankings.len();
         let offset = (page.saturating_sub(1)) * per_page;

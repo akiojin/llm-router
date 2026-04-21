@@ -44,6 +44,7 @@ llmlb は OpenAI 互換の推論サーバーにリクエストをルーティン
 - エンドポイント管理: LM Studio、Ollama、vLLM、xLLM等の外部推論サーバーをロードバランサーから一元管理
 - モデル同期: 登録エンドポイントから `GET /v1/models` でモデル一覧を自動同期
 - クラウドプレフィックス: `openai:`, `google:`, `anthropic:` を `model` に付けて同一エンドポイントでプロキシ
+- Anthropic互換API: `POST /v1/messages` を受け付け、Claude Code のバックエンドとしても利用可能（[`docs/api-clients.md`](docs/api-clients.md#claude-code-から接続する) 参照）
 - 自動アップデート: GitHub Releases検知→承認後にドレイン→再起動。スケジューリング（即時/アイドル/時刻指定）、自動＋手動ロールバック、DL進捗表示に対応
 
 ## ダッシュボード
