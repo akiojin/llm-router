@@ -14,13 +14,27 @@ use axum::{
 use reqwest::{Client, StatusCode as ReqStatusCode};
 use serde_json::{json, Value};
 use serial_test::serial;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[derive(Clone)]
 struct ChatNodeStubState {
     response: ChatStubResponse,
+    /// /v1/models で広告するモデル ID。エンドポイント同期でこの値が登録される。
+    advertised_model: String,
+    /// llmlb のエンドポイント型自動検出に「どの runtime として振る舞うか」を指定する。
+    detection_kind: DetectionKind,
+    /// /v1/chat/completions に届いた最新の POST body を捕捉する（`/v1/messages` の
+    /// モデル書き換えを検証するために使用）。
+    captured_request: Arc<Mutex<Option<Value>>>,
+}
+
+#[derive(Clone, Copy)]
+enum DetectionKind {
+    OpenaiCompatible,
+    Ollama,
+    LmStudio,
 }
 
 #[derive(Clone)]
@@ -29,18 +43,39 @@ enum ChatStubResponse {
     Stream(String),
 }
 
-async fn spawn_chat_node_stub(state: ChatNodeStubState) -> TestServer {
-    let app = Router::new()
+fn chat_node_stub_openai_compat(response: ChatStubResponse) -> ChatNodeStubState {
+    ChatNodeStubState {
+        response,
+        advertised_model: "test-model".to_string(),
+        detection_kind: DetectionKind::OpenaiCompatible,
+        captured_request: Arc::new(Mutex::new(None)),
+    }
+}
+
+async fn spawn_chat_node_stub(state: ChatNodeStubState) -> (TestServer, Arc<Mutex<Option<Value>>>) {
+    let captured = state.captured_request.clone();
+    let detection = state.detection_kind;
+    let mut app = Router::new()
         .route("/v1/chat/completions", post(chat_handler))
-        .route("/v1/models", get(models_handler))
-        .with_state(Arc::new(state));
-    crate::support::http::spawn_lb(app).await
+        .route("/v1/models", get(models_handler));
+    if matches!(detection, DetectionKind::Ollama) {
+        app = app.route("/api/tags", get(ollama_tags_handler));
+    }
+    let server = crate::support::http::spawn_lb(app.with_state(Arc::new(state))).await;
+    (server, captured)
 }
 
 async fn chat_handler(
     State(state): State<Arc<ChatNodeStubState>>,
-    Json(_request): Json<Value>,
+    Json(request): Json<Value>,
 ) -> impl IntoResponse {
+    {
+        let mut guard = state
+            .captured_request
+            .lock()
+            .expect("captured_request lock should not be poisoned");
+        *guard = Some(request);
+    }
     match &state.response {
         ChatStubResponse::Json(payload) => (StatusCode::OK, Json(payload.clone())).into_response(),
         ChatStubResponse::Stream(body) => axum::response::Response::builder()
@@ -51,12 +86,29 @@ async fn chat_handler(
     }
 }
 
-async fn models_handler() -> impl IntoResponse {
+async fn models_handler(State(state): State<Arc<ChatNodeStubState>>) -> impl IntoResponse {
+    let owned_by = match state.detection_kind {
+        DetectionKind::LmStudio => "lm-studio",
+        DetectionKind::Ollama => "ollama",
+        DetectionKind::OpenaiCompatible => "test",
+    };
     (
         StatusCode::OK,
         Json(json!({
+            "object": "list",
             "data": [
-                {"id": "test-model", "object": "model"}
+                {"id": state.advertised_model, "object": "model", "owned_by": owned_by}
+            ]
+        })),
+    )
+}
+
+async fn ollama_tags_handler(State(state): State<Arc<ChatNodeStubState>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "models": [
+                {"name": state.advertised_model, "size": 12_000_000_000i64}
             ]
         })),
     )
@@ -65,8 +117,8 @@ async fn models_handler() -> impl IntoResponse {
 #[tokio::test]
 #[serial]
 async fn anthropic_messages_local_request_success() {
-    let node = spawn_chat_node_stub(ChatNodeStubState {
-        response: ChatStubResponse::Json(json!({
+    let (node, _captured) = spawn_chat_node_stub(chat_node_stub_openai_compat(
+        ChatStubResponse::Json(json!({
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "model": "test-model",
@@ -85,7 +137,7 @@ async fn anthropic_messages_local_request_success() {
                 "total_tokens": 13
             }
         })),
-    })
+    ))
     .await;
     let lb = spawn_test_lb().await;
     let _ = register_responses_endpoint(lb.addr(), node.addr(), "test-model")
@@ -119,16 +171,18 @@ async fn anthropic_messages_local_request_success() {
 #[tokio::test]
 #[serial]
 async fn anthropic_messages_streaming_transforms_openai_sse() {
-    let node = spawn_chat_node_stub(ChatNodeStubState {
-        response: ChatStubResponse::Stream(concat!(
-            "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"index\":0}]}\n\n",
-            "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
-            "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\" world\"},\"index\":0}]}\n\n",
-            "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}\n\n",
-            "data: [DONE]\n\n"
-        )
-        .to_string()),
-    })
+    let (node, _captured) = spawn_chat_node_stub(chat_node_stub_openai_compat(
+        ChatStubResponse::Stream(
+            concat!(
+                "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"index\":0}]}\n\n",
+                "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
+                "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\" world\"},\"index\":0}]}\n\n",
+                "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}\n\n",
+                "data: [DONE]\n\n"
+            )
+            .to_string(),
+        ),
+    ))
     .await;
     let lb = spawn_test_lb().await;
     let _ = register_responses_endpoint(lb.addr(), node.addr(), "test-model")
@@ -269,4 +323,115 @@ async fn anthropic_messages_invalid_api_key_uses_anthropic_error_shape() {
     let body: Value = response.json().await.expect("error body must be json");
     assert_eq!(body["type"], "error");
     assert_eq!(body["error"]["type"], "authentication_error");
+}
+
+/// Claude Code 相当のクライアントが `openai/gpt-oss-20b` で `/v1/messages` を叩いた際、
+/// Ollama バックエンドが `gpt-oss:20b` としてしかモデルを保持していないケース。
+/// llmlb は `rewrite_payload_model_for_endpoint` を呼んで upstream へは
+/// エイリアス名（`gpt-oss:20b`）で転送しなければ 502 "not found" になる。
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_rewrites_canonical_to_ollama_alias() {
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Json(json!({
+        "id": "chatcmpl-rewrite",
+        "object": "chat.completion",
+        "model": "gpt-oss:20b",
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "Hello from Ollama"},
+                "finish_reason": "stop"
+            }
+        ],
+        "usage": {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7}
+    })));
+    state.advertised_model = "gpt-oss:20b".to_string();
+    state.detection_kind = DetectionKind::Ollama;
+
+    let (node, captured) = spawn_chat_node_stub(state).await;
+    let lb = spawn_test_lb().await;
+    let _ = register_responses_endpoint(lb.addr(), node.addr(), "gpt-oss:20b")
+        .await
+        .expect("endpoint registration should succeed");
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "openai/gpt-oss-20b",
+            "max_tokens": 32,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), ReqStatusCode::OK);
+
+    let captured_body = captured
+        .lock()
+        .expect("captured_request lock should not be poisoned")
+        .clone()
+        .expect("upstream should have received at least one POST");
+    assert_eq!(
+        captured_body["model"], "gpt-oss:20b",
+        "Ollama の upstream へは canonical 名ではなくエイリアス名で転送されること"
+    );
+}
+
+/// LM Studio のように canonical 名（`openai/gpt-oss-20b`）を
+/// そのまま広告するエンドポイントでは、書き換えが発生せず
+/// リクエストがそのまま upstream に届くこと（no-op パスの保証）。
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_passes_canonical_through_lm_studio() {
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Json(json!({
+        "id": "chatcmpl-passthrough",
+        "object": "chat.completion",
+        "model": "openai/gpt-oss-20b",
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "Hello from LM Studio"},
+                "finish_reason": "stop"
+            }
+        ],
+        "usage": {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7}
+    })));
+    state.advertised_model = "openai/gpt-oss-20b".to_string();
+    state.detection_kind = DetectionKind::LmStudio;
+
+    let (node, captured) = spawn_chat_node_stub(state).await;
+    let lb = spawn_test_lb().await;
+    let _ = register_responses_endpoint(lb.addr(), node.addr(), "openai/gpt-oss-20b")
+        .await
+        .expect("endpoint registration should succeed");
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "openai/gpt-oss-20b",
+            "max_tokens": 32,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), ReqStatusCode::OK);
+
+    let captured_body = captured
+        .lock()
+        .expect("captured_request lock should not be poisoned")
+        .clone()
+        .expect("upstream should have received at least one POST");
+    assert_eq!(
+        captured_body["model"], "openai/gpt-oss-20b",
+        "canonical 名を直接受理するエンドポイントでは書き換えが発生しないこと"
+    );
 }
