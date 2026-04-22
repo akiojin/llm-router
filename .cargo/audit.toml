@@ -9,5 +9,6 @@
 [advisories]
 ignore = [
   "RUSTSEC-2023-0071", # rsa: no fixed upgrade; unreachable unless sqlx-mysql feature is enabled
+  "RUSTSEC-2026-0097", # rand 0.10.0 unsound with custom logger; temporary ignore — permanent fix tracked in #630
 ]
 
