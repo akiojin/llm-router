@@ -533,7 +533,15 @@ async fn test_dashboard_endpoints_include_endpoint_type() {
     assert!(
         endpoints.iter().any(|endpoint| {
             let et = endpoint["endpoint_type"].as_str().unwrap_or("");
-            ["xllm", "ollama", "vllm", "lm_studio", "openai_compatible"].contains(&et)
+            [
+                "xllm",
+                "ollama",
+                "vllm",
+                "lm_studio",
+                "llamacpp",
+                "openai_compatible",
+            ]
+            .contains(&et)
         }),
         "endpoint_type should be included in dashboard endpoints"
     );
