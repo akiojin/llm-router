@@ -114,6 +114,7 @@ mod tests {
         // Others don't
         assert!(!EndpointType::LmStudio.supports_model_delete());
         assert!(!EndpointType::Vllm.supports_model_delete());
+        assert!(!EndpointType::Llamacpp.supports_model_delete());
         assert!(!EndpointType::OpenaiCompatible.supports_model_delete());
     }
 }

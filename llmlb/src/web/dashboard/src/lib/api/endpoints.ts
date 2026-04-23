@@ -13,6 +13,7 @@ export type EndpointType =
   | 'ollama'
   | 'vllm'
   | 'lm_studio'
+  | 'llamacpp'
   | 'openai_compatible'
   | 'unknown'
 export interface DashboardEndpoint {
