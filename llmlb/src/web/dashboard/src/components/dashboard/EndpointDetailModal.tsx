@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type DashboardEndpoint, type EndpointType, endpointsApi } from '@/lib/api'
+import {
+  type DashboardEndpoint,
+  type EndpointType,
+  endpointsApi,
+  getRecommendedInferenceTimeout,
+  getRecommendedInferenceTimeoutLabel,
+} from '@/lib/api'
 import { classifyEndpointLastError } from '@/lib/endpoint-errors'
 import { formatRelativeTime } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
@@ -77,6 +83,8 @@ function getTypeLabel(type: EndpointType | undefined): string {
       return 'vLLM'
     case 'lm_studio':
       return 'LM Studio'
+    case 'llamacpp':
+      return 'llama.cpp'
     case 'openai_compatible':
       return 'OpenAI Compatible'
     case 'unknown':
@@ -95,6 +103,7 @@ function getTypeBadgeVariant(
     case 'ollama':
     case 'vllm':
     case 'lm_studio':
+    case 'llamacpp':
       return 'secondary'
     default:
       return 'outline'
@@ -110,9 +119,14 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
     endpoint?.health_check_interval_secs?.toString() || '30'
   )
   const [inferenceTimeout, setInferenceTimeout] = useState(
-    endpoint?.inference_timeout_secs?.toString() || '120'
+    endpoint?.inference_timeout_secs?.toString()
+      || getRecommendedInferenceTimeout(endpoint?.endpoint_type).toString()
   )
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
+  const recommendedInferenceTimeout = getRecommendedInferenceTimeout(endpoint?.endpoint_type)
+  const recommendedInferenceTimeoutLabel = getRecommendedInferenceTimeoutLabel(
+    endpoint?.endpoint_type
+  )
 
   // Reset form when endpoint changes
   useEffect(() => {
@@ -120,7 +134,10 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
       setName(endpoint.name || '')
       setNotes(endpoint.notes || '')
       setHealthCheckInterval(endpoint.health_check_interval_secs?.toString() || '30')
-      setInferenceTimeout(endpoint.inference_timeout_secs?.toString() || '120')
+      setInferenceTimeout(
+        endpoint.inference_timeout_secs?.toString()
+          || getRecommendedInferenceTimeout(endpoint.endpoint_type).toString()
+      )
     }
   }, [endpoint])
 
@@ -457,6 +474,14 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
                   value={inferenceTimeout}
                   onChange={(e) => setInferenceTimeout(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {recommendedInferenceTimeoutLabel}
+                </p>
+                {inferenceTimeout !== recommendedInferenceTimeout.toString() && (
+                  <p className="text-xs text-muted-foreground">
+                    Current value differs from the recommended default for this endpoint type.
+                  </p>
+                )}
               </div>
             </div>
 

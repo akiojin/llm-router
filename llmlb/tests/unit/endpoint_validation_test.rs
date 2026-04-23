@@ -23,7 +23,7 @@ fn test_endpoint_new_creates_valid_endpoint() {
         llmlb::types::endpoint::EndpointStatus::Pending
     );
     assert_eq!(endpoint.health_check_interval_secs, 30); // default
-    assert_eq!(endpoint.inference_timeout_secs, 120); // default
+    assert_eq!(endpoint.inference_timeout_secs, 600); // local runtime default
     assert_eq!(endpoint.error_count, 0);
 }
 
@@ -127,12 +127,37 @@ fn test_endpoint_inference_timeout_range() {
         EndpointType::Xllm,
     );
 
-    // デフォルトは120秒
-    assert_eq!(endpoint.inference_timeout_secs, 120);
+    // xLLM のデフォルトは600秒
+    assert_eq!(endpoint.inference_timeout_secs, 600);
 
     // 長いタイムアウト（大規模モデル用）
     endpoint.inference_timeout_secs = 300;
     assert_eq!(endpoint.inference_timeout_secs, 300);
+}
+
+#[test]
+fn test_endpoint_default_inference_timeout_depends_on_endpoint_type() {
+    let test_cases = [
+        (EndpointType::Xllm, 600),
+        (EndpointType::Ollama, 600),
+        (EndpointType::LmStudio, 600),
+        (EndpointType::Vllm, 120),
+        (EndpointType::Llamacpp, 120),
+        (EndpointType::OpenaiCompatible, 120),
+    ];
+
+    for (endpoint_type, expected_timeout) in test_cases {
+        let endpoint = Endpoint::new(
+            format!("endpoint-{endpoint_type}"),
+            "http://localhost:8080".to_string(),
+            endpoint_type,
+        );
+
+        assert_eq!(
+            endpoint.inference_timeout_secs, expected_timeout,
+            "unexpected default timeout for {endpoint_type}"
+        );
+    }
 }
 
 #[test]

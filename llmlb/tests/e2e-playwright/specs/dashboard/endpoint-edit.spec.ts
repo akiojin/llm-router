@@ -283,4 +283,67 @@ test.describe('Endpoint Edit @dashboard', () => {
       expect(hasError).toBe(false)
     }
   })
+
+  test('EE-07: Add Endpoint dialog shows timeout guidance', async ({ page }) => {
+    await ensureDashboardLogin(page)
+
+    await page.getByRole('button', { name: 'Add Endpoint' }).click()
+
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Add New Endpoint' })
+    await expect(dialog).toBeVisible({ timeout: 10000 })
+    await expect(
+      dialog.getByText('Local runtimes (xLLM, Ollama, LM Studio) default to 600 seconds.')
+    ).toBeVisible()
+    await expect(
+      dialog.getByText('vLLM, llama.cpp, and OpenAI-compatible endpoints default to 120 seconds.')
+    ).toBeVisible()
+  })
+
+  test('EE-08: Ollama endpoints default to 600 seconds and show a recommendation', async ({
+    page,
+    request,
+  }) => {
+    const ollamaEndpointName = `e2e-edit-ollama-${Date.now()}`
+    const ollamaMock = await startMockOpenAIEndpointServer({ endpointType: 'ollama' })
+
+    try {
+      const createResponse = await request.post(`${API_BASE}/api/endpoints`, {
+        headers: AUTH_HEADER,
+        data: { name: ollamaEndpointName, base_url: ollamaMock.baseUrl },
+      })
+      expect(createResponse.ok()).toBeTruthy()
+
+      const createdEndpoint = (await createResponse.json()) as {
+        id: string
+        inference_timeout_secs: number
+      }
+      expect(createdEndpoint.inference_timeout_secs).toBe(600)
+
+      await expect
+        .poll(
+          async () => {
+            const endpoints = await listEndpoints(request)
+            return endpoints.some((endpoint) => endpoint.name === ollamaEndpointName)
+          },
+          { timeout: 10000, intervals: [200, 500, 1000] }
+        )
+        .toBe(true)
+
+      await ensureDashboardLogin(page)
+      await page.getByPlaceholder('Search by name or URL...').fill(ollamaEndpointName)
+      await page.waitForTimeout(500)
+
+      const row = page.locator('tbody tr').filter({ hasText: ollamaEndpointName })
+      await expect(row).toBeVisible({ timeout: 10000 })
+      await row.locator('button[title="Details"]').click()
+
+      const modal = page.locator('[role="dialog"]').filter({ hasText: ollamaEndpointName })
+      await expect(modal).toBeVisible({ timeout: 10000 })
+      await expect(modal.locator('#inferenceTimeout')).toHaveValue('600')
+      await expect(modal.getByText('Recommended for Ollama: 600 seconds')).toBeVisible()
+    } finally {
+      await deleteEndpointsByName(request, ollamaEndpointName)
+      await ollamaMock.close()
+    }
+  })
 })

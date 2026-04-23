@@ -13,8 +13,47 @@ export type EndpointType =
   | 'ollama'
   | 'vllm'
   | 'lm_studio'
+  | 'llamacpp'
   | 'openai_compatible'
   | 'unknown'
+
+export const CREATE_ENDPOINT_TIMEOUT_GUIDANCE = [
+  'Local runtimes (xLLM, Ollama, LM Studio) default to 600 seconds.',
+  'vLLM, llama.cpp, and OpenAI-compatible endpoints default to 120 seconds.',
+] as const
+
+export function getRecommendedInferenceTimeout(endpointType: EndpointType | undefined): number {
+  switch (endpointType) {
+    case 'xllm':
+    case 'ollama':
+    case 'lm_studio':
+      return 600
+    default:
+      return 120
+  }
+}
+
+export function getRecommendedInferenceTimeoutLabel(
+  endpointType: EndpointType | undefined
+): string {
+  switch (endpointType) {
+    case 'xllm':
+      return 'Recommended for xLLM: 600 seconds'
+    case 'ollama':
+      return 'Recommended for Ollama: 600 seconds'
+    case 'lm_studio':
+      return 'Recommended for LM Studio: 600 seconds'
+    case 'vllm':
+      return 'Recommended for vLLM: 120 seconds'
+    case 'llamacpp':
+      return 'Recommended for llama.cpp: 120 seconds'
+    case 'openai_compatible':
+      return 'Recommended for OpenAI-compatible endpoints: 120 seconds'
+    default:
+      return `Recommended timeout: ${getRecommendedInferenceTimeout(endpointType)} seconds`
+  }
+}
+
 export interface DashboardEndpoint {
   id: string
   name: string

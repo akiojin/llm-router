@@ -806,7 +806,7 @@ mod tests {
             "http://localhost:8080".to_string(),
             crate::types::endpoint::EndpointType::Xllm,
         );
-        assert_eq!(ep.inference_timeout_secs, 120);
+        assert_eq!(ep.inference_timeout_secs, 600);
     }
 
     #[test]

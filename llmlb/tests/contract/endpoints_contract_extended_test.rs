@@ -122,6 +122,23 @@ async fn start_mock_endpoint() -> MockServer {
     server
 }
 
+async fn start_ollama_mock_endpoint() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/system"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/tags"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "models": []
+        })))
+        .mount(&server)
+        .await;
+    server
+}
+
 /// ヘルパー: エンドポイントを登録してIDを返す
 async fn create_endpoint_and_get_id(app: &Router, admin_key: &str, mock: &MockServer) -> String {
     let payload = json!({
@@ -435,7 +452,7 @@ async fn test_create_endpoint_with_inference_timeout() {
     assert_eq!(body["inference_timeout_secs"], 300);
 }
 
-/// POST /api/endpoints - 正常系: デフォルトのinference_timeout_secsが120
+/// POST /api/endpoints - 正常系: OpenAI互換 endpoint の既定 inference_timeout_secs は120
 #[tokio::test]
 #[serial]
 async fn test_create_endpoint_default_inference_timeout() {
@@ -464,6 +481,38 @@ async fn test_create_endpoint_default_inference_timeout() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(body["inference_timeout_secs"], 120);
+}
+
+/// POST /api/endpoints - 正常系: Ollama endpoint の既定 inference_timeout_secs は600
+#[tokio::test]
+#[serial]
+async fn test_create_ollama_endpoint_default_inference_timeout() {
+    let mock = start_ollama_mock_endpoint().await;
+    let TestApp { app, admin_key, .. } = build_app().await;
+
+    let payload = json!({
+        "name": "Default Ollama Timeout",
+        "base_url": mock.uri()
+    });
+
+    let response = app
+        .oneshot(
+            admin_request(&admin_key)
+                .method("POST")
+                .uri("/api/endpoints")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["endpoint_type"], "ollama");
+    assert_eq!(body["inference_timeout_secs"], 600);
 }
 
 /// POST /api/endpoints - 異常系: 空白のみの名前

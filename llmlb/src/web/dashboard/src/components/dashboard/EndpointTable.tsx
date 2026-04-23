@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { type DashboardEndpoint, type EndpointType, endpointsApi } from '@/lib/api'
+import {
+  type DashboardEndpoint,
+  type EndpointType,
+  endpointsApi,
+  CREATE_ENDPOINT_TIMEOUT_GUIDANCE,
+} from '@/lib/api'
 import { classifyEndpointLastError } from '@/lib/endpoint-errors'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -116,6 +121,8 @@ function getTypeLabel(type: EndpointType): string {
       return 'vLLM'
     case 'lm_studio':
       return 'LM Studio'
+    case 'llamacpp':
+      return 'llama.cpp'
     case 'openai_compatible':
       return 'OpenAI Compatible'
     case 'unknown':
@@ -138,6 +145,8 @@ function getTypeBadgeVariant(
     case 'vllm':
       return 'secondary'
     case 'lm_studio':
+      return 'secondary'
+    case 'llamacpp':
       return 'secondary'
     case 'openai_compatible':
       return 'outline'
@@ -364,6 +373,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                 <SelectItem value="ollama">Ollama</SelectItem>
                 <SelectItem value="vllm">vLLM</SelectItem>
                 <SelectItem value="lm_studio">LM Studio</SelectItem>
+                <SelectItem value="llamacpp">llama.cpp</SelectItem>
                 <SelectItem value="openai_compatible">OpenAI Compatible</SelectItem>
                 <SelectItem value="unknown">Unknown</SelectItem>
               </SelectContent>
@@ -652,6 +662,11 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               <p className="text-xs text-muted-foreground">
                 Type is auto-detected
               </p>
+              {CREATE_ENDPOINT_TIMEOUT_GUIDANCE.map((line) => (
+                <p key={line} className="text-xs text-muted-foreground">
+                  {line}
+                </p>
+              ))}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="endpoint-api-key">API Key (optional)</Label>
