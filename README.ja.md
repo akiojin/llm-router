@@ -24,6 +24,7 @@ llmlb は OpenAI 互換の推論サーバーにリクエストをルーティン
 | **Ollama** | ローカル推論サーバー |
 | **vLLM** | 高スループット推論エンジン |
 | **LM Studio** | デスクトップ推論アプリケーション |
+| **llama.cpp** | llama.cpp プロジェクトの `llama-server` |
 | **OpenAI互換** | OpenAI API を実装する任意のサーバー |
 
 ### マルチモーダル対応
@@ -41,7 +42,7 @@ llmlb は OpenAI 互換の推論サーバーにリクエストをルーティン
 - OpenAI 互換 API: `/v1/responses`（推奨）, `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`
 - ロードバランシング: 利用可能なエンドポイントへTPS（Tokens Per Second）ベースで自動ルーティング
 - ダッシュボード: `/dashboard` でエンドポイント、リクエスト履歴、ログ、モデルを管理
-- エンドポイント管理: LM Studio、Ollama、vLLM、xLLM等の外部推論サーバーをロードバランサーから一元管理
+- エンドポイント管理: LM Studio、Ollama、vLLM、xLLM、llama.cpp等の外部推論サーバーをロードバランサーから一元管理
 - モデル同期: 登録エンドポイントから `GET /v1/models` でモデル一覧を自動同期
 - クラウドプレフィックス: `openai:`, `google:`, `anthropic:` を `model` に付けて同一エンドポイントでプロキシ
 - Anthropic互換API: `POST /v1/messages` を受け付け、Claude Code のバックエンドとしても利用可能（[`docs/api-clients.md`](docs/api-clients.md#claude-code-から接続する) 参照）
@@ -64,7 +65,7 @@ http://localhost:32768/dashboard
 
 ## エンドポイント管理
 
-ロードバランサーは外部の推論サーバー（LM Studio、Ollama、vLLM、xLLM等）を「エンドポイント」として一元管理します。
+ロードバランサーは外部の推論サーバー（LM Studio、Ollama、vLLM、xLLM、llama.cpp等）を「エンドポイント」として一元管理します。
 
 ### 対応エンドポイント
 
@@ -74,6 +75,7 @@ http://localhost:32768/dashboard
 | **Ollama** | Ollamaサーバー | `GET /v1/models` |
 | **LM Studio** | LM Studio サーバー | `GET /v1/models` |
 | **vLLM** | vLLM推論サーバー | `GET /v1/models` |
+| **llama.cpp** | llama.cpp の `llama-server` | `GET /v1/models` |
 | **OpenAI互換** | その他のOpenAI互換API | `GET /v1/models` |
 
 ### エンドポイントタイプ自動判別
@@ -86,16 +88,17 @@ http://localhost:32768/dashboard
 2. **LM Studio**: `GET /api/v1/models` と LM Studio 固有のメタデータを検出
 3. **Ollama**: `GET /api/tags` が成功
 4. **vLLM**: Server ヘッダーに "vllm" が含まれる
-5. **OpenAI互換**: `GET /v1/models` が成功
-6. **Unknown**: 判別不能（エンドポイントがオフラインの場合）
+5. **llama.cpp**: Server ヘッダーに "llama.cpp" が含まれる、または `GET /v1/version` の `server` が `"llama.cpp"`
+6. **OpenAI互換**: `GET /v1/models` が成功
+7. **Unknown**: 判別不能（エンドポイントがオフラインの場合）
 
 **タイプ別機能:**
 
-| 機能 | xLLM | Ollama | LM Studio | vLLM | OpenAI互換 |
-|------|------|--------|-----------|------|-----------|
-| モデルダウンロード | ✓ | ✓ | ✓ | - | - |
-| モデルメタデータ取得 | ✓ | ✓ | ✓ | - | - |
-| max_tokens自動取得 | ✓ | ✓ | ✓ | - | - |
+| 機能 | xLLM | Ollama | LM Studio | vLLM | llama.cpp | OpenAI互換 |
+|------|------|--------|-----------|------|-----------|-----------|
+| モデルダウンロード | ✓ | ✓ | ✓ | - | - | - |
+| モデルメタデータ取得 | ✓ | ✓ | ✓ | - | - | - |
+| max_tokens自動取得 | ✓ | ✓ | ✓ | - | - | - |
 
 ### モデル操作
 
@@ -156,6 +159,21 @@ curl http://localhost:32768/api/endpoints \
 curl -X POST http://localhost:32768/api/endpoints/{id}/sync \
   -H "X-API-Key: sk_admin_scope_key"
 ```
+
+### llama.cpp（`llama-server`）の接続例
+
+[llama.cpp](https://github.com/ggml-org/llama.cpp) プロジェクトの `llama-server`
+を OpenAI 互換 API・API キー付きで起動し、ダッシュボードまたは REST API から登録します。
+
+```bash
+# 例: ローカルの GGUF モデルをポート 8080 で公開
+llama-server -m ./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf \
+  --host 0.0.0.0 --port 8080 --api-key sk_dev
+```
+
+llmlb は `Server` ヘッダー（`llama.cpp/...`）または `/v1/version` で
+llama-server を自動検出し、chat / completions / embeddings を OpenAI 互換
+パススルーでルーティングします。1 インスタンスあたり 1 モデル運用が基本です。
 
 ### ステータス遷移
 

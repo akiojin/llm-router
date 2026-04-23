@@ -212,6 +212,33 @@ async fn test_list_endpoints_filter_by_type_vllm() {
     assert!(body["endpoints"].is_array());
 }
 
+/// GET /api/endpoints?type=llamacpp - 正常系: llama.cppタイプでフィルタ
+///
+/// SPEC #575 US-013-A (2026-04-23 delta)
+#[tokio::test]
+#[serial]
+async fn test_list_endpoints_filter_by_type_llamacpp() {
+    let TestApp { app, admin_key } = build_app().await;
+
+    let response = app
+        .oneshot(
+            admin_request(&admin_key)
+                .method("GET")
+                .uri("/api/endpoints?type=llamacpp")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+
+    assert!(body["endpoints"].is_array());
+}
+
 /// GET /api/endpoints?type=openai_compatible - 正常系: OpenAI互換タイプでフィルタ
 #[tokio::test]
 #[serial]
@@ -323,7 +350,15 @@ async fn test_list_endpoints_response_includes_endpoint_type() {
         );
         let endpoint_type = endpoint["endpoint_type"].as_str().unwrap();
         assert!(
-            ["xllm", "ollama", "vllm", "lm_studio", "openai_compatible"].contains(&endpoint_type),
+            [
+                "xllm",
+                "ollama",
+                "vllm",
+                "lm_studio",
+                "llamacpp",
+                "openai_compatible"
+            ]
+            .contains(&endpoint_type),
             "endpoint_type should be a valid value, got: {}",
             endpoint_type
         );
