@@ -2,8 +2,11 @@
 
 use crate::shutdown::ShutdownController;
 use crate::AppState;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 use tracing::info;
+
+const BIND_RETRY_TIMEOUT: Duration = Duration::from_secs(5);
+const BIND_RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
 /// axumサーバーを起動し、シャットダウンシグナルを待機する
 pub async fn run(state: AppState, bind_addr: &str) {
@@ -11,7 +14,7 @@ pub async fn run(state: AppState, bind_addr: &str) {
 
     let app = crate::api::create_app(state);
 
-    let listener = tokio::net::TcpListener::bind(bind_addr)
+    let listener = bind_listener_with_retry(bind_addr, BIND_RETRY_TIMEOUT, BIND_RETRY_INTERVAL)
         .await
         .expect("Failed to bind to address");
 
@@ -62,9 +65,38 @@ async fn shutdown_signal(shutdown: ShutdownController) {
     }
 }
 
+async fn bind_listener_with_retry(
+    bind_addr: &str,
+    retry_timeout: Duration,
+    retry_interval: Duration,
+) -> std::io::Result<tokio::net::TcpListener> {
+    let deadline = tokio::time::Instant::now() + retry_timeout;
+    let mut waited_for_handoff = false;
+
+    loop {
+        match tokio::net::TcpListener::bind(bind_addr).await {
+            Ok(listener) => {
+                if waited_for_handoff {
+                    info!("Recovered bind to {} after restart handoff wait", bind_addr);
+                }
+                return Ok(listener);
+            }
+            Err(err)
+                if err.kind() == std::io::ErrorKind::AddrInUse
+                    && tokio::time::Instant::now() < deadline =>
+            {
+                waited_for_handoff = true;
+                tokio::time::sleep(retry_interval).await;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn shutdown_signal_completes_when_controller_requests_shutdown() {
@@ -78,5 +110,28 @@ mod tests {
             .await
             .expect("shutdown signal task timed out")
             .expect("shutdown signal task panicked");
+    }
+
+    #[tokio::test]
+    async fn bind_listener_with_retry_waits_for_port_handoff() {
+        let occupied = std::net::TcpListener::bind("127.0.0.1:0").expect("bind occupied port");
+        let addr = occupied.local_addr().expect("read occupied addr");
+        let bind_addr = addr.to_string();
+
+        let release_task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            drop(occupied);
+        });
+
+        let rebound = bind_listener_with_retry(
+            &bind_addr,
+            Duration::from_millis(500),
+            Duration::from_millis(25),
+        )
+        .await
+        .expect("listener should bind after previous process releases the port");
+
+        drop(rebound);
+        release_task.await.expect("release task should finish");
     }
 }
