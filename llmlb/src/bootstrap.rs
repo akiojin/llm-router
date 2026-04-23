@@ -73,9 +73,8 @@ async fn initialize_inner(
         .await
         .expect("Failed to connect to database");
 
-    // マイグレーションを実行
-    sqlx::migrate!("./migrations")
-        .run(&db_pool)
+    // 起動時も共通の互換レイヤー経由でマイグレーションを実行する
+    crate::db::migrations::run_migrations(&db_pool)
         .await
         .expect("Failed to run database migrations");
 
