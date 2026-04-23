@@ -1934,6 +1934,76 @@ fn wait_for_pid_exit(pid: u32, timeout: Duration) -> Result<()> {
     Ok(())
 }
 
+fn restore_backup(backup: &Path, target: &Path) -> Result<()> {
+    let started = std::time::Instant::now();
+    let retry_timeout = Duration::from_secs(3);
+
+    loop {
+        match try_restore_backup(backup, target) {
+            Ok(()) => return Ok(()),
+            Err(err) if should_retry_restore_backup(&err) && started.elapsed() < retry_timeout => {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(err) => return Err(err).context("Failed to restore backup"),
+        }
+    }
+}
+
+fn try_restore_backup(backup: &Path, target: &Path) -> io::Result<()> {
+    if let Err(err) = fs::rename(backup, target) {
+        if err.kind() == io::ErrorKind::CrossesDevices {
+            fs::copy(backup, target)?;
+            let _ = fs::remove_file(backup);
+            return Ok(());
+        }
+
+        #[cfg(windows)]
+        if should_remove_target_before_restore(&err) {
+            remove_target_for_restore(target)?;
+            fs::rename(backup, target)?;
+            return Ok(());
+        }
+
+        return Err(err);
+    }
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn should_remove_target_before_restore(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::PermissionDenied
+        || matches!(err.raw_os_error(), Some(5 | 32 | 80 | 183))
+}
+
+#[cfg(windows)]
+fn remove_target_for_restore(target: &Path) -> io::Result<()> {
+    if target.exists() {
+        match fs::remove_file(target) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        }
+    }
+
+    Ok(())
+}
+
+fn should_retry_restore_backup(err: &io::Error) -> bool {
+    if err.kind() == io::ErrorKind::PermissionDenied {
+        return true;
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(code) = err.raw_os_error() {
+            return matches!(code, 5 | 32 | 33);
+        }
+    }
+
+    false
+}
+
 pub(crate) fn internal_apply_update(
     old_pid: u32,
     target: PathBuf,
@@ -1979,15 +2049,10 @@ pub(crate) fn internal_apply_update(
         if backup.exists() {
             // Kill the new (broken) process if it's running.
             // We don't know the PID, but we can try to restore the backup.
-            if let Err(restore_err) = fs::rename(&backup, &target) {
-                if restore_err.kind() == io::ErrorKind::CrossesDevices {
-                    let _ = fs::copy(&backup, &target);
-                    let _ = fs::remove_file(&backup);
-                } else {
-                    eprintln!("Failed to restore backup: {restore_err}");
-                    return Err(restore_err)
-                        .context("Failed to restore backup after health check failure");
-                }
+            if let Err(restore_err) = restore_backup(&backup, &target) {
+                eprintln!("Failed to restore backup: {restore_err}");
+                return Err(restore_err)
+                    .context("Failed to restore backup after health check failure");
             }
             #[cfg(unix)]
             {
@@ -2176,14 +2241,7 @@ pub(crate) fn internal_rollback(
     if !backup.exists() {
         return Err(anyhow!("Backup file does not exist: {}", backup.display()));
     }
-    if let Err(e) = fs::rename(&backup, &target) {
-        if e.kind() == io::ErrorKind::CrossesDevices {
-            fs::copy(&backup, &target)?;
-            let _ = fs::remove_file(&backup);
-        } else {
-            return Err(e).context("Failed to restore backup");
-        }
-    }
+    restore_backup(&backup, &target)?;
 
     #[cfg(unix)]
     {
@@ -3132,6 +3190,8 @@ mod tests {
         let backup = dir.path().join("llmlb.bak");
         let args_file = dir.path().join("restart_args.json");
 
+        // Simulate a freshly updated target that rollback must replace.
+        fs::write(&target, b"new-binary-content").unwrap();
         // Create a fake "old" binary.
         fs::write(&backup, b"old-binary-content").unwrap();
         // Create a fake args file (needed for restart_from_args_file).
