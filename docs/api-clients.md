@@ -42,6 +42,19 @@ const data = await res.json();
 console.log(data);
 ```
 
+## Endpoint timeout guidance
+
+When you register a new endpoint, llmlb sets `inference_timeout_secs` from the
+detected `endpoint_type`.
+
+- `xllm`, `ollama`, `lm_studio`: `600`
+- `vllm`, `llamacpp`, `openai_compatible`: `120`
+
+Use `600` seconds or more for large local models that may spend several
+minutes loading weights before the first response. Existing endpoints are not
+migrated automatically, so update the timeout from the dashboard if an older
+local runtime still uses `120`.
+
 ## Claude Code から接続する
 
 llmlb は Anthropic 互換の `/v1/messages` を提供するため、

@@ -25,7 +25,13 @@ export type {
   MonthlyTokenStats,
 } from './dashboard'
 
-export { endpointsApi, benchmarkApi } from './endpoints'
+export {
+  endpointsApi,
+  benchmarkApi,
+  CREATE_ENDPOINT_TIMEOUT_GUIDANCE,
+  getRecommendedInferenceTimeout,
+  getRecommendedInferenceTimeoutLabel,
+} from './endpoints'
 export type {
   EndpointType,
   DashboardEndpoint,

@@ -54,8 +54,8 @@ pub struct CreateEndpointRequest {
     #[serde(default = "default_health_check_interval")]
     pub health_check_interval_secs: u32,
     /// 推論タイムアウト（秒）
-    #[serde(default = "default_inference_timeout")]
-    pub inference_timeout_secs: u32,
+    #[serde(default)]
+    pub inference_timeout_secs: Option<u32>,
     /// メモ
     #[serde(default)]
     pub notes: Option<String>,
@@ -66,10 +66,6 @@ pub struct CreateEndpointRequest {
 
 fn default_health_check_interval() -> u32 {
     30
-}
-
-fn default_inference_timeout() -> u32 {
-    120
 }
 
 /// /api/system APIレスポンス（SPEC-f8e3a1b7）
@@ -585,7 +581,9 @@ pub async fn create_endpoint(
     let mut endpoint = Endpoint::new(req.name, req.base_url.clone(), detected_type);
     endpoint.api_key = req.api_key.clone();
     endpoint.health_check_interval_secs = req.health_check_interval_secs;
-    endpoint.inference_timeout_secs = req.inference_timeout_secs;
+    if let Some(timeout) = req.inference_timeout_secs {
+        endpoint.inference_timeout_secs = timeout;
+    }
     endpoint.notes = req.notes;
     if !req.capabilities.is_empty() {
         endpoint.capabilities = req.capabilities;
@@ -1506,11 +1504,6 @@ mod tests {
     }
 
     #[test]
-    fn test_default_inference_timeout() {
-        assert_eq!(default_inference_timeout(), 120);
-    }
-
-    #[test]
     fn test_create_endpoint_request_minimal() {
         let json = json!({
             "name": "test-ep",
@@ -1521,7 +1514,7 @@ mod tests {
         assert_eq!(req.base_url, "http://localhost:8080");
         assert!(req.api_key.is_none());
         assert_eq!(req.health_check_interval_secs, 30);
-        assert_eq!(req.inference_timeout_secs, 120);
+        assert!(req.inference_timeout_secs.is_none());
         assert!(req.notes.is_none());
         assert!(req.capabilities.is_empty());
     }
@@ -1541,7 +1534,7 @@ mod tests {
         assert_eq!(req.name, "my-endpoint");
         assert_eq!(req.api_key, Some("sk-test-key".to_string()));
         assert_eq!(req.health_check_interval_secs, 60);
-        assert_eq!(req.inference_timeout_secs, 300);
+        assert_eq!(req.inference_timeout_secs, Some(300));
         assert_eq!(req.notes, Some("Production GPU node".to_string()));
         assert_eq!(req.capabilities.len(), 1);
     }

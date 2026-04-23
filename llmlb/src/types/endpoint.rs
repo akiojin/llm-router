@@ -177,6 +177,14 @@ impl EndpointType {
     pub fn is_tps_trackable(&self) -> bool {
         true
     }
+
+    /// エンドポイントタイプごとの推論タイムアウト推奨値（秒）
+    pub fn recommended_inference_timeout_secs(&self) -> u32 {
+        match self {
+            Self::Xllm | Self::Ollama | Self::LmStudio => 600,
+            Self::Vllm | Self::Llamacpp | Self::OpenaiCompatible => 120,
+        }
+    }
 }
 
 /// EndpointType のパースエラー
@@ -386,7 +394,7 @@ impl Endpoint {
             status: EndpointStatus::Pending,
             endpoint_type,
             health_check_interval_secs: 30,
-            inference_timeout_secs: 120,
+            inference_timeout_secs: endpoint_type.recommended_inference_timeout_secs(),
             latency_ms: None,
             last_seen: None,
             last_error: None,
@@ -628,11 +636,30 @@ mod tests {
         assert_eq!(endpoint.status, EndpointStatus::Pending);
         assert_eq!(endpoint.endpoint_type, EndpointType::Xllm);
         assert_eq!(endpoint.health_check_interval_secs, 30);
-        assert_eq!(endpoint.inference_timeout_secs, 120);
+        assert_eq!(endpoint.inference_timeout_secs, 600);
         assert_eq!(endpoint.error_count, 0);
         // デフォルトでChatCompletion機能を持つ
         assert!(endpoint.has_capability(EndpointCapability::ChatCompletion));
         assert!(!endpoint.has_capability(EndpointCapability::ImageGeneration));
+    }
+
+    #[test]
+    fn test_endpoint_type_recommended_inference_timeout() {
+        let test_cases = [
+            (EndpointType::Xllm, 600),
+            (EndpointType::Ollama, 600),
+            (EndpointType::LmStudio, 600),
+            (EndpointType::Vllm, 120),
+            (EndpointType::Llamacpp, 120),
+            (EndpointType::OpenaiCompatible, 120),
+        ];
+
+        for (endpoint_type, expected_timeout) in test_cases {
+            assert_eq!(
+                endpoint_type.recommended_inference_timeout_secs(),
+                expected_timeout
+            );
+        }
     }
 
     #[test]
