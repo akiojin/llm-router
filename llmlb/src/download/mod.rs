@@ -240,6 +240,7 @@ mod tests {
     #[test]
     fn test_unsupported_types_rejected() {
         assert!(!EndpointType::Vllm.supports_model_download());
+        assert!(!EndpointType::Llamacpp.supports_model_download());
         assert!(!EndpointType::OpenaiCompatible.supports_model_download());
     }
 

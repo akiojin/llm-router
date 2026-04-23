@@ -25,6 +25,12 @@ type RuntimeSelection = {
   lmStudioModel: string
 }
 
+type OpenAiModelEntry = {
+  id?: string
+  aliases?: string[]
+  canonical_name?: string | null
+}
+
 function formatRuntimePreflightError(runtime: string, error: unknown): string {
   const message =
     error instanceof Error ? error.message.replace(/^apiRequestContext\.\w+:\s*/, '') : String(error)
@@ -174,6 +180,7 @@ async function waitForApiModelVisible(
   apiKey: string,
   modelId: string
 ) {
+  let resolvedModelId = ''
   await expect
     .poll(
       async () => {
@@ -181,15 +188,24 @@ async function waitForApiModelVisible(
           headers: { Authorization: `Bearer ${apiKey}` },
           timeout: 10000,
         })
-        if (!response.ok()) return [] as string[]
-        const json = (await response.json()) as { data?: Array<{ id?: string }> }
-        return (json.data ?? [])
-          .map((model) => model.id?.trim() ?? '')
-          .filter((id) => id.length > 0)
+        if (!response.ok()) return ''
+        const json = (await response.json()) as { data?: OpenAiModelEntry[] }
+        const match = (json.data ?? []).find((model) => {
+          const candidates = [
+            model.id?.trim() ?? '',
+            model.canonical_name?.trim() ?? '',
+            ...(model.aliases ?? []).map((alias) => alias.trim()),
+          ].filter((candidate) => candidate.length > 0)
+          return candidates.includes(modelId)
+        })
+        resolvedModelId = match?.id?.trim() ?? ''
+        return resolvedModelId
       },
       { timeout: 120000, intervals: [1000, 2000, 5000] }
     )
-    .toContain(modelId)
+    .not.toBe('')
+
+  return resolvedModelId
 }
 
 async function createApiKeyViaUi(page: Page, keyName: string): Promise<{ id: string; key: string }> {
@@ -382,11 +398,19 @@ test.describe('Real Local Runtimes @workflows @real-runtimes', () => {
     expect(createdApiKey.key).toMatch(/^sk_/)
 
     // Wait until both synced runtime models are exposed via llmlb.
-    await waitForApiModelVisible(request, createdApiKey.key, runtimeSelection.ollamaModel)
-    await waitForApiModelVisible(request, createdApiKey.key, runtimeSelection.lmStudioModel)
+    const ollamaApiModelId = await waitForApiModelVisible(
+      request,
+      createdApiKey.key,
+      runtimeSelection.ollamaModel
+    )
+    const lmStudioApiModelId = await waitForApiModelVisible(
+      request,
+      createdApiKey.key,
+      runtimeSelection.lmStudioModel
+    )
 
     // Run real inference through llmlb with the UI-created API key.
-    await expectChatCompletion(request, createdApiKey.key, runtimeSelection.ollamaModel)
-    await expectChatCompletion(request, createdApiKey.key, runtimeSelection.lmStudioModel)
+    await expectChatCompletion(request, createdApiKey.key, ollamaApiModelId)
+    await expectChatCompletion(request, createdApiKey.key, lmStudioApiModelId)
   })
 })

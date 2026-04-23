@@ -4,6 +4,7 @@
 //!
 //! このモジュールはEndpoint型を使用しています。
 
+use crate::api::openai_util::classify_upstream_request_error;
 use crate::common::{
     error::LbError,
     protocol::{RequestResponseRecord, TpsApiKind},
@@ -397,7 +398,13 @@ pub(crate) async fn forward_to_endpoint(
             endpoint.name,
             e
         );
-        LbError::Http(format!("Endpoint request failed: {}", e))
+        let classified =
+            classify_upstream_request_error(&e, &url, endpoint.inference_timeout_secs, None);
+        if classified.status_code == StatusCode::GATEWAY_TIMEOUT {
+            LbError::Timeout(classified.record_message)
+        } else {
+            LbError::Http(classified.record_message)
+        }
     })?;
 
     // エラーステータスをチェック
@@ -806,7 +813,7 @@ mod tests {
             "http://localhost:8080".to_string(),
             crate::types::endpoint::EndpointType::Xllm,
         );
-        assert_eq!(ep.inference_timeout_secs, 120);
+        assert_eq!(ep.inference_timeout_secs, 600);
     }
 
     #[test]

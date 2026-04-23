@@ -9,6 +9,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::error::Error as StdError;
 use std::time::Duration;
 
 /// Structured classification for an upstream request failure.
@@ -85,6 +86,7 @@ pub async fn probe_ollama_model_loaded(
 /// Classifies a reqwest upstream failure into a stable client-facing error response.
 pub fn classify_upstream_request_error(
     error: &reqwest::Error,
+    upstream_url: &str,
     timeout_secs: u32,
     ollama_loading_model: Option<&str>,
 ) -> UpstreamRequestFailure {
@@ -102,10 +104,8 @@ pub fn classify_upstream_request_error(
             };
         }
 
-        let client_message = format!(
-            "Upstream endpoint request timed out after {} seconds",
-            timeout_secs
-        );
+        let client_message =
+            format!("Upstream request to {upstream_url} timed out after {timeout_secs} seconds");
         return UpstreamRequestFailure {
             status_code: StatusCode::GATEWAY_TIMEOUT,
             error_type: "timeout",
@@ -115,7 +115,7 @@ pub fn classify_upstream_request_error(
     }
 
     if error.is_connect() {
-        let client_message = "Failed to connect to upstream endpoint".to_string();
+        let client_message = format!("Failed to connect to upstream: {upstream_url}");
         return UpstreamRequestFailure {
             status_code: StatusCode::BAD_GATEWAY,
             error_type: "connection_error",
@@ -124,13 +124,49 @@ pub fn classify_upstream_request_error(
         };
     }
 
-    let client_message = "Failed to proxy request to upstream endpoint".to_string();
+    if is_tls_error(error) {
+        let client_message = format!("Upstream TLS handshake failed: {upstream_url}");
+        return UpstreamRequestFailure {
+            status_code: StatusCode::BAD_GATEWAY,
+            error_type: "tls_error",
+            record_message: format!("{}: {}", client_message, error),
+            client_message,
+        };
+    }
+
+    let client_message = format!("Upstream request failed: {upstream_url}");
     UpstreamRequestFailure {
         status_code: StatusCode::BAD_GATEWAY,
         error_type: "endpoint_request_error",
         record_message: format!("{}: {}", client_message, error),
         client_message,
     }
+}
+
+/// Build a client-visible upstream error message from an HTTP status and raw body bytes.
+pub fn upstream_error_message_from_bytes(status: StatusCode, body_bytes: &[u8]) -> String {
+    let body = String::from_utf8_lossy(body_bytes).trim().to_string();
+    if body.is_empty() {
+        status.to_string()
+    } else {
+        body
+    }
+}
+
+fn is_tls_error(error: &reqwest::Error) -> bool {
+    error_chain_contains(error, &["certificate", "cert", "tls", "ssl", "handshake"])
+}
+
+fn error_chain_contains(error: &reqwest::Error, needles: &[&str]) -> bool {
+    let mut current = error.source();
+    while let Some(source) = current {
+        let text = source.to_string().to_ascii_lowercase();
+        if needles.iter().any(|needle| text.contains(needle)) {
+            return true;
+        }
+        current = source.source();
+    }
+    false
 }
 
 /// 履歴保存用にペイロードをサニタイズ（base64データをリダクト）

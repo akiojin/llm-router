@@ -7,6 +7,7 @@ import {
   createApiKeyViaUi,
   expectChatCompletion,
   expectEmbeddings,
+  findOpenAiModelEntry,
   findSupportedLocalRuntimeModels,
   getLocalRuntimeModels,
   getOpenAiModels,
@@ -101,26 +102,37 @@ test.describe('Real Local Supported Models @workflows @real-runtimes', () => {
     createdApiKeyId = createdApiKey.id
     await page.close()
 
+    const resolvedApiModelIds = new Map<string, string>()
     const canonicalModels = [...new Set(supportedCases.map((entry) => entry.canonicalModel))]
     for (const canonicalModel of canonicalModels) {
-      await waitForApiModelVisible(request, createdApiKey.key, canonicalModel)
+      const resolvedApiModelId = await waitForApiModelVisible(
+        request,
+        createdApiKey.key,
+        canonicalModel
+      )
+      resolvedApiModelIds.set(canonicalModel, resolvedApiModelId)
     }
 
     const apiModels = await getOpenAiModels(request, createdApiKey.key)
-    const modelsById = new Map(apiModels.map((model) => [model.id ?? '', model]))
     const failures: string[] = []
 
     for (const modelCase of supportedCases) {
       await test.step(`model exposure: ${modelCase.label}`, async () => {
         try {
-          const apiModel = modelsById.get(modelCase.canonicalModel)
+          const apiModel =
+            findOpenAiModelEntry(apiModels, modelCase.canonicalModel) ??
+            findOpenAiModelEntry(apiModels, modelCase.runtimeModel)
           expect(
             apiModel,
             `${modelCase.label} should be exposed as ${modelCase.canonicalModel}`
           ).toBeTruthy()
-          if (modelCase.runtimeModel !== modelCase.canonicalModel) {
-            expect(apiModel?.aliases ?? []).toContain(modelCase.runtimeModel)
-          }
+          const identifiers = [
+            apiModel?.id ?? '',
+            apiModel?.canonical_name ?? '',
+            ...(apiModel?.aliases ?? []),
+          ].filter((value) => value.length > 0)
+          expect(identifiers).toContain(modelCase.canonicalModel)
+          expect(identifiers).toContain(modelCase.runtimeModel)
         } catch (error) {
           failures.push(
             `[exposure] ${modelCase.label}: ${error instanceof Error ? error.message : String(error)}`
@@ -139,7 +151,12 @@ test.describe('Real Local Supported Models @workflows @real-runtimes', () => {
     for (const canonicalModel of chatCanonicalModels) {
       await test.step(`chat completion: ${canonicalModel}`, async () => {
         try {
-          await expectChatCompletion(request, createdApiKey.key, canonicalModel, 'Hi.')
+          await expectChatCompletion(
+            request,
+            createdApiKey.key,
+            resolvedApiModelIds.get(canonicalModel) ?? canonicalModel,
+            'Hi.'
+          )
         } catch (error) {
           failures.push(
             `[chat] ${canonicalModel}: ${error instanceof Error ? error.message : String(error)}`
@@ -158,7 +175,11 @@ test.describe('Real Local Supported Models @workflows @real-runtimes', () => {
     for (const canonicalModel of embeddingCanonicalModels) {
       await test.step(`embeddings: ${canonicalModel}`, async () => {
         try {
-          await expectEmbeddings(request, createdApiKey.key, canonicalModel)
+          await expectEmbeddings(
+            request,
+            createdApiKey.key,
+            resolvedApiModelIds.get(canonicalModel) ?? canonicalModel
+          )
         } catch (error) {
           failures.push(
             `[embeddings] ${canonicalModel}: ${error instanceof Error ? error.message : String(error)}`

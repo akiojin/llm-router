@@ -234,6 +234,112 @@ async fn test_endpoint_type_detection_vllm() {
     assert_eq!(body["endpoint_type"], "vllm");
 }
 
+/// US6-シナリオ5b: llama.cpp判別（Server header `llama.cpp/...`）
+///
+/// SPEC #575 US-013-A (2026-04-23 delta): UI 補完作業に併せて
+/// llama.cpp 検出経路の登録 API レベル統合テストを追加する。
+#[tokio::test]
+async fn test_endpoint_type_detection_llamacpp_via_server_header() {
+    let (server, db_pool) = spawn_test_lb_with_db().await;
+    let client = Client::new();
+    let admin_key = create_admin_api_key(&db_pool).await;
+
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/system"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/models"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/tags"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("server", "llama.cpp/0.3.0")
+                .set_body_json(json!({"object": "list", "data": []})),
+        )
+        .mount(&mock)
+        .await;
+
+    let response = client
+        .post(format!("http://{}/api/endpoints", server.addr()))
+        .header("authorization", format!("Bearer {}", admin_key))
+        .json(&json!({
+            "name": "llama.cpp Endpoint via Server header",
+            "base_url": mock.uri()
+        }))
+        .send()
+        .await
+        .expect("registration request failed");
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["endpoint_type"], "llamacpp");
+}
+
+/// US6-シナリオ5c: llama.cpp判別（`/v1/version` の server="llama.cpp"）
+#[tokio::test]
+async fn test_endpoint_type_detection_llamacpp_via_version_endpoint() {
+    let (server, db_pool) = spawn_test_lb_with_db().await;
+    let client = Client::new();
+    let admin_key = create_admin_api_key(&db_pool).await;
+
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/system"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/models"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/tags"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    // /v1/models は Server header なしで OK 応答（vLLM とも判定されない）
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"object": "list", "data": []})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "server": "llama.cpp",
+            "version": "0.3.0"
+        })))
+        .mount(&mock)
+        .await;
+
+    let response = client
+        .post(format!("http://{}/api/endpoints", server.addr()))
+        .header("authorization", format!("Bearer {}", admin_key))
+        .json(&json!({
+            "name": "llama.cpp Endpoint via /v1/version",
+            "base_url": mock.uri()
+        }))
+        .send()
+        .await
+        .expect("registration request failed");
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["endpoint_type"], "llamacpp");
+}
+
 /// US6-シナリオ6: LM Studio判別（/v1/models owned_byフォールバック）
 #[tokio::test]
 async fn test_endpoint_type_detection_lm_studio_owned_by_fallback() {

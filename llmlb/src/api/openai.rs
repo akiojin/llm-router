@@ -11,6 +11,7 @@ use crate::common::{
 };
 use crate::types::model::{ModelCapabilities, ModelCapability};
 use axum::{
+    body::Body,
     extract::{ConnectInfo, Path, State},
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -35,11 +36,11 @@ use crate::{
         openai_util::{
             classify_upstream_request_error, model_unavailable_response, openai_error_response,
             openai_error_response_with_type, probe_ollama_model_loaded, queue_error_response,
-            sanitize_openai_payload_for_history,
+            sanitize_openai_payload_for_history, upstream_error_message_from_bytes,
         },
         proxy::{
-            forward_streaming_response, forward_streaming_response_with_tps_tracking,
-            record_endpoint_request_stats, save_request_record, select_available_endpoint,
+            forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
+            save_request_record, select_available_endpoint,
             select_available_endpoint_with_queue_for_model, QueueSelection,
         },
     },
@@ -1025,6 +1026,7 @@ async fn proxy_openai_post(
             };
             let classified_error = classify_upstream_request_error(
                 &e,
+                &runtime_url,
                 endpoint.inference_timeout_secs,
                 ollama_loading_model.as_deref(),
             );
@@ -1110,28 +1112,22 @@ async fn proxy_openai_post(
             );
         }
 
-        {
-            let mut record = RequestResponseRecord::new(
-                endpoint_id,
-                endpoint_name.clone(),
-                endpoint_host,
-                model.clone(),
-                request_type,
-                request_body.clone(),
-                response.status(),
-                duration,
-                client_ip,
-                api_key_id,
-            );
-            if !succeeded {
-                record.status = RecordStatus::Error {
-                    message: format!("Upstream stream returned status {}", response.status()),
-                };
-            }
-            save_request_record(state.request_history.clone(), record);
-        }
-
         let mut axum_response = if succeeded {
+            {
+                let record = RequestResponseRecord::new(
+                    endpoint_id,
+                    endpoint_name.clone(),
+                    endpoint_host,
+                    model.clone(),
+                    request_type,
+                    request_body.clone(),
+                    response.status(),
+                    duration,
+                    client_ip,
+                    api_key_id,
+                );
+                save_request_record(state.request_history.clone(), record);
+            }
             forward_streaming_response_with_tps_tracking(
                 response,
                 endpoint_id,
@@ -1145,7 +1141,51 @@ async fn proxy_openai_post(
             )
             .map_err(AppError::from)?
         } else {
-            forward_streaming_response(response).map_err(AppError::from)?
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body_bytes = response.bytes().await.unwrap_or_default();
+            let message = upstream_error_message_from_bytes(status, &body_bytes);
+
+            let mut record = RequestResponseRecord::new(
+                endpoint_id,
+                endpoint_name.clone(),
+                endpoint_host,
+                model.clone(),
+                request_type,
+                request_body.clone(),
+                status,
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            record.status = RecordStatus::Error {
+                message: message.clone(),
+            };
+            save_request_record(state.request_history.clone(), record);
+
+            let mut response = Response::new(Body::from(body_bytes));
+            *response.status_mut() = status;
+            {
+                let response_headers = response.headers_mut();
+                for (name, value) in headers.iter() {
+                    if let (Ok(header_name), Ok(header_value)) = (
+                        HeaderName::from_bytes(name.as_str().as_bytes()),
+                        HeaderValue::from_bytes(value.as_bytes()),
+                    ) {
+                        response_headers.insert(header_name, header_value);
+                    }
+                }
+            }
+            if !response
+                .headers()
+                .contains_key(axum::http::header::CONTENT_TYPE)
+            {
+                response.headers_mut().insert(
+                    axum::http::header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/json"),
+                );
+            }
+            response
         };
         if let Some(wait_ms) = queued_wait_ms {
             add_queue_headers(&mut axum_response, wait_ms);
@@ -1179,11 +1219,7 @@ async fn proxy_openai_post(
         // OpenAI互換経路では upstream 非2xx は 502 に正規化して返す
         let status_code = StatusCode::BAD_GATEWAY;
         let body_bytes = response.bytes().await.unwrap_or_default();
-        let message = if body_bytes.is_empty() {
-            status.to_string()
-        } else {
-            String::from_utf8_lossy(&body_bytes).trim().to_string()
-        };
+        let message = upstream_error_message_from_bytes(status, &body_bytes);
 
         {
             let mut record = RequestResponseRecord::new(
@@ -2105,9 +2141,13 @@ mod tests {
             .await
             .expect("timeout body");
         let json: serde_json::Value = serde_json::from_slice(&body).expect("timeout json");
+        let expected_message = format!(
+            "Upstream request to {}/v1/chat/completions timed out after 1 seconds",
+            server.uri()
+        );
         assert_eq!(
-            json["error"]["message"],
-            "Upstream endpoint request timed out after 1 seconds"
+            json["error"]["message"].as_str(),
+            Some(expected_message.as_str())
         );
         assert_eq!(json["error"]["type"], "timeout");
         assert_eq!(json["error"]["code"], 504);
@@ -2455,9 +2495,11 @@ mod tests {
             .await
             .expect("connect failure body");
         let json: serde_json::Value = serde_json::from_slice(&body).expect("connect failure json");
+        let expected_message =
+            format!("Failed to connect to upstream: http://{addr}/v1/chat/completions");
         assert_eq!(
-            json["error"]["message"],
-            "Failed to connect to upstream endpoint"
+            json["error"]["message"].as_str(),
+            Some(expected_message.as_str())
         );
         assert_eq!(json["error"]["type"], "connection_error");
         assert_eq!(json["error"]["code"], 502);
@@ -2548,6 +2590,98 @@ mod tests {
         assert!(
             entry.total_output_tokens > 0,
             "streaming output tokens should be accumulated"
+        );
+    }
+
+    /// SPEC #575 US-013-A (2026-04-23 delta):
+    /// llama.cpp タイプのエンドポイントに対するストリーミング chat completions が
+    /// 正常にプロキシされ、TPS 計測が更新されることを確認する。
+    #[tokio::test]
+    #[serial]
+    async fn llamacpp_streaming_request_updates_model_tps_after_stream_completion() {
+        use crate::types::endpoint::{
+            Endpoint, EndpointModel, EndpointStatus, EndpointType, SupportedAPI,
+        };
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let server = MockServer::start().await;
+        let stream_body = concat!(
+            "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n",
+            "data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(stream_body, "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let mut endpoint = Endpoint::new(
+            "llamacpp-stream-tps-endpoint".to_string(),
+            server.uri(),
+            EndpointType::Llamacpp,
+        );
+        endpoint.status = EndpointStatus::Online;
+        let endpoint_id = endpoint.id;
+        state
+            .endpoint_registry
+            .add(endpoint)
+            .await
+            .expect("add endpoint");
+        state
+            .endpoint_registry
+            .add_model(&EndpointModel {
+                endpoint_id,
+                model_id: "llamacpp-stream-model".to_string(),
+                capabilities: None,
+                max_tokens: None,
+                last_checked: None,
+                supported_apis: vec![SupportedAPI::ChatCompletions],
+                canonical_name: None,
+            })
+            .await
+            .expect("add endpoint model");
+
+        let payload = json!({
+            "model": "llamacpp-stream-model",
+            "messages": [{"role":"user","content":"hello"}],
+            "stream": true
+        });
+        let response = proxy_openai_post(
+            &state,
+            payload,
+            "/v1/chat/completions",
+            "llamacpp-stream-model".to_string(),
+            true,
+            RequestType::Chat,
+            None,
+            None,
+        )
+        .await
+        .expect("streaming request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = to_bytes(response.into_body(), 1_000_000)
+            .await
+            .expect("stream body should be readable");
+
+        sleep(Duration::from_millis(100)).await;
+
+        let tps = state.load_manager.get_model_tps(endpoint_id).await;
+        let entry = tps
+            .iter()
+            .find(|info| info.model_id == "llamacpp-stream-model")
+            .expect("llamacpp stream model should have TPS entry");
+        assert!(entry.tps.is_some(), "TPS should be updated for llamacpp");
+        assert!(
+            entry.total_output_tokens > 0,
+            "streaming output tokens should be accumulated for llamacpp"
         );
     }
 

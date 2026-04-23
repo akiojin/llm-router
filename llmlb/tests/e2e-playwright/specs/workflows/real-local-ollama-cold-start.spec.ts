@@ -14,6 +14,7 @@ import {
   openDashboard,
   openEndpointDetails,
   prepareEndpointViaUi,
+  retestEndpointConnection,
   resolveApiModelIdForRuntimeModel,
   selectEndpointPlaygroundModel,
   sendPlaygroundMessage,
@@ -99,6 +100,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
       timeout: 180000,
     })
     await expect(page.getByText(/still loading/i).first()).toBeVisible({ timeout: 180000 })
+    await retestEndpointConnection(request, endpoint.id, endpointName, 'ollama')
 
     const apiKey = await createApiKeyWithPermissions(request, apiKeyName, [
       'openai.inference',
@@ -126,6 +128,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
         maxTokens: 4,
       }
     )
+    await retestEndpointConnection(request, endpoint.id, endpointName, 'ollama')
 
     await openDashboard(page)
     detailsDialog = await openEndpointDetails(page, endpointName)
@@ -144,6 +147,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
       })
       .toBe(300)
 
+    await retestEndpointConnection(request, endpoint.id, endpointName, 'ollama')
     await ensureOllamaModelUnloaded(request, model)
     await expectChatCompletion(request, apiKey.key, apiModelId, 'Reply with OK only.', {
       timeout: 300000,

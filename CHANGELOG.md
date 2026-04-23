@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+## [5.8.0](https://github.com/akiojin/llmlb/compare/v5.7.2...v5.8.0) (2026-04-23)
+
+### Added
+
+- Endpoints: エンドポイントタイプ別の既定 `inference_timeout_secs` を最適化し、ダッシュボードの Add/Edit Endpoint フローにタイムアウトガイダンスと推奨値を追加 (closes #629)
+- Dashboard: llama.cpp エンドポイントタイプを UI から選択・識別できるよう対応（ラベル・バッジ・手動選択肢追加）
+
+### Fixed
+
+- DB: 旧バージョンから MSI で upgrade した際に発生していた `Failed to run database migrations: VersionMismatch(5)` エラーを修正。`_sqlx_migrations` の checksum 互換処理を復元し、起動パスを共通の `run_migrations()` に統一 (closes #420)
+- Update: Windows の self-update rollback で既存実行ファイルが残っていると `.bak` 復元が `os error 5` で失敗する問題を修正。auto / manual rollback を共通の restore 処理に統一 (closes #473)
+- Server: Windows self-update 再起動時に旧プロセスのポート解放遅延で bind panic が発生する問題を修正（`AddrInUse` に対してリトライ handoff を追加）(closes #476)
+- Anthropic: `/v1/messages` で upstream timeout や非 2xx 応答時にハードコード文言で握りつぶしていた実エラー詳細を保持してクライアントと履歴に返すよう修正 (closes #628)
+- OpenAI 互換経路: streaming / non-streaming の upstream error を raw body ベースで保持し、history 記録とクライアント応答の message を統一
+- Update: Unix 系の rollback 置換処理を維持するよう修正
+- Playwright: 実ランタイム E2E を `/v1/models` から解決した実モデル ID ベースへ安定化し、ダッシュボード Playground の reasoning テキスト表示にも対応
+
+### Security
+
+- Deps: `rustls-webpki` を 0.103.13 に更新し RUSTSEC-2026-0104（CRL parsing の reachable panic）を解消
+- Deps: `rand` を 0.10.1 に更新し RUSTSEC-2026-0097（unsound）を正規解消
+
+### Test
+
+- Endpoints: SPEC #575 US-013-A 向けに llama.cpp 対応の統合・契約・ストリーミング TPS テストを追加
+
+### Docs
+
+- README / `docs/architecture.md` に llama.cpp エンドポイント対応を追記
+- Lessons: Claude Code 502 調査の教訓を `memory/lessons.md` に追記
+
+### Chore
+
+- Codex: `.codex/hooks.json` をリポジトリで追跡するよう変更
+- Dashboard: llama.cpp UI 反映に伴い `llmlb/src/web/static/` バンドルを再生成
+
 ## [5.7.2](https://github.com/akiojin/llmlb/compare/v5.7.1...v5.7.2) (2026-04-21)
 
 ### Fixed
