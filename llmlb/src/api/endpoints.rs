@@ -1212,6 +1212,7 @@ pub async fn proxy_chat_completions(
             };
             let classified_error = classify_upstream_request_error(
                 &e,
+                &endpoint.base_url,
                 endpoint.inference_timeout_secs,
                 ollama_loading_model.as_deref(),
             );

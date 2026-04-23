@@ -2,19 +2,24 @@
 
 use crate::support::{
     http::TestServer,
-    lb::{register_responses_endpoint, spawn_test_lb},
+    lb::{register_responses_endpoint, spawn_test_lb, spawn_test_lb_with_db},
 };
 use axum::{
+    body::Body,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
+use llmlb::common::protocol::{RecordStatus, RequestResponseRecord};
+use llmlb::db::request_history::RequestHistoryStorage;
 use reqwest::{Client, StatusCode as ReqStatusCode};
 use serde_json::{json, Value};
 use serial_test::serial;
+use sqlx::SqlitePool;
 use std::sync::{Arc, Mutex};
+use tokio::time::{sleep, Duration};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -41,6 +46,12 @@ enum DetectionKind {
 enum ChatStubResponse {
     Json(Value),
     Stream(String),
+    Raw {
+        status: StatusCode,
+        body: String,
+        content_type: &'static str,
+        delay_ms: u64,
+    },
 }
 
 fn chat_node_stub_openai_compat(response: ChatStubResponse) -> ChatNodeStubState {
@@ -83,6 +94,21 @@ async fn chat_handler(
             .header("content-type", "text/event-stream")
             .body(axum::body::Body::from(body.clone()))
             .expect("stream response should build"),
+        ChatStubResponse::Raw {
+            status,
+            body,
+            content_type,
+            delay_ms,
+        } => {
+            if *delay_ms > 0 {
+                sleep(Duration::from_millis(*delay_ms)).await;
+            }
+            axum::response::Response::builder()
+                .status(*status)
+                .header("content-type", *content_type)
+                .body(Body::from(body.clone()))
+                .expect("raw response should build")
+        }
     }
 }
 
@@ -112,6 +138,87 @@ async fn ollama_tags_handler(State(state): State<Arc<ChatNodeStubState>>) -> imp
             ]
         })),
     )
+}
+
+async fn load_request_history_from_db(db_pool: &SqlitePool) -> Vec<RequestResponseRecord> {
+    let storage = Arc::new(RequestHistoryStorage::new(db_pool.clone()));
+    storage.load_records().await.unwrap_or_default()
+}
+
+async fn wait_for_latest_error_message(db_pool: &SqlitePool, model: &str) -> String {
+    for _ in 0..20 {
+        let records = load_request_history_from_db(db_pool).await;
+        if let Some(message) = records
+            .iter()
+            .rev()
+            .find(|record| record.model == model)
+            .and_then(|record| match &record.status {
+                RecordStatus::Error { message } => Some(message.clone()),
+                RecordStatus::Success => None,
+            })
+        {
+            return message;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    panic!("timed out waiting for request history error record for model {model}");
+}
+
+async fn register_chat_endpoint_with_timeout(
+    lb_addr: std::net::SocketAddr,
+    node_addr: std::net::SocketAddr,
+    name: &str,
+    inference_timeout_secs: u32,
+) -> String {
+    let client = Client::new();
+
+    let create_response = client
+        .post(format!("http://{}/api/endpoints", lb_addr))
+        .header("authorization", "Bearer sk_debug")
+        .json(&json!({
+            "name": format!("{name} - {node_addr}"),
+            "base_url": format!("http://{}", node_addr),
+            "health_check_interval_secs": 30,
+            "inference_timeout_secs": inference_timeout_secs,
+        }))
+        .send()
+        .await
+        .expect("endpoint registration must succeed");
+    assert_eq!(create_response.status(), ReqStatusCode::CREATED);
+
+    let create_body: Value = create_response
+        .json()
+        .await
+        .expect("endpoint registration response must be json");
+    let endpoint_id = create_body["id"]
+        .as_str()
+        .expect("endpoint id must be present")
+        .to_string();
+
+    let test_response = client
+        .post(format!(
+            "http://{}/api/endpoints/{}/test",
+            lb_addr, endpoint_id
+        ))
+        .header("authorization", "Bearer sk_debug")
+        .send()
+        .await
+        .expect("endpoint test must succeed");
+    assert_eq!(test_response.status(), ReqStatusCode::OK);
+
+    let sync_response = client
+        .post(format!(
+            "http://{}/api/endpoints/{}/sync",
+            lb_addr, endpoint_id
+        ))
+        .header("authorization", "Bearer sk_debug")
+        .send()
+        .await
+        .expect("endpoint sync must succeed");
+    assert_eq!(sync_response.status(), ReqStatusCode::OK);
+
+    endpoint_id
 }
 
 #[tokio::test]
@@ -434,4 +541,246 @@ async fn anthropic_messages_passes_canonical_through_lm_studio() {
         captured_body["model"], "openai/gpt-oss-20b",
         "canonical 名を直接受理するエンドポイントでは書き換えが発生しないこと"
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_timeout_surfaces_detailed_upstream_error_and_history() {
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Raw {
+        status: StatusCode::OK,
+        body: json!({
+            "id": "chatcmpl-timeout",
+            "object": "chat.completion",
+            "model": "timeout-model",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "too late"},
+                    "finish_reason": "stop"
+                }
+            ]
+        })
+        .to_string(),
+        content_type: "application/json",
+        delay_ms: 1_200,
+    });
+    state.advertised_model = "timeout-model".to_string();
+
+    let (node, _captured) = spawn_chat_node_stub(state).await;
+    let (lb, db_pool) = spawn_test_lb_with_db().await;
+    let _endpoint_id =
+        register_chat_endpoint_with_timeout(lb.addr(), node.addr(), "timeout-endpoint", 1).await;
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "timeout-model",
+            "max_tokens": 32,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), ReqStatusCode::GATEWAY_TIMEOUT);
+    let body: Value = response.json().await.expect("error body must be json");
+    assert_eq!(body["error"]["type"], "api_error");
+    let message = body["error"]["message"]
+        .as_str()
+        .expect("error message should be string");
+    assert!(
+        message.contains("timed out after 1 seconds"),
+        "timeout detail should be exposed, got: {message}"
+    );
+
+    let history_message = wait_for_latest_error_message(&db_pool, "timeout-model").await;
+    assert_eq!(history_message, message);
+}
+
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_non_streaming_404_preserves_raw_upstream_body() {
+    let raw_body = json!({
+        "error": {"message": "model missing", "type": "not_found_error"},
+        "upstream": "lm-studio"
+    })
+    .to_string();
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Raw {
+        status: StatusCode::NOT_FOUND,
+        body: raw_body.clone(),
+        content_type: "application/json",
+        delay_ms: 0,
+    });
+    state.advertised_model = "missing-upstream-model".to_string();
+
+    let (node, _captured) = spawn_chat_node_stub(state).await;
+    let (lb, db_pool) = spawn_test_lb_with_db().await;
+    let _endpoint_id = register_chat_endpoint_with_timeout(
+        lb.addr(),
+        node.addr(),
+        "missing-upstream-endpoint",
+        30,
+    )
+    .await;
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "missing-upstream-model",
+            "max_tokens": 32,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), ReqStatusCode::NOT_FOUND);
+    let body: Value = response.json().await.expect("error body must be json");
+    assert_eq!(body["error"]["type"], "not_found_error");
+    assert_eq!(body["error"]["message"], raw_body);
+
+    let history_message = wait_for_latest_error_message(&db_pool, "missing-upstream-model").await;
+    assert_eq!(history_message, raw_body);
+}
+
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_streaming_404_preserves_raw_upstream_body() {
+    let raw_body = json!({
+        "error": {"message": "model missing", "type": "not_found_error"},
+        "upstream": "streaming-endpoint"
+    })
+    .to_string();
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Raw {
+        status: StatusCode::NOT_FOUND,
+        body: raw_body.clone(),
+        content_type: "application/json",
+        delay_ms: 0,
+    });
+    state.advertised_model = "stream-missing-model".to_string();
+
+    let (node, _captured) = spawn_chat_node_stub(state).await;
+    let (lb, db_pool) = spawn_test_lb_with_db().await;
+    let _endpoint_id =
+        register_chat_endpoint_with_timeout(lb.addr(), node.addr(), "stream-error-endpoint", 30)
+            .await;
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "stream-missing-model",
+            "max_tokens": 32,
+            "stream": true,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), ReqStatusCode::NOT_FOUND);
+    let body: Value = response.json().await.expect("error body must be json");
+    assert_eq!(body["error"]["type"], "not_found_error");
+    assert_eq!(body["error"]["message"], raw_body);
+
+    let history_message = wait_for_latest_error_message(&db_pool, "stream-missing-model").await;
+    assert_eq!(history_message, raw_body);
+}
+
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_streaming_500_without_body_uses_status_text() {
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Raw {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        body: String::new(),
+        content_type: "application/json",
+        delay_ms: 0,
+    });
+    state.advertised_model = "stream-empty-body-model".to_string();
+
+    let (node, _captured) = spawn_chat_node_stub(state).await;
+    let (lb, db_pool) = spawn_test_lb_with_db().await;
+    let _endpoint_id =
+        register_chat_endpoint_with_timeout(lb.addr(), node.addr(), "stream-empty-body", 30).await;
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "stream-empty-body-model",
+            "max_tokens": 32,
+            "stream": true,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), ReqStatusCode::BAD_GATEWAY);
+    let body: Value = response.json().await.expect("error body must be json");
+    assert_eq!(body["error"]["type"], "api_error");
+    assert_eq!(body["error"]["message"], "500 Internal Server Error");
+
+    let history_message = wait_for_latest_error_message(&db_pool, "stream-empty-body-model").await;
+    assert_eq!(history_message, "500 Internal Server Error");
+}
+
+#[tokio::test]
+#[serial]
+async fn anthropic_messages_parse_failure_surfaces_parser_detail() {
+    let mut state = chat_node_stub_openai_compat(ChatStubResponse::Raw {
+        status: StatusCode::OK,
+        body: "not-json".to_string(),
+        content_type: "text/plain",
+        delay_ms: 0,
+    });
+    state.advertised_model = "parse-failure-model".to_string();
+
+    let (node, _captured) = spawn_chat_node_stub(state).await;
+    let (lb, db_pool) = spawn_test_lb_with_db().await;
+    let _endpoint_id =
+        register_chat_endpoint_with_timeout(lb.addr(), node.addr(), "parse-failure-endpoint", 30)
+            .await;
+
+    let response = Client::new()
+        .post(format!("http://{}/v1/messages", lb.addr()))
+        .header("x-api-key", "sk_debug")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "parse-failure-model",
+            "max_tokens": 32,
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), ReqStatusCode::BAD_GATEWAY);
+    let body: Value = response.json().await.expect("error body must be json");
+    assert_eq!(body["error"]["type"], "api_error");
+    let message = body["error"]["message"]
+        .as_str()
+        .expect("error message should be string");
+    assert!(
+        message.contains("Failed to parse OpenAI-compatible upstream response:"),
+        "parse detail should be exposed, got: {message}"
+    );
+
+    let history_message = wait_for_latest_error_message(&db_pool, "parse-failure-model").await;
+    assert_eq!(history_message, message);
 }
