@@ -595,12 +595,53 @@ async fn proxy_local_anthropic_messages(
     }
 
     let upstream_status = upstream.status();
-    let upstream_body = upstream.bytes().await.map_err(|err| {
-        AppError::from(LbError::Http(format!(
-            "Failed to read OpenAI-compatible upstream response: {}",
-            err
-        )))
-    })?;
+    let upstream_body = match upstream.bytes().await {
+        Ok(body) => body,
+        Err(err) => {
+            let duration = started.elapsed();
+            let read_error = LbError::Http(format!(
+                "Failed to read OpenAI-compatible upstream response: {}",
+                err
+            ));
+            let (error_status, error_type, message) = anthropic_upstream_error_details(&read_error);
+
+            request_lease
+                .complete(RequestOutcome::Error, duration)
+                .await
+                .map_err(AppError::from)?;
+            record_endpoint_request_stats(
+                state.endpoint_registry.clone(),
+                endpoint_id,
+                model.clone(),
+                false,
+                0,
+                0,
+                tps_api_kind,
+                endpoint_type,
+                state.load_manager.clone(),
+                state.event_bus.clone(),
+            );
+
+            let mut record = RequestResponseRecord::new(
+                endpoint_id,
+                endpoint_name.clone(),
+                UNSPECIFIED_IP,
+                model.clone(),
+                request_type,
+                request_body.clone(),
+                error_status,
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            record.status = RecordStatus::Error {
+                message: message.clone(),
+            };
+            save_request_record(state.request_history.clone(), record);
+
+            return Ok(anthropic_error_response(error_status, error_type, message));
+        }
+    };
     let duration = started.elapsed();
 
     if !upstream_status.is_success() {
@@ -2118,6 +2159,106 @@ mod tests {
         // Test that streaming tool call events are properly transformed
         // This test is a placeholder for streaming transformation logic
         // TODO: Implement streaming transformation and associated tests
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn local_body_read_failure_returns_error_response_and_records_history() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let addr = listener.local_addr().expect("listener addr");
+        tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let mut read_buf = [0u8; 4096];
+                let _ = socket.read(&mut read_buf).await;
+                let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 256\r\nConnection: close\r\n\r\n{\"id\":\"truncated\"}";
+                let _ = socket.write_all(response).await;
+                let _ = socket.shutdown().await;
+            }
+        });
+
+        let mut endpoint = Endpoint::new(
+            "broken-anthropic-endpoint".to_string(),
+            format!("http://{addr}"),
+            EndpointType::OpenaiCompatible,
+        );
+        endpoint.status = EndpointStatus::Online;
+        let endpoint_id = endpoint.id;
+        state
+            .endpoint_registry
+            .add(endpoint)
+            .await
+            .expect("add endpoint");
+        state
+            .endpoint_registry
+            .add_model(&EndpointModel {
+                endpoint_id,
+                model_id: "broken-model".to_string(),
+                capabilities: None,
+                max_tokens: None,
+                last_checked: None,
+                supported_apis: vec![SupportedAPI::ChatCompletions],
+                canonical_name: None,
+            })
+            .await
+            .expect("add endpoint model");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
+        let payload = json!({
+            "model": "broken-model",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hello"}]
+        });
+
+        let response = handle_messages(
+            std::net::SocketAddr::from(([127, 0, 0, 1], 8080)),
+            headers,
+            state.clone(),
+            None,
+            payload,
+        )
+        .await
+        .expect("body read failure should return response");
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        let body = to_bytes(response.into_body(), 1_000_000)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(json["type"], "error");
+        assert_eq!(json["error"]["type"], "api_error");
+        let message = json["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .to_string();
+        assert!(
+            message.contains("Failed to read OpenAI-compatible upstream response"),
+            "unexpected error message: {message}"
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let snapshot = state
+            .load_manager
+            .snapshot(endpoint_id)
+            .await
+            .expect("snapshot");
+        assert_eq!(snapshot.active_requests, 0);
+
+        let records = state.request_history.load_records().await.expect("records");
+        assert_eq!(records.len(), 1);
+        match &records[0].status {
+            RecordStatus::Error {
+                message: record_message,
+            } => assert_eq!(record_message, &message),
+            _ => panic!("expected request history error record"),
+        }
     }
 
     #[tokio::test]

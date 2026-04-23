@@ -2141,9 +2141,13 @@ mod tests {
             .await
             .expect("timeout body");
         let json: serde_json::Value = serde_json::from_slice(&body).expect("timeout json");
+        let expected_message = format!(
+            "Upstream request to {}/v1/chat/completions timed out after 1 seconds",
+            server.uri()
+        );
         assert_eq!(
-            json["error"]["message"],
-            "Upstream endpoint request timed out after 1 seconds"
+            json["error"]["message"].as_str(),
+            Some(expected_message.as_str())
         );
         assert_eq!(json["error"]["type"], "timeout");
         assert_eq!(json["error"]["code"], 504);
@@ -2491,9 +2495,11 @@ mod tests {
             .await
             .expect("connect failure body");
         let json: serde_json::Value = serde_json::from_slice(&body).expect("connect failure json");
+        let expected_message =
+            format!("Failed to connect to upstream: http://{addr}/v1/chat/completions");
         assert_eq!(
-            json["error"]["message"],
-            "Failed to connect to upstream endpoint"
+            json["error"]["message"].as_str(),
+            Some(expected_message.as_str())
         );
         assert_eq!(json["error"]["type"], "connection_error");
         assert_eq!(json["error"]["code"], 502);
