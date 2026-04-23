@@ -26,6 +26,7 @@ llmlb routes requests to any OpenAI-compatible inference server:
 | **Ollama** | Popular local inference server |
 | **vLLM** | High-throughput serving engine |
 | **LM Studio** | Desktop inference application |
+| **llama.cpp** | `llama-server` from the llama.cpp project |
 | **OpenAI-compatible** | Any server implementing the OpenAI API |
 
 ### Multimodal Support
@@ -43,7 +44,7 @@ available for compatibility.
 
 - **Unified API Endpoint**: Access multiple LLM runtime instances through a single URL
 - **Automatic Load Balancing**: TPS-based (Tokens Per Second) request distribution across available endpoints
-- **Endpoint Management**: Centralized management of LM Studio, Ollama, vLLM, xLLM, and other OpenAI-compatible servers
+- **Endpoint Management**: Centralized management of LM Studio, Ollama, vLLM, xLLM, llama.cpp, and other OpenAI-compatible servers
 - **Model Sync**: Automatic model discovery via `GET /v1/models` from registered endpoints
 - **Automatic Failure Detection**: Detect offline endpoints and exclude them from routing
 - **Real-time Monitoring**: Comprehensive visualization of endpoint states and performance metrics via web dashboard
@@ -247,7 +248,7 @@ cloud LLM providers via model prefixes.
 
 ### Components
 - **LLM Load Balancer (Rust)**: Receives OpenAI-compatible traffic, chooses a path, and proxies requests. Exposes dashboard, metrics, and admin APIs.
-- **Registered Endpoints**: LM Studio, Ollama, vLLM, xLLM, and other OpenAI-compatible servers registered with the load balancer.
+- **Registered Endpoints**: LM Studio, Ollama, vLLM, xLLM, llama.cpp, and other OpenAI-compatible servers registered with the load balancer.
 - **Cloud Proxy**: When a model name starts with `openai:` `google:` or `anthropic:` the load balancer forwards to the corresponding cloud API.
 - **Storage**: SQLite for load balancer metadata; model artifacts remain on each endpoint or registry source.
 - **Observability**: Prometheus metrics, structured logs, dashboard stats.
@@ -413,7 +414,7 @@ Use it to monitor endpoints, view request history, inspect logs, and manage mode
 ## Endpoint Management
 
 the load balancer centrally manages external inference servers (LM Studio, Ollama, vLLM, xLLM,
-and other OpenAI-compatible APIs) as "endpoints".
+llama.cpp, and other OpenAI-compatible APIs) as "endpoints".
 
 ### Supported Endpoints
 
@@ -423,6 +424,7 @@ and other OpenAI-compatible APIs) as "endpoints".
 | **Ollama** | Ollama server | `GET /v1/models` |
 | **LM Studio** | LM Studio local server | `GET /v1/models` |
 | **vLLM** | vLLM inference server | `GET /v1/models` |
+| **llama.cpp** | `llama-server` from llama.cpp | `GET /v1/models` |
 | **OpenAI-compatible** | Other OpenAI-compatible APIs | `GET /v1/models` |
 
 ### Endpoint Type Auto Detection
@@ -435,16 +437,17 @@ Endpoints are auto-detected when you register them.
 2. **LM Studio**: `GET /api/v1/models` with LM Studio-specific metadata
 3. **Ollama**: `GET /api/tags` succeeds
 4. **vLLM**: `Server` header contains `vllm`
-5. **OpenAI-compatible**: `GET /v1/models` succeeds
-6. **Unknown**: no type matched or the endpoint is offline
+5. **llama.cpp**: `Server` header contains `llama.cpp` or `GET /v1/version` returns `server="llama.cpp"`
+6. **OpenAI-compatible**: `GET /v1/models` succeeds
+7. **Unknown**: no type matched or the endpoint is offline
 
 **Type-specific features:**
 
-| Feature | xLLM | Ollama | LM Studio | vLLM | OpenAI-compatible |
-|---------|------|--------|-----------|------|-------------------|
-| Model download | ✓ | ✓ | ✓ | - | - |
-| Model metadata | ✓ | ✓ | ✓ | - | - |
-| max_tokens sync | ✓ | ✓ | ✓ | - | - |
+| Feature | xLLM | Ollama | LM Studio | vLLM | llama.cpp | OpenAI-compatible |
+|---------|------|--------|-----------|------|-----------|-------------------|
+| Model download | ✓ | ✓ | ✓ | - | - | - |
+| Model metadata | ✓ | ✓ | ✓ | - | - | - |
+| max_tokens sync | ✓ | ✓ | ✓ | - | - | - |
 
 ### Model Operations
 
@@ -475,6 +478,22 @@ curl http://localhost:32768/api/endpoints \
 curl -X POST http://localhost:32768/api/endpoints/{id}/sync \
   -H "Authorization: Bearer sk_your_api_key"
 ```
+
+### Connecting `llama-server` (llama.cpp)
+
+Start `llama-server` (from the [llama.cpp](https://github.com/ggml-org/llama.cpp) project)
+with an OpenAI-compatible API and (optionally) an API key, then register it from the
+dashboard or via REST API.
+
+```bash
+# Example: serve a local GGUF model on port 8080
+llama-server -m ./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf \
+  --host 0.0.0.0 --port 8080 --api-key sk_dev
+```
+
+llmlb auto-detects llama-server via the `Server` header (`llama.cpp/...`) or the
+`/v1/version` endpoint, and routes chat / completions / embeddings traffic through the
+standard OpenAI-compatible passthrough. Single-model-per-instance is the typical setup.
 
 ### Status Transitions
 
@@ -623,7 +642,7 @@ If not using GPU, remove `--gpus all` or set `CUDA_VISIBLE_DEVICES=""`.
 
 ### 3) External Endpoint Runtime
 Set up the inference server you want to register separately. llmlb works with LM Studio, Ollama,
-vLLM, xLLM, and other OpenAI-compatible endpoints.
+vLLM, xLLM, llama.cpp (`llama-server`), and other OpenAI-compatible endpoints.
 
 ### Requirements
 
