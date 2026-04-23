@@ -100,14 +100,14 @@ const SUPPORTED_RUNTIME_MODEL_CASES: Array<{
   {
     runtime: 'ollama',
     candidateRuntimeModels: ['qwen3-coder:30b', 'qwen3-coder:latest'],
-    canonicalModel: 'Qwen/qwen3-coder-30b',
+    canonicalModel: 'Qwen/Qwen3-Coder-30B-A3B-Instruct',
     label: 'Ollama qwen3-coder:30b',
     requestKind: 'chat',
   },
   {
     runtime: 'lm_studio',
     candidateRuntimeModels: ['Qwen/qwen3-coder-30b', 'qwen/qwen3-coder-30b'],
-    canonicalModel: 'Qwen/qwen3-coder-30b',
+    canonicalModel: 'Qwen/Qwen3-Coder-30B-A3B-Instruct',
     label: 'LM Studio qwen3-coder-30b',
     requestKind: 'chat',
   },
@@ -173,7 +173,7 @@ const SUPPORTED_RUNTIME_MODEL_CASES: Array<{
   },
   {
     runtime: 'lm_studio',
-    candidateRuntimeModels: ['nvidia/nemotron-3-nano'],
+    candidateRuntimeModels: ['nvidia/nemotron-3-nano', 'nvidia/nemotron-3-nano-4b'],
     canonicalModel: 'nvidia/Nemotron-3-Nano',
     label: 'LM Studio nemotron-3-nano',
     requestKind: 'chat',
@@ -455,7 +455,15 @@ export async function registerEndpointViaUi(
   await expect(dialog).toBeVisible({ timeout: 10000 })
   await dialog.locator('#endpoint-name').fill(endpointName)
   await dialog.locator('#endpoint-url').fill(baseUrl)
+  const createResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/endpoints') &&
+      response.request().method() === 'POST' &&
+      response.status() >= 200 &&
+      response.status() < 300
+  )
   await dialog.getByRole('button', { name: 'Create Endpoint' }).click()
+  await createResponse
   await expect(dialog).toBeHidden({ timeout: 20000 })
   return searchEndpointRow(page, endpointName)
 }
@@ -493,6 +501,18 @@ export async function waitForEndpointTypeAndStatus(
       { timeout: 120000, intervals: [1000, 2000, 5000] }
     )
     .toBe(`online|${endpointType}`)
+}
+
+export async function waitForEndpointRegistered(
+  request: APIRequestContext,
+  endpointName: string
+) {
+  await expect
+    .poll(async () => Boolean(await getEndpointByName(request, endpointName)), {
+      timeout: 30000,
+      intervals: [500, 1000, 2000],
+    })
+    .toBe(true)
 }
 
 export async function getEndpointByName(
@@ -542,6 +562,7 @@ export async function prepareEndpointViaUi(
 ) {
   await deleteEndpointsByBaseUrl(request, options.baseUrl)
   let row = await registerEndpointViaUi(page, options.endpointName, options.baseUrl)
+  await waitForEndpointRegistered(request, options.endpointName)
   await row.locator('button[title="Test Connection"]').click()
   await waitForEndpointTypeAndStatus(request, options.endpointName, options.endpointType)
   row = await searchEndpointRow(page, options.endpointName)
@@ -559,6 +580,19 @@ export async function prepareEndpointViaUi(
   const endpoint = await getEndpointByName(request, options.endpointName)
   expect(endpoint).toBeTruthy()
   return endpoint!
+}
+
+export async function retestEndpointConnection(
+  request: APIRequestContext,
+  endpointId: string,
+  endpointName: string,
+  endpointType: string
+) {
+  const response = await request.post(`${API_BASE}/api/endpoints/${endpointId}/test`, {
+    headers: DEBUG_AUTH_HEADERS,
+  })
+  expect(response.ok()).toBeTruthy()
+  await waitForEndpointTypeAndStatus(request, endpointName, endpointType)
 }
 
 export async function waitForModelVisibleInDetails(
@@ -590,28 +624,47 @@ export async function waitForApiModelVisible(
   apiKey: string,
   modelId: string
 ) {
+  let resolvedModelId = ''
   await expect
     .poll(
       async () => {
-        const response = await request.get(`${API_BASE}/v1/models`, {
-          headers: { Authorization: `Bearer ${apiKey}` },
-          timeout: 10000,
-        })
-        if (!response.ok()) return [] as string[]
-        const json = (await response.json()) as { data?: Array<{ id?: string }> }
-        return (json.data ?? [])
-          .map((model) => model.id?.trim() ?? '')
-          .filter((id) => id.length > 0)
+        const models = await getOpenAiModels(request, apiKey).catch(() => [])
+        const match = findOpenAiModelEntry(models, modelId)
+        resolvedModelId = match?.id?.trim() ?? ''
+        return resolvedModelId
       },
       { timeout: 120000, intervals: [1000, 2000, 5000] }
     )
-    .toContain(modelId)
+    .not.toBe('')
+
+  return resolvedModelId
 }
 
 export type OpenAiModelEntry = {
   id?: string
   aliases?: string[]
   canonical_name?: string | null
+}
+
+function normalizeModelReference(reference: string | null | undefined): string {
+  return reference?.trim() ?? ''
+}
+
+export function findOpenAiModelEntry(
+  models: OpenAiModelEntry[],
+  reference: string
+): OpenAiModelEntry | undefined {
+  const expected = normalizeModelReference(reference)
+  if (!expected) return undefined
+
+  return models.find((model) => {
+    const candidates = [
+      normalizeModelReference(model.id),
+      normalizeModelReference(model.canonical_name),
+      ...(model.aliases ?? []).map((alias) => normalizeModelReference(alias)),
+    ].filter((candidate) => candidate.length > 0)
+    return candidates.includes(expected)
+  })
 }
 
 export async function getOpenAiModels(
@@ -637,12 +690,7 @@ export async function resolveApiModelIdForRuntimeModel(
     .poll(
       async () => {
         const models = await getOpenAiModels(request, apiKey)
-        const match = models.find(
-          (model) =>
-            model.id === runtimeModel ||
-            (model.aliases ?? []).includes(runtimeModel) ||
-            model.canonical_name === runtimeModel
-        )
+        const match = findOpenAiModelEntry(models, runtimeModel)
         resolvedModelId = match?.id?.trim() ?? ''
         return resolvedModelId
       },
@@ -937,10 +985,15 @@ export async function waitForAssistantBubbleCount(page: Page, expectedCount: num
 }
 
 export async function waitForAssistantText(page: Page) {
+  const assistantRows = page.locator('div.flex.gap-3').filter({
+    has: page.locator('svg.lucide-bot'),
+  })
   await expect
     .poll(
       async () => {
-        const messages = await page.locator('div.bg-muted p.whitespace-pre-wrap').allTextContents()
+        const messages = await assistantRows
+          .locator('p.text-sm.whitespace-pre-wrap')
+          .allTextContents()
         return messages.map((message) => message.trim()).filter((message) => message.length > 0)
           .length
       },

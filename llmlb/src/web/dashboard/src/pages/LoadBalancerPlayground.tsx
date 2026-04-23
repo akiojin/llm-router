@@ -82,6 +82,19 @@ interface LoadBalancerPlaygroundProps {
   initialModel?: string
 }
 
+function extractAssistantMessageText(response: {
+  choices?: Array<{
+    message?: {
+      content?: string
+      reasoning?: string
+      reasoning_content?: string
+    }
+  }>
+}): string {
+  const message = response.choices?.[0]?.message
+  return message?.content || message?.reasoning_content || message?.reasoning || ''
+}
+
 function generateRunId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -389,7 +402,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
 
         pg.setMessages((prev) => [...prev, {
           role: 'assistant',
-          content: response?.choices?.[0]?.message?.content || '',
+          content: extractAssistantMessageText(response),
         }])
       }
 

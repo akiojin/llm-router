@@ -26,6 +26,19 @@ export interface ChatCompletionRequest {
   user?: string
 }
 
+function extractAssistantDeltaText(parsed: {
+  choices?: Array<{
+    delta?: {
+      content?: string
+      reasoning?: string
+      reasoning_content?: string
+    }
+  }>
+}): string {
+  const delta = parsed.choices?.[0]?.delta
+  return delta?.content || delta?.reasoning_content || delta?.reasoning || ''
+}
+
 export const chatApi = {
   complete: async (
     request: ChatCompletionRequest,
@@ -73,7 +86,7 @@ export const chatApi = {
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data)
-              const content = parsed.choices?.[0]?.delta?.content
+              const content = extractAssistantDeltaText(parsed)
               if (content) {
                 onChunk(content)
               }

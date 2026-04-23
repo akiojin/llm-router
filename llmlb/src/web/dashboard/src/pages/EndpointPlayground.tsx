@@ -21,6 +21,19 @@ interface EndpointPlaygroundProps {
   onBack: () => void
 }
 
+function extractAssistantMessageText(data: {
+  choices?: Array<{
+    message?: {
+      content?: string
+      reasoning?: string
+      reasoning_content?: string
+    }
+  }>
+}): string {
+  const message = data.choices?.[0]?.message
+  return message?.content || message?.reasoning_content || message?.reasoning || ''
+}
+
 function getStatusBadgeVariant(
   status: DashboardEndpoint['status'] | undefined
 ): 'online' | 'pending' | 'offline' | 'destructive' | 'outline' {
@@ -160,7 +173,7 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
 
         pg.setMessages((prev) => [...prev, {
           role: 'assistant',
-          content: data?.choices?.[0]?.message?.content || '',
+          content: extractAssistantMessageText(data),
         }])
       }
     } catch (error) {

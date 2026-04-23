@@ -190,6 +190,19 @@ export interface TpsBenchmarkAccepted {
   status: 'running'
 }
 
+function extractAssistantDeltaText(parsed: {
+  choices?: Array<{
+    delta?: {
+      content?: string
+      reasoning?: string
+      reasoning_content?: string
+    }
+  }>
+}): string {
+  const delta = parsed.choices?.[0]?.delta
+  return delta?.content || delta?.reasoning_content || delta?.reasoning || ''
+}
+
 export const endpointsApi = {
   /** List endpoints for dashboard */
   list: () => fetchWithAuth<DashboardEndpoint[]>('/api/dashboard/endpoints'),
@@ -362,7 +375,7 @@ export const endpointsApi = {
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data)
-              const content = parsed.choices?.[0]?.delta?.content
+              const content = extractAssistantDeltaText(parsed)
               if (content) {
                 onChunk(content)
               }
