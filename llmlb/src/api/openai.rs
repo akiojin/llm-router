@@ -11,6 +11,7 @@ use crate::common::{
 };
 use crate::types::model::{ModelCapabilities, ModelCapability};
 use axum::{
+    body::Body,
     extract::{ConnectInfo, Path, State},
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -35,11 +36,11 @@ use crate::{
         openai_util::{
             classify_upstream_request_error, model_unavailable_response, openai_error_response,
             openai_error_response_with_type, probe_ollama_model_loaded, queue_error_response,
-            sanitize_openai_payload_for_history,
+            sanitize_openai_payload_for_history, upstream_error_message_from_bytes,
         },
         proxy::{
-            forward_streaming_response, forward_streaming_response_with_tps_tracking,
-            record_endpoint_request_stats, save_request_record, select_available_endpoint,
+            forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
+            save_request_record, select_available_endpoint,
             select_available_endpoint_with_queue_for_model, QueueSelection,
         },
     },
@@ -1025,6 +1026,7 @@ async fn proxy_openai_post(
             };
             let classified_error = classify_upstream_request_error(
                 &e,
+                &runtime_url,
                 endpoint.inference_timeout_secs,
                 ollama_loading_model.as_deref(),
             );
@@ -1110,28 +1112,22 @@ async fn proxy_openai_post(
             );
         }
 
-        {
-            let mut record = RequestResponseRecord::new(
-                endpoint_id,
-                endpoint_name.clone(),
-                endpoint_host,
-                model.clone(),
-                request_type,
-                request_body.clone(),
-                response.status(),
-                duration,
-                client_ip,
-                api_key_id,
-            );
-            if !succeeded {
-                record.status = RecordStatus::Error {
-                    message: format!("Upstream stream returned status {}", response.status()),
-                };
-            }
-            save_request_record(state.request_history.clone(), record);
-        }
-
         let mut axum_response = if succeeded {
+            {
+                let record = RequestResponseRecord::new(
+                    endpoint_id,
+                    endpoint_name.clone(),
+                    endpoint_host,
+                    model.clone(),
+                    request_type,
+                    request_body.clone(),
+                    response.status(),
+                    duration,
+                    client_ip,
+                    api_key_id,
+                );
+                save_request_record(state.request_history.clone(), record);
+            }
             forward_streaming_response_with_tps_tracking(
                 response,
                 endpoint_id,
@@ -1145,7 +1141,51 @@ async fn proxy_openai_post(
             )
             .map_err(AppError::from)?
         } else {
-            forward_streaming_response(response).map_err(AppError::from)?
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body_bytes = response.bytes().await.unwrap_or_default();
+            let message = upstream_error_message_from_bytes(status, &body_bytes);
+
+            let mut record = RequestResponseRecord::new(
+                endpoint_id,
+                endpoint_name.clone(),
+                endpoint_host,
+                model.clone(),
+                request_type,
+                request_body.clone(),
+                status,
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            record.status = RecordStatus::Error {
+                message: message.clone(),
+            };
+            save_request_record(state.request_history.clone(), record);
+
+            let mut response = Response::new(Body::from(body_bytes));
+            *response.status_mut() = status;
+            {
+                let response_headers = response.headers_mut();
+                for (name, value) in headers.iter() {
+                    if let (Ok(header_name), Ok(header_value)) = (
+                        HeaderName::from_bytes(name.as_str().as_bytes()),
+                        HeaderValue::from_bytes(value.as_bytes()),
+                    ) {
+                        response_headers.insert(header_name, header_value);
+                    }
+                }
+            }
+            if !response
+                .headers()
+                .contains_key(axum::http::header::CONTENT_TYPE)
+            {
+                response.headers_mut().insert(
+                    axum::http::header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/json"),
+                );
+            }
+            response
         };
         if let Some(wait_ms) = queued_wait_ms {
             add_queue_headers(&mut axum_response, wait_ms);
@@ -1179,11 +1219,7 @@ async fn proxy_openai_post(
         // OpenAI互換経路では upstream 非2xx は 502 に正規化して返す
         let status_code = StatusCode::BAD_GATEWAY;
         let body_bytes = response.bytes().await.unwrap_or_default();
-        let message = if body_bytes.is_empty() {
-            status.to_string()
-        } else {
-            String::from_utf8_lossy(&body_bytes).trim().to_string()
-        };
+        let message = upstream_error_message_from_bytes(status, &body_bytes);
 
         {
             let mut record = RequestResponseRecord::new(

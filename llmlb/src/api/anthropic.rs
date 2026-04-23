@@ -6,6 +6,7 @@
 use crate::api::error::AppError;
 use crate::api::model_name::rewrite_payload_model_for_endpoint;
 use crate::api::models::load_registered_model;
+use crate::api::openai_util::upstream_error_message_from_bytes;
 use crate::api::proxy::{
     forward_streaming_response, forward_to_endpoint, record_endpoint_request_stats,
     save_request_record, select_available_endpoint_with_queue_for_model, QueueSelection,
@@ -456,12 +457,13 @@ async fn proxy_local_anthropic_messages(
         &endpoint,
         "/v1/chat/completions",
         body_bytes,
-        stream,
+        true,
     )
     .await
     {
         Ok(response) => response,
         Err(err) => {
+            let (error_status, error_type, message) = anthropic_upstream_error_details(&err);
             let duration = started.elapsed();
             request_lease
                 .complete(RequestOutcome::Error, duration)
@@ -487,21 +489,17 @@ async fn proxy_local_anthropic_messages(
                 model.clone(),
                 request_type,
                 request_body,
-                StatusCode::BAD_GATEWAY,
+                error_status,
                 duration,
                 client_ip,
                 api_key_id,
             );
             record.status = RecordStatus::Error {
-                message: err.to_string(),
+                message: message.clone(),
             };
             save_request_record(state.request_history.clone(), record);
 
-            return Ok(anthropic_error_response(
-                StatusCode::BAD_GATEWAY,
-                "api_error",
-                "OpenAI-compatible upstream request failed",
-            ));
+            return Ok(anthropic_error_response(error_status, error_type, message));
         }
     };
 
@@ -537,7 +535,35 @@ async fn proxy_local_anthropic_messages(
             );
         }
 
-        let mut record = RequestResponseRecord::new(
+        if !succeeded {
+            let body = upstream.bytes().await.unwrap_or_default();
+            let message = upstream_error_message_from_bytes(upstream_status, &body);
+            let (anthropic_status, error_type) =
+                map_upstream_status_to_anthropic_error(upstream_status);
+            let mut record = RequestResponseRecord::new(
+                endpoint_id,
+                endpoint_name,
+                UNSPECIFIED_IP,
+                model.clone(),
+                request_type,
+                request_body,
+                anthropic_status,
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            record.status = RecordStatus::Error {
+                message: message.clone(),
+            };
+            save_request_record(state.request_history.clone(), record);
+            return Ok(anthropic_error_response(
+                anthropic_status,
+                error_type,
+                message,
+            ));
+        }
+
+        let record = RequestResponseRecord::new(
             endpoint_id,
             endpoint_name,
             UNSPECIFIED_IP,
@@ -549,27 +575,7 @@ async fn proxy_local_anthropic_messages(
             client_ip,
             api_key_id,
         );
-        if !succeeded {
-            record.status = RecordStatus::Error {
-                message: format!("Upstream stream returned status {}", upstream_status),
-            };
-        }
         save_request_record(state.request_history.clone(), record);
-
-        if !succeeded {
-            let status = upstream.status();
-            let body = upstream.bytes().await.unwrap_or_default();
-            let message = if body.is_empty() {
-                status.to_string()
-            } else {
-                String::from_utf8_lossy(&body).trim().to_string()
-            };
-            return Ok(anthropic_error_response(
-                StatusCode::BAD_GATEWAY,
-                "api_error",
-                message,
-            ));
-        }
 
         let mut response = transform_openai_streaming_response_to_anthropic(
             upstream,
@@ -589,7 +595,12 @@ async fn proxy_local_anthropic_messages(
     }
 
     let upstream_status = upstream.status();
-    let upstream_body = upstream.json::<Value>().await;
+    let upstream_body = upstream.bytes().await.map_err(|err| {
+        AppError::from(LbError::Http(format!(
+            "Failed to read OpenAI-compatible upstream response: {}",
+            err
+        )))
+    })?;
     let duration = started.elapsed();
 
     if !upstream_status.is_success() {
@@ -610,15 +621,9 @@ async fn proxy_local_anthropic_messages(
             state.event_bus.clone(),
         );
 
-        let message = match &upstream_body {
-            Ok(body) => body
-                .get("error")
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                .unwrap_or(&upstream_status.to_string())
-                .to_string(),
-            Err(_) => upstream_status.to_string(),
-        };
+        let message = upstream_error_message_from_bytes(upstream_status, &upstream_body);
+        let (anthropic_status, error_type) =
+            map_upstream_status_to_anthropic_error(upstream_status);
 
         let mut record = RequestResponseRecord::new(
             endpoint_id,
@@ -627,32 +632,15 @@ async fn proxy_local_anthropic_messages(
             model,
             request_type,
             request_body,
-            upstream_status,
+            anthropic_status,
             duration,
             client_ip,
             api_key_id,
         );
         record.status = RecordStatus::Error {
-            message: format!("Upstream returned status {}", upstream_status),
+            message: message.clone(),
         };
         save_request_record(state.request_history.clone(), record);
-
-        let anthropic_status = match upstream_status.as_u16() {
-            400 => StatusCode::BAD_REQUEST,
-            401 => StatusCode::UNAUTHORIZED,
-            403 => StatusCode::FORBIDDEN,
-            404 => StatusCode::NOT_FOUND,
-            429 => StatusCode::TOO_MANY_REQUESTS,
-            _ => StatusCode::BAD_GATEWAY,
-        };
-        let error_type = match upstream_status.as_u16() {
-            400 => "invalid_request_error",
-            401 => "authentication_error",
-            403 => "permission_error",
-            404 => "not_found_error",
-            429 => "rate_limit_error",
-            _ => "api_error",
-        };
 
         return Ok(anthropic_error_response(
             anthropic_status,
@@ -661,7 +649,7 @@ async fn proxy_local_anthropic_messages(
         ));
     }
 
-    match upstream_body {
+    match serde_json::from_slice::<Value>(&upstream_body) {
         Ok(body) => {
             let response_text = extract_openai_response_text(&body);
             let token_usage = extract_or_estimate_tokens(
@@ -753,14 +741,21 @@ async fn proxy_local_anthropic_messages(
                 api_key_id,
             );
             record.status = RecordStatus::Error {
-                message: format!("Failed to parse OpenAI-compatible response: {}", err),
+                message: format!(
+                    "Failed to parse OpenAI-compatible upstream response: {}",
+                    err
+                ),
             };
             save_request_record(state.request_history.clone(), record);
 
+            let message = format!(
+                "Failed to parse OpenAI-compatible upstream response: {}",
+                err
+            );
             Ok(anthropic_error_response(
                 StatusCode::BAD_GATEWAY,
                 "api_error",
-                "Failed to parse OpenAI-compatible upstream response",
+                message,
             ))
         }
     }
@@ -1649,6 +1644,67 @@ fn anthropic_error_from_lb_error(err: &LbError) -> Response {
             anthropic_error_response(status, "not_found_error", message.clone())
         }
         _ => anthropic_error_response(status, "api_error", err.external_message()),
+    }
+}
+
+fn anthropic_upstream_error_details(err: &LbError) -> (StatusCode, &'static str, String) {
+    let message = lb_error_detail_message(err);
+    match err {
+        LbError::Timeout(_) => (StatusCode::GATEWAY_TIMEOUT, "api_error", message),
+        LbError::Http(_) => (StatusCode::BAD_GATEWAY, "api_error", message),
+        _ => (
+            err.status_code(),
+            anthropic_error_type_for_lb_error(err),
+            message,
+        ),
+    }
+}
+
+fn anthropic_error_type_for_lb_error(err: &LbError) -> &'static str {
+    match err {
+        LbError::Common(CommonError::Validation(_)) => "invalid_request_error",
+        LbError::Authentication(_) => "authentication_error",
+        LbError::Authorization(_) => "permission_error",
+        LbError::NotFound(_) | LbError::InvalidModelName(_) | LbError::EndpointNotFound(_) => {
+            "not_found_error"
+        }
+        _ => "api_error",
+    }
+}
+
+fn lb_error_detail_message(err: &LbError) -> String {
+    match err {
+        LbError::Common(CommonError::Validation(message))
+        | LbError::NotFound(message)
+        | LbError::Database(message)
+        | LbError::Http(message)
+        | LbError::Timeout(message)
+        | LbError::ServiceUnavailable(message)
+        | LbError::Internal(message)
+        | LbError::InvalidModelName(message)
+        | LbError::InsufficientStorage(message)
+        | LbError::PasswordHash(message)
+        | LbError::Jwt(message)
+        | LbError::Authentication(message)
+        | LbError::Authorization(message)
+        | LbError::Conflict(message)
+        | LbError::NoCapableEndpoints(message) => message.clone(),
+        LbError::EndpointNotFound(endpoint_id) => format!("Endpoint not found: {}", endpoint_id),
+        LbError::EndpointOffline(endpoint_id) => format!("Endpoint {} is offline", endpoint_id),
+        LbError::NoEndpointsAvailable => err.external_message().to_string(),
+        LbError::Common(_) => err.external_message().to_string(),
+    }
+}
+
+fn map_upstream_status_to_anthropic_error(status: StatusCode) -> (StatusCode, &'static str) {
+    match status.as_u16() {
+        400 => (StatusCode::BAD_REQUEST, "invalid_request_error"),
+        401 => (StatusCode::UNAUTHORIZED, "authentication_error"),
+        403 => (StatusCode::FORBIDDEN, "permission_error"),
+        404 => (StatusCode::NOT_FOUND, "not_found_error"),
+        408 | 504 => (StatusCode::GATEWAY_TIMEOUT, "api_error"),
+        429 => (StatusCode::TOO_MANY_REQUESTS, "rate_limit_error"),
+        _ => (StatusCode::BAD_GATEWAY, "api_error"),
     }
 }
 
