@@ -1950,20 +1950,39 @@ fn restore_backup(backup: &Path, target: &Path) -> Result<()> {
 }
 
 fn try_restore_backup(backup: &Path, target: &Path) -> io::Result<()> {
+    if let Err(err) = fs::rename(backup, target) {
+        if err.kind() == io::ErrorKind::CrossesDevices {
+            fs::copy(backup, target)?;
+            let _ = fs::remove_file(backup);
+            return Ok(());
+        }
+
+        #[cfg(windows)]
+        if should_remove_target_before_restore(&err) {
+            remove_target_for_restore(target)?;
+            fs::rename(backup, target)?;
+            return Ok(());
+        }
+
+        return Err(err);
+    }
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn should_remove_target_before_restore(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::PermissionDenied
+        || matches!(err.raw_os_error(), Some(5 | 32 | 80 | 183))
+}
+
+#[cfg(windows)]
+fn remove_target_for_restore(target: &Path) -> io::Result<()> {
     if target.exists() {
         match fs::remove_file(target) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(err),
-        }
-    }
-
-    if let Err(err) = fs::rename(backup, target) {
-        if err.kind() == io::ErrorKind::CrossesDevices {
-            fs::copy(backup, target)?;
-            let _ = fs::remove_file(backup);
-        } else {
-            return Err(err);
         }
     }
 
