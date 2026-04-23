@@ -24,9 +24,9 @@
     "@commitlint/config-conventional": "^20.5.0",
     "@playwright/test": "^1.59.1",
     "bats": "^1.13.0",
-    "bun": "^1.3.11",
+    "bun": "^1.3.13",
     "husky": "^9.1.0",
-    "markdownlint-cli2": "^0.22.0"
+    "markdownlint-cli2": "^0.22.1"
   },
   "workspaces": [
     "llmlb/src/web/dashboard"
