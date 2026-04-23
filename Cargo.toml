@@ -11,7 +11,7 @@ repository = "https://github.com/akiojin/llmlb"
 
 [workspace.dependencies]
 # 共通依存クレート
-tokio = { version = "1.51", features = ["full"] }
+tokio = { version = "1.52", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.23", features = ["v4", "serde"] }
