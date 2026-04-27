@@ -10,7 +10,11 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+
+/// 単一エンドポイントが「異常な数」のモデルを申告したと判定する閾値。
+/// この値を超えたら `warn!()` ログで運用者に通知する（実態を持たない誤申告の早期検知用）。
+const SUSPICIOUS_MODEL_COUNT_THRESHOLD: usize = 50;
 use uuid::Uuid;
 
 fn model_lookup_keys(model_id: &str) -> Vec<String> {
@@ -537,6 +541,17 @@ impl EndpointRegistry {
             total = models.len(),
             "Synced endpoint models"
         );
+
+        // 単一エンドポイントが過剰なモデル数を申告した場合に警告（誤申告/設定ミスの早期検知）。
+        // 例: カタログ集約サーバが実体なしの全モデルを `/v1/models` で返してしまうケース。
+        if models.len() > SUSPICIOUS_MODEL_COUNT_THRESHOLD {
+            warn!(
+                endpoint_id = %endpoint_id,
+                model_count = models.len(),
+                threshold = SUSPICIOUS_MODEL_COUNT_THRESHOLD,
+                "Endpoint reported suspiciously many models. Verify the endpoint is not aggregating models it cannot serve (see CLAUDE.md C-1/C-2 notes)"
+            );
+        }
 
         Ok(SyncResult {
             added: added.len(),
@@ -1789,6 +1804,42 @@ mod tests {
         // モデルマッピングが正しく再構築されている
         let found = registry.find_by_model("refresh-model").await;
         assert_eq!(found.len(), 1);
+    }
+
+    /// C-defensive: 単一エンドポイントが 50 件超を申告しても sync_models が成功すること
+    /// （warn ログが出力される動作は tracing 出力検証の範囲外。本テストは regression 用）
+    #[tokio::test]
+    async fn test_sync_models_handles_suspiciously_large_model_list() {
+        let _lock = TEST_LOCK.lock().await;
+        let pool = setup_test_db().await;
+        let registry = EndpointRegistry::new(pool).await.unwrap();
+
+        let mut ep = Endpoint::new(
+            "ManyModelsEndpoint".to_string(),
+            "http://localhost:9027".to_string(),
+            EndpointType::Xllm,
+        );
+        ep.status = EndpointStatus::Online;
+        let ep_id = ep.id;
+        registry.add(ep).await.unwrap();
+
+        // 閾値（50）を確実に超える 60 モデルを申告
+        let models: Vec<EndpointModel> = (0..60)
+            .map(|i| EndpointModel {
+                endpoint_id: ep_id,
+                model_id: format!("test-model-{:03}", i),
+                capabilities: None,
+                max_tokens: None,
+                last_checked: None,
+                supported_apis: vec![SupportedAPI::ChatCompletions],
+                canonical_name: None,
+            })
+            .collect();
+
+        let result = registry.sync_models(ep_id, models).await.unwrap();
+        assert_eq!(result.added, 60);
+        assert_eq!(result.removed, 0);
+        assert_eq!(result.total, 60);
     }
 
     // ===== SyncResult テスト =====

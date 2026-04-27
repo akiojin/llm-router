@@ -1080,6 +1080,12 @@ pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppEr
 
         let aliases = canonical_resolution.aliases_for(model_id);
         let canonical_name = canonical_resolution.canonical_for(model_id);
+        let max_tokens = crate::models::mapping::resolve_max_tokens(
+            &canonical_name,
+            endpoint_model_max_tokens.get(model_id).copied().flatten(),
+        );
+        let (_, quantization) = crate::models::mapping::split_quantization_suffix(model_id);
+        let quantization = quantization.map(|s| s.to_string());
 
         if let Some(m) = registered_map.get(model_id) {
             let caps: crate::types::model::ModelCapabilities = m.get_capabilities().into();
@@ -1101,7 +1107,8 @@ pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppEr
                 "description": m.description,
                 "chat_template": m.chat_template,
                 "supported_apis": supported_apis,
-                "max_tokens": endpoint_model_max_tokens.get(model_id).copied().flatten(),
+                "max_tokens": max_tokens,
+                "quantization": quantization,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
                 "aliases": aliases,
@@ -1116,7 +1123,8 @@ pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppEr
                 "download_progress": null,
                 "ready": ready,
                 "supported_apis": supported_apis,
-                "max_tokens": endpoint_model_max_tokens.get(model_id).copied().flatten(),
+                "max_tokens": max_tokens,
+                "quantization": quantization,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
                 "aliases": aliases,
@@ -1141,6 +1149,12 @@ pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppEr
             .unwrap_or_default();
         let aliases = canonical_resolution.aliases_for(model_id);
         let canonical_name = canonical_resolution.canonical_for(model_id);
+        let max_tokens = crate::models::mapping::resolve_max_tokens(
+            &canonical_name,
+            endpoint_model_max_tokens.get(model_id).copied().flatten(),
+        );
+        let (_, quantization) = crate::models::mapping::split_quantization_suffix(model_id);
+        let quantization = quantization.map(|s| s.to_string());
         data.push(json!({
             "id": model_id,
             "object": "model",
@@ -1150,7 +1164,8 @@ pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppEr
             "download_progress": null,
             "ready": ready_models.contains(model_id),
             "supported_apis": supported_apis,
-            "max_tokens": endpoint_model_max_tokens.get(model_id).copied().flatten(),
+            "max_tokens": max_tokens,
+            "quantization": quantization,
             "endpoint_ids": endpoint_ids,
             "canonical_name": canonical_name,
             "aliases": aliases,
