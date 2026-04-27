@@ -423,6 +423,9 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
             &canonical_name,
             endpoint_model_max_tokens.get(model_id).copied().flatten(),
         );
+        // 量子化サフィックスを ID から分離（G-3 暫定: ID は維持しつつ別フィールドへ出す）
+        let (_, quantization) = crate::models::mapping::split_quantization_suffix(model_id);
+        let quantization = quantization.map(|s| s.to_string());
 
         if let Some(m) = registered_map.get(model_id) {
             let caps: ModelCapabilities = m.get_capabilities().into();
@@ -449,6 +452,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
                 "chat_template": m.chat_template,
                 "supported_apis": supported_apis,
                 "max_tokens": max_tokens,
+                "quantization": quantization,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
                 "aliases": aliases,
@@ -465,6 +469,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
                 "ready": ready,
                 "supported_apis": supported_apis,
                 "max_tokens": max_tokens,
+                "quantization": quantization,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
                 "aliases": aliases,
@@ -4064,6 +4069,76 @@ mod tests {
         assert!(apis.contains(&"chat_completions"));
         assert!(apis.contains(&"embeddings"));
         assert!(apis.contains(&"responses"));
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    /// G-3 暫定: 量子化サフィックス付きモデル ID から `quantization` フィールドが分離されること
+    #[tokio::test]
+    #[serial]
+    async fn list_models_quantization_suffix_is_emitted_as_separate_field() {
+        use crate::types::endpoint::{
+            Endpoint, EndpointModel, EndpointStatus, EndpointType, SupportedAPI,
+        };
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        // 1 つのエンドポイントに「量子化付き」と「量子化なし」両方のモデルを登録して比較
+        let mut endpoint = Endpoint::new(
+            "quant-endpoint".to_string(),
+            "http://127.0.0.1:0".to_string(),
+            EndpointType::OpenaiCompatible,
+        );
+        endpoint.status = EndpointStatus::Online;
+        let endpoint_id = endpoint.id;
+        state
+            .endpoint_registry
+            .add(endpoint)
+            .await
+            .expect("add endpoint");
+        for model_id in ["ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M", "openai/gpt-oss-20b"] {
+            state
+                .endpoint_registry
+                .add_model(&EndpointModel {
+                    endpoint_id,
+                    model_id: model_id.to_string(),
+                    capabilities: None,
+                    max_tokens: None,
+                    last_checked: None,
+                    supported_apis: vec![SupportedAPI::ChatCompletions],
+                    canonical_name: None,
+                })
+                .await
+                .expect("add endpoint model");
+        }
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+
+        let gguf = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M"))
+            .expect("gguf model in /v1/models");
+        assert_eq!(
+            gguf["quantization"].as_str(),
+            Some("Q4_K_M"),
+            "quantization suffix must be emitted as separate field"
+        );
+        assert_eq!(
+            gguf["id"].as_str(),
+            Some("ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M"),
+            "id must remain unchanged for backward compatibility"
+        );
+
+        let plain = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("openai/gpt-oss-20b"))
+            .expect("non-gguf model in /v1/models");
+        assert!(
+            plain["quantization"].is_null(),
+            "non-quantized model must report quantization: null (got: {:?})",
+            plain["quantization"]
+        );
         std::env::remove_var("LLMLB_DATA_DIR");
     }
 

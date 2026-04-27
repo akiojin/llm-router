@@ -382,12 +382,24 @@ impl CanonicalResolution {
     /// 「mapping に登録があるか？」を判定したい場合は [`Self::is_known`] を使用する。
     pub fn canonical_for(&self, model_key: &str) -> String {
         if self.canonical_to_aliases.contains_key(model_key) {
-            model_key.to_string()
-        } else if let Some(canonical) = self.model_to_canonical.get(model_key) {
-            canonical.clone()
-        } else {
-            model_key.to_string()
+            return model_key.to_string();
         }
+        if let Some(canonical) = self.model_to_canonical.get(model_key) {
+            return canonical.clone();
+        }
+        // 量子化サフィックス（:Q4_K_M 等）を除いた base ID で再 lookup する
+        // （ggml-org の GGUF リポジトリのように、量子化バリアントが alias に未登録なケース）。
+        let (base, quant) = split_quantization_suffix(model_key);
+        if quant.is_some() && base != model_key {
+            if self.canonical_to_aliases.contains_key(base) {
+                return base.to_string();
+            }
+            if let Some(canonical) = self.model_to_canonical.get(base) {
+                return canonical.clone();
+            }
+        }
+        // self-canonical fallback
+        model_key.to_string()
     }
 
     /// `model_key` が canonical テーブルに登録されているか。
@@ -428,6 +440,45 @@ pub fn build_canonical_maps<'a>(
             .insert(model_id.to_string(), canonical.to_string());
     }
     res
+}
+
+/// 量子化サフィックス（`:Q4_K_M` `:Q8_0` `:F16` 等）をモデル ID から分離する。
+///
+/// 戻り値は `(base_id, quantization)` のタプル。suffix が量子化タグに該当する場合は
+/// `:` の前後に分割し、そうでなければ元の `model_id` 全体を base として返す
+/// （`qwen3-coder:30b` のような Ollama 形式タグや `gemma3:latest` を誤検出しない）。
+///
+/// G-3 の暫定対応として、ID は当面互換性のため変更せず、量子化情報は新フィールド
+/// `quantization` として API レスポンスに別出しする。
+pub fn split_quantization_suffix(model_id: &str) -> (&str, Option<&str>) {
+    if let Some(idx) = model_id.rfind(':') {
+        let suffix = &model_id[idx + 1..];
+        if is_quantization_tag(suffix) {
+            return (&model_id[..idx], Some(suffix));
+        }
+    }
+    (model_id, None)
+}
+
+/// 与えられた文字列が GGUF / safetensors の量子化タグらしいかを判定する。
+///
+/// 認識する形式:
+/// - `Q[0-9]...`: `Q4_K_M`, `Q5_K_M`, `Q8_0` など（GGUF k-quants/legacy quants）
+/// - `IQ[0-9]...`: `IQ4_XS`, `IQ3_S` など（GGUF imatrix quants）
+/// - 浮動小数点フォーマット: `F16`, `F32`, `BF16`, `FP16`, `FP32`, `F8E4M3FN`, `F8E5M2`
+fn is_quantization_tag(s: &str) -> bool {
+    if matches!(
+        s,
+        "F16" | "F32" | "BF16" | "FP16" | "FP32" | "F8E4M3FN" | "F8E5M2"
+    ) {
+        return true;
+    }
+    let mut chars = s.chars();
+    match chars.next() {
+        Some('Q') => chars.next().is_some_and(|c| c.is_ascii_digit()),
+        Some('I') => chars.next() == Some('Q'),
+        _ => false,
+    }
 }
 
 /// 既知 canonical モデルのコンテキスト長フォールバックテーブル。
@@ -911,6 +962,61 @@ mod tests {
         let res = build_canonical_maps(models.into_iter());
 
         assert_eq!(res.canonical_for("gpt-oss:20b"), "openai/gpt-oss-20b");
+    }
+
+    #[test]
+    fn test_split_quantization_suffix_extracts_quantization_tag() {
+        // GGUF 量子化サフィックス
+        let (base, q) = split_quantization_suffix("ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M");
+        assert_eq!(base, "ggml-org/gemma-4-E4B-it-GGUF");
+        assert_eq!(q, Some("Q4_K_M"));
+
+        // Q5_K_M, Q8_0
+        let (_, q5) = split_quantization_suffix("foo/bar:Q5_K_M");
+        assert_eq!(q5, Some("Q5_K_M"));
+        let (_, q8) = split_quantization_suffix("foo/bar:Q8_0");
+        assert_eq!(q8, Some("Q8_0"));
+
+        // 浮動小数点フォーマット
+        let (_, f16) = split_quantization_suffix("foo/bar:F16");
+        assert_eq!(f16, Some("F16"));
+        let (_, bf16) = split_quantization_suffix("foo/bar:BF16");
+        assert_eq!(bf16, Some("BF16"));
+
+        // imatrix 量子化（IQ*）
+        let (_, iq) = split_quantization_suffix("foo/bar:IQ4_XS");
+        assert_eq!(iq, Some("IQ4_XS"));
+    }
+
+    #[test]
+    fn test_split_quantization_suffix_returns_none_for_non_quantization_tags() {
+        // Ollama タグ（`:30b` `:latest` 等）は量子化ではない
+        let (base, q) = split_quantization_suffix("qwen3-coder:30b");
+        assert_eq!(base, "qwen3-coder:30b");
+        assert_eq!(q, None);
+
+        let (base2, q2) = split_quantization_suffix("gemma3:latest");
+        assert_eq!(base2, "gemma3:latest");
+        assert_eq!(q2, None);
+
+        // コロンなし
+        let (base3, q3) = split_quantization_suffix("openai/gpt-oss-20b");
+        assert_eq!(base3, "openai/gpt-oss-20b");
+        assert_eq!(q3, None);
+    }
+
+    #[test]
+    fn test_canonical_for_falls_back_to_quantization_stripped_lookup() {
+        // base 名が canonical 表に登録されているとき、量子化付き ID も同じ canonical へ解決される
+        let models = vec![("gguf-base", Some("vendor/base"))];
+        let res = build_canonical_maps(models.into_iter());
+
+        // suffix 付き ID は逆引きにないが、suffix 除去後にヒットする
+        assert_eq!(res.canonical_for("gguf-base:Q4_K_M"), "vendor/base");
+        assert_eq!(res.canonical_for("gguf-base:F16"), "vendor/base");
+
+        // 量子化タグでない suffix は self-canonical fallback のまま
+        assert_eq!(res.canonical_for("gguf-base:foo"), "gguf-base:foo");
     }
 
     #[test]
