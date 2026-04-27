@@ -64,20 +64,41 @@ ggml-org のように community 配布版のリポジトリは、独自 SKU 接�
 派生バリエーションは「同じ世代の別 SKU」として扱う。利用者には UI/ドキュメントで
 派生関係を明示する（dashboard 側の表示改善は別 SPEC）。
 
-## 量子化サフィックス方針（G-3、暫定）
+## 量子化サフィックス方針（G-3、暫定実装済み）
 
-現状、モデル ID には量子化サフィックス（`:Q4_K_M`、`:Q5_K_M`、`:Q8_0` 等）が
-含まれるケースと含まれないケースが混在する。本書執筆時点では**現状を維持**し、
-構造的な分離（`id` と `quantization` フィールドへの分割）は別 SPEC で扱う。
+モデル ID には量子化サフィックス（`:Q4_K_M`、`:Q5_K_M`、`:Q8_0`、`:F16`、
+`:IQ4_XS` 等）が含まれるケースと含まれないケースが混在する。後方互換性のため
+**ID 自体は変更せず**、`/v1/models` レスポンスに新フィールド `quantization` を
+追加して情報を別出しする方針を採用する。
 
-**暫定運用**:
+### 実装（`llmlb/src/models/mapping.rs`）
 
-- `BUILTIN_MAPPINGS` に登録する canonical は **量子化サフィックス無し** の repo ID
-  を優先する（例: `ggml-org/gemma-4-E4B-it-GGUF`）。
-- 同一 repo の異なる量子化を別エントリで列挙することは、可能な限り避ける。
-- エンドポイントが量子化サフィックス付き ID を申告してきた場合、self-canonical
-  fallback により `canonical_name` には ID 自身が入る（mapping 不在のため）。
-  恒久対応は `quantization` フィールド分離 SPEC を待つ。
+- `split_quantization_suffix(model_id) -> (&str, Option<&str>)`:
+  - `:Q[0-9]*`、`:IQ[0-9]*`、`:F16` / `:F32` / `:BF16` / `:FP16` / `:FP32` /
+    `:F8E4M3FN` / `:F8E5M2` のいずれかにマッチした場合のみ suffix を分離。
+  - Ollama 形式タグ（`:30b`、`:latest` 等）は誤検出しない。
+- `CanonicalResolution::canonical_for(model_key)`:
+  - 通常の lookup → 量子化サフィックスを除去した base での再 lookup → self-fallback
+    の順で解決。これにより `ggml-org/repo:Q4_K_M` も `BUILTIN_MAPPINGS` に登録した
+    base 名（`ggml-org/repo`）から canonical を引ける。
+
+### レスポンスフィールド
+
+```text
+{
+  "id": "ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M",   // 互換のため変更しない
+  "quantization": "Q4_K_M",                       // 新フィールド（追加）
+  ...
+}
+```
+
+量子化サフィックスを持たないモデルは `quantization: null`。
+
+### 構造的分離（後方互換性影響あり）について
+
+「`id` を量子化なしへ正規化し、エンドポイントへのルーティング時に `quantization`
+を別経路で扱う」構造的分離はクライアント・dashboard・OpenAI 互換契約への影響が
+大きいため、この PR では扱わず別 SPEC（要 Issue 起票）で扱う。
 
 ## 異常検知ログ（C-defensive）
 
@@ -96,10 +117,10 @@ ggml-org のように community 配布版のリポジトリは、独自 SKU 接�
 ## 別 SPEC へ送る項目（このブランチでは扱わない）
 
 - B-4: `lifecycle_status` / `download_progress` の挙動見直し（UI 連動の影響範囲が広い）
-- G-1: ggml-org gemma-4-E2B/E4B の canonical 追加（Gemma 4 系 SKU の実在性確認 G-5 が前提）
-- G-3: 量子化サフィックス命名規則の構造変更（`id` ↔ `quantization` 分離は API 互換性影響あり）
+- G-1: ggml-org gemma-4-E2B/E4B の canonical 追加（Gemma 4 系 SKU の実在性確認 G-5 が前提。本書時点では self-canonical fallback で `canonical_name` に id 自身が入る暫定動作）
+- G-3 構造分離: `id` から量子化部分を除去し別経路でルーティングする破壊的変更（本書時点では `quantization` フィールド追加で情報の別出しまで実施）
 - G-5: Gemma 4 SKU 実在性の事実確認（外部リソース照合）
-- C-1 / C-2 / G-6: 単一エンドポイントの大量モデル誤申告の根本対応（エンドポイント側設定）
+- C-1 / C-2 / G-6: 単一エンドポイントの大量モデル誤申告の根本対応（エンドポイント側設定。本書時点では sync_models() の警告ログで早期検知のみ）
 - C-3: モデル名妥当性の事実確認（外部リソース照合）
 
 ## 関連リンク
@@ -107,4 +128,5 @@ ggml-org のように community 配布版のリポジトリは、独自 SKU 接�
 - 設計概要: [`architecture.md`](./architecture.md)
 - mapping 実装: `llmlb/src/models/mapping.rs`
 - /v1/models 実装: `llmlb/src/api/openai.rs` (`list_models`, `get_model`)
-- 関連 Issue: [#575 OpenAI互換APIゲートウェイ](https://github.com/akiojin/llmlb/issues/575)
+- 親 SPEC: [#575 OpenAI互換APIゲートウェイ](https://github.com/akiojin/llmlb/issues/575)
+- Follow-up Issue: [#643 /v1/models 品質改善: 残課題](https://github.com/akiojin/llmlb/issues/643)
