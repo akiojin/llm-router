@@ -245,8 +245,10 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
         ],
     },
+    // GLM-4.7-Flash: HuggingFace 上の現行リポジトリは `zai-org/glm-4.7-flash`（旧 THUDM）。
+    // canonical は実在するリポジトリ ID に合わせ、`THUDM/...` は alias として残す。
     ModelMapping {
-        canonical: "THUDM/glm-4.7-flash",
+        canonical: "zai-org/glm-4.7-flash",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
@@ -258,17 +260,15 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
             EngineAlias {
                 engine: EndpointType::LmStudio,
-                name: "zai-org/glm-4.7-flash",
+                name: "THUDM/glm-4.7-flash",
             },
         ],
     },
+    // Gemma 4 (26B-A4B): `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
+    // 具体タグ `gemma4` のみを Ollama alias として保持。
     ModelMapping {
         canonical: "google/gemma-4-26b-a4b",
         aliases: &[
-            EngineAlias {
-                engine: EndpointType::Ollama,
-                name: "gemma4:latest",
-            },
             EngineAlias {
                 engine: EndpointType::Ollama,
                 name: "gemma4",
@@ -373,15 +373,27 @@ pub struct CanonicalResolution {
 impl CanonicalResolution {
     /// Resolve the canonical name to display for a given model key.
     ///
-    /// If the key itself is a known canonical name (present in
-    /// `canonical_to_aliases`), returns it directly. Otherwise falls back to
-    /// the `model_to_canonical` reverse map.
-    pub fn canonical_for(&self, model_key: &str) -> Option<String> {
+    /// 解決順:
+    /// 1. `model_key` 自体が canonical 名（`canonical_to_aliases` にエントリあり）→ そのまま返す。
+    /// 2. `model_to_canonical` の逆引きで canonical が見つかる → それを返す。
+    /// 3. いずれも該当なし → `model_key` 自身を canonical として返す（self-canonical fallback）。
+    ///
+    /// fallback により `/v1/models` レスポンスで `canonical_name: null` が出ることがなくなる。
+    /// 「mapping に登録があるか？」を判定したい場合は [`Self::is_known`] を使用する。
+    pub fn canonical_for(&self, model_key: &str) -> String {
         if self.canonical_to_aliases.contains_key(model_key) {
-            Some(model_key.to_string())
+            model_key.to_string()
+        } else if let Some(canonical) = self.model_to_canonical.get(model_key) {
+            canonical.clone()
         } else {
-            self.model_to_canonical.get(model_key).cloned()
+            model_key.to_string()
         }
+    }
+
+    /// `model_key` が canonical テーブルに登録されているか。
+    pub fn is_known(&self, model_key: &str) -> bool {
+        self.canonical_to_aliases.contains_key(model_key)
+            || self.model_to_canonical.contains_key(model_key)
     }
 
     /// Sorted aliases for a given model key.
@@ -416,6 +428,53 @@ pub fn build_canonical_maps<'a>(
             .insert(model_id.to_string(), canonical.to_string());
     }
     res
+}
+
+/// 既知 canonical モデルのコンテキスト長フォールバックテーブル。
+///
+/// エンドポイントが `/v1/models` で `max_tokens` を申告しないケース（B-1, G-7）への対策として、
+/// 公開情報から確認できる代表的なモデルの context window をハードコードしている。
+/// エンドポイント申告が優先されるため、このテーブルはあくまで欠損値補填用。
+///
+/// 値の出典: 各モデルの HuggingFace モデルカード／公式リリースノート時点での公称 context length。
+const KNOWN_CONTEXT_LENGTHS: &[(&str, u32)] = &[
+    // OpenAI gpt-oss
+    ("openai/gpt-oss-20b", 131_072),
+    ("openai/gpt-oss-120b", 131_072),
+    // Qwen
+    ("Qwen/Qwen3-Coder-30B-A3B-Instruct", 262_144),
+    ("Qwen/Qwen3.5-35B-A3B", 262_144),
+    ("Qwen/Qwen2.5-14B-Instruct-AWQ", 32_768),
+    // Google Gemma
+    ("google/gemma-3-27b-it", 131_072),
+    ("google/gemma-4-26b-a4b", 131_072),
+    // GLM
+    ("zai-org/glm-4.7-flash", 131_072),
+    // Nvidia Nemotron
+    ("nvidia/nemotron-3-super-120b-a12b", 131_072),
+    ("nvidia/Nemotron-3-Nano", 131_072),
+    // Meta Llama
+    ("meta-llama/Llama-3.3-70B-Instruct", 131_072),
+    // Embeddings
+    ("nomic-ai/nomic-embed-text-v1.5", 8_192),
+];
+
+/// 既知 canonical の context length を返す（未登録なら `None`）。
+pub fn known_max_tokens(canonical: &str) -> Option<u32> {
+    KNOWN_CONTEXT_LENGTHS
+        .iter()
+        .find(|(name, _)| *name == canonical)
+        .map(|(_, len)| *len)
+}
+
+/// `max_tokens` をエンドポイント申告 → known テーブルの順に解決する。
+///
+/// 値の優先順位:
+/// 1. エンドポイントが申告した値（`endpoint_reported`）。
+/// 2. `KNOWN_CONTEXT_LENGTHS` のフォールバック値。
+/// 3. いずれも該当なし → `None`（API レスポンスでは `null` として表現）。
+pub fn resolve_max_tokens(canonical: &str, endpoint_reported: Option<u32>) -> Option<u32> {
+    endpoint_reported.or_else(|| known_max_tokens(canonical))
 }
 
 /// Resolve a canonical ID by matching against any known alias regardless of endpoint type.
@@ -648,8 +707,13 @@ mod tests {
 
     #[test]
     fn test_glm47_mapping() {
+        // canonical は zai-org に統一（HF 上の現行リポジトリ）
         let result = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(result, Some("THUDM/glm-4.7-flash"));
+        assert_eq!(result, Some("zai-org/glm-4.7-flash"));
+
+        // 旧 THUDM 名は alias として canonical に解決される
+        let legacy = resolve_canonical("THUDM/glm-4.7-flash", &EndpointType::LmStudio);
+        assert_eq!(legacy, Some("zai-org/glm-4.7-flash"));
     }
 
     #[test]
@@ -712,10 +776,14 @@ mod tests {
     #[test]
     fn test_glm_flash_mapping() {
         let ollama = resolve_canonical("glm-4.7-flash:latest", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("THUDM/glm-4.7-flash"));
+        assert_eq!(ollama, Some("zai-org/glm-4.7-flash"));
 
         let result = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(result, Some("THUDM/glm-4.7-flash"));
+        assert_eq!(result, Some("zai-org/glm-4.7-flash"));
+
+        // legacy THUDM/... も alias 経由で canonical に解決される
+        let legacy = resolve_canonical("THUDM/glm-4.7-flash", &EndpointType::LmStudio);
+        assert_eq!(legacy, Some("zai-org/glm-4.7-flash"));
     }
 
     #[test]
@@ -743,11 +811,13 @@ mod tests {
 
     #[test]
     fn test_gemma4_ollama_resolves_to_canonical() {
-        let result = resolve_canonical("gemma4:latest", &EndpointType::Ollama);
-        assert_eq!(result, Some("google/gemma-4-26b-a4b"));
+        // `gemma4:latest` は撤廃済み（将来世代の登場で意味がねじれるため）。
+        let removed = resolve_canonical("gemma4:latest", &EndpointType::Ollama);
+        assert_eq!(removed, None);
 
-        let result2 = resolve_canonical("gemma4", &EndpointType::Ollama);
-        assert_eq!(result2, Some("google/gemma-4-26b-a4b"));
+        // 具体タグ `gemma4` は引き続き alias として解決される。
+        let result = resolve_canonical("gemma4", &EndpointType::Ollama);
+        assert_eq!(result, Some("google/gemma-4-26b-a4b"));
     }
 
     #[test]
@@ -758,8 +828,9 @@ mod tests {
 
     #[test]
     fn test_gemma4_engine_name_resolution() {
+        // `:latest` 撤廃により Ollama 側の優先 alias は具体タグ `gemma4`
         let ollama = resolve_engine_name("google/gemma-4-26b-a4b", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("gemma4:latest"));
+        assert_eq!(ollama, Some("gemma4"));
 
         let lms = resolve_engine_name("google/gemma-4-26b-a4b", &EndpointType::LmStudio);
         assert_eq!(lms, Some("google/gemma-4-26b-a4b"));
@@ -830,7 +901,7 @@ mod tests {
 
         assert_eq!(
             res.canonical_for("openai/gpt-oss-20b"),
-            Some("openai/gpt-oss-20b".to_string())
+            "openai/gpt-oss-20b"
         );
     }
 
@@ -839,18 +910,61 @@ mod tests {
         let models = vec![("gpt-oss:20b", Some("openai/gpt-oss-20b"))];
         let res = build_canonical_maps(models.into_iter());
 
+        assert_eq!(res.canonical_for("gpt-oss:20b"), "openai/gpt-oss-20b");
+    }
+
+    #[test]
+    fn test_known_max_tokens_returns_value_for_known_canonical() {
+        assert_eq!(known_max_tokens("openai/gpt-oss-20b"), Some(131_072));
         assert_eq!(
-            res.canonical_for("gpt-oss:20b"),
-            Some("openai/gpt-oss-20b".to_string())
+            known_max_tokens("Qwen/Qwen3-Coder-30B-A3B-Instruct"),
+            Some(262_144)
+        );
+        assert_eq!(known_max_tokens("zai-org/glm-4.7-flash"), Some(131_072));
+        assert_eq!(
+            known_max_tokens("nomic-ai/nomic-embed-text-v1.5"),
+            Some(8_192)
         );
     }
 
     #[test]
-    fn test_canonical_for_returns_none_for_unknown() {
+    fn test_known_max_tokens_returns_none_for_unknown() {
+        assert_eq!(known_max_tokens("ggml-org/gemma-4-E2B-it-GGUF"), None);
+        assert_eq!(known_max_tokens(""), None);
+    }
+
+    #[test]
+    fn test_resolve_max_tokens_prefers_endpoint_reported() {
+        // endpoint 申告がある場合はそれを採用（既知テーブルより優先）
+        let resolved = resolve_max_tokens("openai/gpt-oss-20b", Some(65_536));
+        assert_eq!(resolved, Some(65_536));
+    }
+
+    #[test]
+    fn test_resolve_max_tokens_falls_back_to_known_table() {
+        // endpoint 申告が無い場合は known テーブルから取得
+        let resolved = resolve_max_tokens("openai/gpt-oss-20b", None);
+        assert_eq!(resolved, Some(131_072));
+    }
+
+    #[test]
+    fn test_resolve_max_tokens_returns_none_for_unknown() {
+        // どちらにも無ければ None（レスポンスでは null）
+        let resolved = resolve_max_tokens("totally-unknown-model", None);
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
+    fn test_canonical_for_returns_self_for_unknown() {
+        // self-canonical fallback: mapping 未登録のモデルは id 自身を canonical とする
+        // （`/v1/models` レスポンスで canonical_name: null を出さない方針）
         let models = vec![("gpt-oss:20b", Some("openai/gpt-oss-20b"))];
         let res = build_canonical_maps(models.into_iter());
 
-        assert_eq!(res.canonical_for("unknown-model"), None);
+        assert_eq!(res.canonical_for("unknown-model"), "unknown-model");
+        assert!(!res.is_known("unknown-model"));
+        assert!(res.is_known("openai/gpt-oss-20b"));
+        assert!(res.is_known("gpt-oss:20b"));
     }
 
     #[test]

@@ -416,8 +416,13 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
 
         // エイリアス情報を取得
         let aliases = canonical_resolution.aliases_for(model_id);
-        // canonical_nameを取得（表示用）
+        // canonical_nameを取得（self-fallback により null は返らない）
         let canonical_name = canonical_resolution.canonical_for(model_id);
+        // max_tokens: endpoint 申告 → 既知 canonical テーブルの順で解決
+        let max_tokens = crate::models::mapping::resolve_max_tokens(
+            &canonical_name,
+            endpoint_model_max_tokens.get(model_id).copied().flatten(),
+        );
 
         if let Some(m) = registered_map.get(model_id) {
             let caps: ModelCapabilities = m.get_capabilities().into();
@@ -443,7 +448,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
                 "description": m.description,
                 "chat_template": m.chat_template,
                 "supported_apis": supported_apis,
-                "max_tokens": endpoint_model_max_tokens.get(model_id).copied().flatten(),
+                "max_tokens": max_tokens,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
                 "aliases": aliases,
@@ -459,7 +464,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
                 "download_progress": null,
                 "ready": ready,
                 "supported_apis": supported_apis,
-                "max_tokens": endpoint_model_max_tokens.get(model_id).copied().flatten(),
+                "max_tokens": max_tokens,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
                 "aliases": aliases,
@@ -4059,6 +4064,55 @@ mod tests {
         assert!(apis.contains(&"chat_completions"));
         assert!(apis.contains(&"embeddings"));
         assert!(apis.contains(&"responses"));
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    /// B-1/G-7: endpoint が max_tokens を申告しない場合に既知 canonical テーブルから補填すること
+    #[tokio::test]
+    #[serial]
+    async fn list_models_max_tokens_falls_back_to_known_canonical_table() {
+        use crate::registry::models::ModelInfo;
+        use crate::types::endpoint::SupportedAPI;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        // 既知 canonical のモデルを登録（テーブルには 131072 がある）
+        let model = ModelInfo::new(
+            "openai/gpt-oss-20b".to_string(),
+            0,
+            "test".to_string(),
+            0,
+            vec![],
+        );
+        let storage = crate::db::models::ModelStorage::new(state.db_pool.clone());
+        storage.save_model(&model).await.expect("save model");
+
+        // endpoint は max_tokens を申告しない（add_endpoint_with_supported_apis のヘルパは
+        // EndpointModel.max_tokens=None で登録する）
+        add_endpoint_with_supported_apis(
+            &state,
+            "fallback-endpoint",
+            "openai/gpt-oss-20b",
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+        let model = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("openai/gpt-oss-20b"))
+            .expect("model in /v1/models");
+
+        let max_tokens = model["max_tokens"]
+            .as_u64()
+            .expect("max_tokens fallback applied");
+        assert_eq!(
+            max_tokens, 131_072,
+            "max_tokens must fall back to KNOWN_CONTEXT_LENGTHS for known canonical (got: {})",
+            max_tokens
+        );
         std::env::remove_var("LLMLB_DATA_DIR");
     }
 
