@@ -5,6 +5,58 @@
 /// 未指定/仮想IPアドレス（クラウドプロバイダ等、実IPを持たない場合に使用）
 const UNSPECIFIED_IP: std::net::IpAddr = std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED);
 
+/// `id` の組織プレフィックス（"org/name" の "org"）を `owned_by` として返す。
+/// スラッシュがない場合は "load balancer" にフォールバック。
+fn owned_by_from_id(id: &str) -> String {
+    match id.split_once('/') {
+        Some((org, _)) if !org.is_empty() => org.to_string(),
+        _ => "load balancer".to_string(),
+    }
+}
+
+/// 登録済みモデルの capabilities とエンドポイント申告 supported_apis を統合し、
+/// `as_str()` 昇順で並べた `Vec<String>` を返す（OpenAI互換 /v1/models 用）。
+///
+/// - 登録モデルの `ModelCapability` から SupportedAPI を導出（embedding 等の取りこぼし対策）。
+/// - capability マッピングが空の場合のみ、エンドポイント申告にフォールバック。
+/// - 出力は決定論的（HashSet 由来の非決定的順序を排除）。
+fn build_supported_apis(
+    model: Option<&crate::registry::models::ModelInfo>,
+    endpoint_reported: Option<&std::collections::HashSet<crate::types::endpoint::SupportedAPI>>,
+) -> Vec<String> {
+    use crate::types::endpoint::SupportedAPI;
+    use std::collections::HashSet;
+
+    let mut set: HashSet<SupportedAPI> = HashSet::new();
+    if let Some(m) = model {
+        for cap in m.get_capabilities() {
+            match cap {
+                ModelCapability::TextGeneration => {
+                    set.insert(SupportedAPI::ChatCompletions);
+                    set.insert(SupportedAPI::Responses);
+                }
+                ModelCapability::Embedding => {
+                    set.insert(SupportedAPI::Embeddings);
+                }
+                _ => {}
+            }
+        }
+    }
+    if set.is_empty() {
+        if let Some(reported) = endpoint_reported {
+            for api in reported {
+                set.insert(*api);
+            }
+        }
+        if set.is_empty() {
+            set.insert(SupportedAPI::ChatCompletions);
+        }
+    }
+    let mut v: Vec<SupportedAPI> = set.into_iter().collect();
+    v.sort_by_key(|a| a.as_str());
+    v.into_iter().map(|a| a.as_str().to_string()).collect()
+}
+
 use crate::common::{
     error::{CommonError, LbError},
     protocol::{RecordStatus, RequestResponseRecord, RequestType, TpsApiKind},
@@ -338,22 +390,21 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
     let available_set: std::collections::HashSet<String> =
         available_models.iter().cloned().collect();
 
-    // 追跡用：モデルID一覧
-    let mut seen_models: HashSet<String> = HashSet::new();
-
     // OpenAI互換レスポンス形式 + Azure capabilities + ダッシュボード拡張
     let mut data: Vec<Value> = Vec::new();
 
+    // 観測時刻（last_modified が無いモデルは観測時刻を created に採用）
+    let observed_now = chrono::Utc::now().timestamp();
+
     // ノードのモデルを追加
     for model_id in &available_models {
-        seen_models.insert(model_id.clone());
         let ready = available_set.contains(model_id);
 
-        // supported_apisを取得（デフォルトはchat_completions）
-        let supported_apis: Vec<String> = endpoint_model_apis
-            .get(model_id)
-            .map(|apis| apis.iter().map(|a| a.as_str().to_string()).collect())
-            .unwrap_or_else(|| vec!["chat_completions".to_string()]);
+        // supported_apis: 登録モデルの capability 由来 / エンドポイント申告 / フォールバックを統合し as_str() 昇順で返す
+        let supported_apis: Vec<String> = build_supported_apis(
+            registered_map.get(model_id),
+            endpoint_model_apis.get(model_id),
+        );
         let endpoint_ids: Vec<String> = endpoint_model_ids
             .get(model_id)
             .map(|ids| {
@@ -370,11 +421,15 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
 
         if let Some(m) = registered_map.get(model_id) {
             let caps: ModelCapabilities = m.get_capabilities().into();
+            let created = m
+                .last_modified
+                .map(|t| t.timestamp())
+                .unwrap_or(observed_now);
             let obj = json!({
                 "id": m.name,
                 "object": "model",
-                "created": 0,
-                "owned_by": "load balancer",
+                "created": created,
+                "owned_by": owned_by_from_id(&m.name),
                 "capabilities": caps,
                 "lifecycle_status": LifecycleStatus::Registered,
                 "download_progress": null,
@@ -398,8 +453,8 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
             let obj = json!({
                 "id": model_id,
                 "object": "model",
-                "created": 0,
-                "owned_by": "load balancer",
+                "created": observed_now,
+                "owned_by": owned_by_from_id(model_id),
                 "lifecycle_status": LifecycleStatus::Registered,
                 "download_progress": null,
                 "ready": ready,
@@ -413,36 +468,9 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
         }
     }
 
-    // SPEC-0f1de549: エンドポイント専用モデルを追加（ノードにないモデル）
-    for (model_id, apis) in &endpoint_model_apis {
-        if seen_models.contains(model_id) {
-            continue;
-        }
-        seen_models.insert(model_id.clone());
-
-        let supported_apis: Vec<String> = apis.iter().map(|a| a.as_str().to_string()).collect();
-        let endpoint_ids: Vec<String> = endpoint_model_ids
-            .get(model_id)
-            .map(|ids| {
-                let mut ids: Vec<String> = ids.iter().cloned().collect();
-                ids.sort();
-                ids
-            })
-            .unwrap_or_default();
-        let obj = json!({
-            "id": model_id,
-            "object": "model",
-            "created": 0,
-            "owned_by": "endpoint",
-            "lifecycle_status": LifecycleStatus::Registered,
-            "download_progress": null,
-            "ready": true,
-            "supported_apis": supported_apis,
-            "max_tokens": endpoint_model_max_tokens.get(model_id).copied().flatten(),
-            "endpoint_ids": endpoint_ids,
-        });
-        data.push(obj);
-    }
+    // NOTE: かつて存在した "endpoint_model_apis を再走査する" ループは
+    // available_models = endpoint_model_apis.keys() のため到達不能だった。
+    // 上の available_models ループで全件カバー済み。
 
     // NOTE: SPEC-6cd7f960 FR-6により、登録済みだがオンラインエンドポイントにないモデルは
     // /v1/models に含めない（利用可能なモデルのみを返す）
@@ -530,11 +558,10 @@ pub async fn get_model(
         return Ok((StatusCode::NOT_FOUND, Json(body)).into_response());
     }
 
-    // supported_apisを取得（デフォルトはchat_completions）
-    let supported_apis: Vec<String> = endpoint_model_apis
-        .get(&model_id)
-        .map(|apis| apis.iter().map(|a| a.as_str().to_string()).collect())
-        .unwrap_or_else(|| vec!["chat_completions".to_string()]);
+    // supported_apis: 登録モデルの capability 由来 / エンドポイント申告 を統合し as_str() 昇順で返す
+    let supported_apis: Vec<String> =
+        build_supported_apis(model.as_ref(), endpoint_model_apis.get(&model_id));
+    let observed_now = chrono::Utc::now().timestamp();
 
     if let Some(model) = model {
         // Azure OpenAI 形式の capabilities (boolean object)
@@ -545,12 +572,16 @@ pub async fn get_model(
         } else {
             LifecycleStatus::Pending
         };
+        let created = model
+            .last_modified
+            .map(|t| t.timestamp())
+            .unwrap_or(observed_now);
 
         let body = json!({
             "id": model_id,
             "object": "model",
-            "created": 0,
-            "owned_by": "load balancer",
+            "created": created,
+            "owned_by": owned_by_from_id(&model_id),
             "capabilities": caps,
             // ダッシュボード用拡張フィールド
             "lifecycle_status": lifecycle_status,
@@ -570,20 +601,14 @@ pub async fn get_model(
         return Ok((StatusCode::OK, Json(body)).into_response());
     }
 
-    // エンドポイント専用モデルまたはノードのモデル（メタデータなし）
-    let owned_by = if is_endpoint_model {
-        "endpoint"
-    } else {
-        "load balancer"
-    };
-
+    // エンドポイント専用モデル（メタデータなし）
     let body = json!({
         "id": model_id,
         "object": "model",
-        "created": 0,
-        "owned_by": owned_by,
+        "created": observed_now,
+        "owned_by": owned_by_from_id(&model_id),
         "lifecycle_status": LifecycleStatus::Registered,
-        "ready": true,
+        "ready": is_endpoint_model,
         "supported_apis": supported_apis,
     });
 
@@ -3826,5 +3851,258 @@ mod tests {
             HeaderValue::from_static("for=unknown;proto=https"),
         );
         assert!(extract_client_ip_from_headers(&headers).is_none());
+    }
+
+    // ===== /v1/models response correction tests (#575 US-001 補正対応) =====
+
+    /// helper: 指定 supported_apis を申告するオンラインエンドポイントを登録する
+    async fn add_endpoint_with_supported_apis(
+        state: &AppState,
+        endpoint_name: &str,
+        model_id: &str,
+        apis: Vec<crate::types::endpoint::SupportedAPI>,
+    ) -> uuid::Uuid {
+        use crate::types::endpoint::{Endpoint, EndpointModel, EndpointStatus, EndpointType};
+        let mut endpoint = Endpoint::new(
+            endpoint_name.to_string(),
+            "http://127.0.0.1:0".to_string(),
+            EndpointType::OpenaiCompatible,
+        );
+        endpoint.status = EndpointStatus::Online;
+        let endpoint_id = endpoint.id;
+        state
+            .endpoint_registry
+            .add(endpoint)
+            .await
+            .expect("add endpoint");
+        state
+            .endpoint_registry
+            .add_model(&EndpointModel {
+                endpoint_id,
+                model_id: model_id.to_string(),
+                capabilities: None,
+                max_tokens: None,
+                last_checked: None,
+                supported_apis: apis,
+                canonical_name: None,
+            })
+            .await
+            .expect("add endpoint model");
+        endpoint_id
+    }
+
+    /// helper: list_models() を呼び出し、JSON ボディを返す
+    async fn fetch_list_models(state: AppState) -> serde_json::Value {
+        let resp = super::list_models(axum::extract::State(state))
+            .await
+            .expect("list_models ok");
+        let bytes = to_bytes(resp.into_body(), 1_000_000)
+            .await
+            .expect("read body");
+        serde_json::from_slice::<serde_json::Value>(&bytes).expect("parse json")
+    }
+
+    /// A-1 RED: 登録済み embedding モデルの supported_apis に "embeddings" が含まれること
+    #[tokio::test]
+    #[serial]
+    async fn list_models_embedding_capability_emits_embeddings_api() {
+        use crate::registry::models::ModelInfo;
+        use crate::types::endpoint::SupportedAPI;
+        use crate::types::ModelCapability;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        // embedding capability で登録
+        let mut model = ModelInfo::with_capabilities(
+            "nomic-ai/nomic-embed-text-v1.5".to_string(),
+            0,
+            "embedding model".to_string(),
+            0,
+            vec![],
+            vec![ModelCapability::Embedding],
+        );
+        model.repo = Some("nomic-ai/nomic-embed-text-v1.5".to_string());
+        let storage = crate::db::models::ModelStorage::new(state.db_pool.clone());
+        storage.save_model(&model).await.expect("save model");
+
+        // エンドポイントは ChatCompletions しか申告しない（実環境の典型ケース）
+        add_endpoint_with_supported_apis(
+            &state,
+            "embed-endpoint",
+            "nomic-ai/nomic-embed-text-v1.5",
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+        let model = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("nomic-ai/nomic-embed-text-v1.5"))
+            .expect("embedding model in /v1/models");
+
+        let apis: Vec<&str> = model["supported_apis"]
+            .as_array()
+            .expect("supported_apis array")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            apis.contains(&"embeddings"),
+            "embedding-capability model must report 'embeddings' in supported_apis (got: {:?})",
+            apis
+        );
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    /// A-2 RED: 登録済みモデルの created は last_modified の Unix epoch を反映すること
+    #[tokio::test]
+    #[serial]
+    async fn list_models_registered_created_reflects_last_modified() {
+        use crate::registry::models::ModelInfo;
+        use crate::types::endpoint::SupportedAPI;
+        use chrono::TimeZone;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let known_ts = chrono::Utc.with_ymd_and_hms(2024, 6, 1, 12, 0, 0).unwrap();
+        let mut model = ModelInfo::new(
+            "vendor/known-time-model".to_string(),
+            0,
+            "test".to_string(),
+            0,
+            vec![],
+        );
+        model.last_modified = Some(known_ts);
+        let storage = crate::db::models::ModelStorage::new(state.db_pool.clone());
+        storage.save_model(&model).await.expect("save model");
+
+        add_endpoint_with_supported_apis(
+            &state,
+            "ts-endpoint",
+            "vendor/known-time-model",
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+        let model = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("vendor/known-time-model"))
+            .expect("model in /v1/models");
+
+        let created = model["created"].as_i64().expect("created is integer");
+        assert_eq!(
+            created,
+            known_ts.timestamp(),
+            "registered model created must reflect last_modified epoch (got: {})",
+            created
+        );
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    /// A-3 RED: supported_apis は as_str() 昇順で並ぶこと（決定論化）
+    #[tokio::test]
+    #[serial]
+    async fn list_models_supported_apis_are_sorted() {
+        use crate::registry::models::ModelInfo;
+        use crate::types::endpoint::SupportedAPI;
+        use crate::types::ModelCapability;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        // TextGeneration + Embedding の両対応モデル
+        let model = ModelInfo::with_capabilities(
+            "vendor/multi-cap".to_string(),
+            0,
+            "multi capability".to_string(),
+            0,
+            vec![],
+            vec![ModelCapability::TextGeneration, ModelCapability::Embedding],
+        );
+        let storage = crate::db::models::ModelStorage::new(state.db_pool.clone());
+        storage.save_model(&model).await.expect("save model");
+
+        add_endpoint_with_supported_apis(
+            &state,
+            "multi-endpoint",
+            "vendor/multi-cap",
+            vec![SupportedAPI::ChatCompletions, SupportedAPI::Embeddings],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+        let model = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("vendor/multi-cap"))
+            .expect("multi-cap model in /v1/models");
+
+        let apis: Vec<&str> = model["supported_apis"]
+            .as_array()
+            .expect("supported_apis array")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        let mut sorted = apis.clone();
+        sorted.sort();
+        assert_eq!(
+            apis, sorted,
+            "supported_apis must be in ascending lexicographic order (got: {:?})",
+            apis
+        );
+        // 期待される3要素を網羅していること（A-1 の効果も込み）
+        assert!(apis.contains(&"chat_completions"));
+        assert!(apis.contains(&"embeddings"));
+        assert!(apis.contains(&"responses"));
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    /// A-5 RED: owned_by は id の組織プレフィックス由来になること（"load balancer" 固定値からの脱却）
+    #[tokio::test]
+    #[serial]
+    async fn list_models_owned_by_uses_id_org_prefix() {
+        use crate::registry::models::ModelInfo;
+        use crate::types::endpoint::SupportedAPI;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let model = ModelInfo::new(
+            "Qwen/Qwen3-Coder-30B-A3B-Instruct".to_string(),
+            0,
+            "test".to_string(),
+            0,
+            vec![],
+        );
+        let storage = crate::db::models::ModelStorage::new(state.db_pool.clone());
+        storage.save_model(&model).await.expect("save model");
+
+        add_endpoint_with_supported_apis(
+            &state,
+            "qwen-endpoint",
+            "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+        let model = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("Qwen/Qwen3-Coder-30B-A3B-Instruct"))
+            .expect("model in /v1/models");
+
+        let owned_by = model["owned_by"].as_str().expect("owned_by string");
+        assert_eq!(
+            owned_by, "Qwen",
+            "owned_by must derive from id organization prefix (got: {})",
+            owned_by
+        );
+        std::env::remove_var("LLMLB_DATA_DIR");
     }
 }
