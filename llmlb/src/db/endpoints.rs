@@ -403,12 +403,13 @@ pub async fn add_endpoint_model(
         .capabilities
         .as_ref()
         .map(|c| serde_json::to_string(c).unwrap_or_default());
+    let supported_apis_json = serde_json::to_string(&model.supported_apis).unwrap_or_default();
     let last_checked = model.last_checked.map(|dt| dt.to_rfc3339());
 
     sqlx::query(
         r#"
-        INSERT OR REPLACE INTO endpoint_models (endpoint_id, model_id, capabilities, max_tokens, last_checked, canonical_name)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO endpoint_models (endpoint_id, model_id, capabilities, max_tokens, last_checked, supported_apis, canonical_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(model.endpoint_id.to_string())
@@ -416,6 +417,7 @@ pub async fn add_endpoint_model(
     .bind(&capabilities_json)
     .bind(model.max_tokens.map(|v| v as i32))
     .bind(&last_checked)
+    .bind(&supported_apis_json)
     .bind(&model.canonical_name)
     .execute(pool)
     .await?;
@@ -432,17 +434,19 @@ pub async fn update_endpoint_model(
         .capabilities
         .as_ref()
         .map(|c| serde_json::to_string(c).unwrap_or_default());
+    let supported_apis_json = serde_json::to_string(&model.supported_apis).unwrap_or_default();
 
     let result = sqlx::query(
         r#"
         UPDATE endpoint_models
-        SET capabilities = ?, max_tokens = ?, last_checked = ?, canonical_name = ?
+        SET capabilities = ?, max_tokens = ?, last_checked = ?, supported_apis = ?, canonical_name = ?
         WHERE endpoint_id = ? AND model_id = ?
         "#,
     )
     .bind(&capabilities_json)
     .bind(model.max_tokens.map(|v| v as i32))
     .bind(model.last_checked.map(|dt| dt.to_rfc3339()))
+    .bind(&supported_apis_json)
     .bind(&model.canonical_name)
     .bind(model.endpoint_id.to_string())
     .bind(&model.model_id)

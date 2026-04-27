@@ -17,9 +17,15 @@ fn owned_by_from_id(id: &str) -> String {
 /// 登録済みモデルの capabilities とエンドポイント申告 supported_apis を統合し、
 /// `as_str()` 昇順で並べた `Vec<String>` を返す（OpenAI互換 /v1/models 用）。
 ///
-/// - 登録モデルの `ModelCapability` から SupportedAPI を導出（embedding 等の取りこぼし対策）。
-/// - capability マッピングが空の場合のみ、エンドポイント申告にフォールバック。
-/// - 出力は決定論的（HashSet 由来の非決定的順序を排除）。
+/// 解決順:
+/// 1. 登録モデルの `ModelCapability` から導出した SupportedAPI を加算する
+///    （A-1: embedding capability の取りこぼし対策）。
+/// 2. **常に** endpoint_reported もマージする。`ModelInfo::get_capabilities()` は
+///    メタデータが空のレガシー行に対して `[TextGeneration]` を既定で返すため、
+///    capability 由来の set が非空でも endpoint がサポートする `embeddings` 等を
+///    取りこぼさないように両者をマージする（CodeRabbit/Codex review #642 対応）。
+/// 3. 双方が何も寄与しなければ `ChatCompletions` のフォールバック。
+/// 4. 最後に `as_str()` 昇順で並べて決定論化する（A-3）。
 fn build_supported_apis(
     model: Option<&crate::registry::models::ModelInfo>,
     endpoint_reported: Option<&std::collections::HashSet<crate::types::endpoint::SupportedAPI>>,
@@ -42,15 +48,13 @@ fn build_supported_apis(
             }
         }
     }
+    if let Some(reported) = endpoint_reported {
+        for api in reported {
+            set.insert(*api);
+        }
+    }
     if set.is_empty() {
-        if let Some(reported) = endpoint_reported {
-            for api in reported {
-                set.insert(*api);
-            }
-        }
-        if set.is_empty() {
-            set.insert(SupportedAPI::ChatCompletions);
-        }
+        set.insert(SupportedAPI::ChatCompletions);
     }
     let mut v: Vec<SupportedAPI> = set.into_iter().collect();
     v.sort_by_key(|a| a.as_str());
@@ -4069,6 +4073,59 @@ mod tests {
         assert!(apis.contains(&"chat_completions"));
         assert!(apis.contains(&"embeddings"));
         assert!(apis.contains(&"responses"));
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    /// Regression: capability 由来 set が非空でも endpoint_reported が必ずマージされること
+    /// （review #642 — ModelInfo がレガシー行で `[TextGeneration]` を既定返却することにより
+    /// endpoint が報告する `embeddings` 等が取りこぼされていた問題の検証）
+    #[tokio::test]
+    #[serial]
+    async fn list_models_endpoint_apis_are_merged_even_when_model_capabilities_default() {
+        use crate::registry::models::ModelInfo;
+        use crate::types::endpoint::SupportedAPI;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        // capabilities を明示せず登録（=> get_capabilities() は [TextGeneration] を既定返却）
+        let model = ModelInfo::new(
+            "vendor/legacy-row".to_string(),
+            0,
+            "legacy registration without capabilities".to_string(),
+            0,
+            vec![],
+        );
+        let storage = crate::db::models::ModelStorage::new(state.db_pool.clone());
+        storage.save_model(&model).await.expect("save model");
+
+        // endpoint は Embeddings をサポートしている（実態を申告）
+        add_endpoint_with_supported_apis(
+            &state,
+            "embed-endpoint",
+            "vendor/legacy-row",
+            vec![SupportedAPI::Embeddings],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+        let model = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("vendor/legacy-row"))
+            .expect("model in /v1/models");
+
+        let apis: Vec<&str> = model["supported_apis"]
+            .as_array()
+            .expect("supported_apis array")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            apis.contains(&"embeddings"),
+            "endpoint-reported `embeddings` must not be dropped even when capability-derived set is non-empty (got: {:?})",
+            apis
+        );
         std::env::remove_var("LLMLB_DATA_DIR");
     }
 
