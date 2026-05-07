@@ -29,7 +29,7 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 
 # Node専用
-sysinfo = "0.38"
+sysinfo = "0.39"
 
 [profile.release]
 opt-level = 3
