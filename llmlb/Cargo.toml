@@ -55,7 +55,7 @@ jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 sha2 = "0.11"
 async-trait = "0.1"
 rand = "0.10"
-rpassword = "7.3"
+rpassword = "7.5"
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
