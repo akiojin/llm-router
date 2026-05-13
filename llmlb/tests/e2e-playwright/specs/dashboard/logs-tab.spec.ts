@@ -45,7 +45,7 @@ test.describe('Logs Tab @dashboard', () => {
 
   test('LT-01: LB Logs displays log entries', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Logs")')
+    await page.getByRole('tab', { name: /system/i }).click()
     await page.waitForTimeout(1000)
 
     const logsList = page.locator(DashboardSelectors.logs.routerList)
@@ -59,7 +59,7 @@ test.describe('Logs Tab @dashboard', () => {
 
   test('LT-02: Endpoint Logs shows logs after selecting endpoint', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Logs")')
+    await page.getByRole('tab', { name: /system/i }).click()
     await page.waitForTimeout(1000)
 
     // Select an endpoint from the dropdown
@@ -85,7 +85,7 @@ test.describe('Logs Tab @dashboard', () => {
 
   test('LT-03: Refresh button updates logs without error', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Logs")')
+    await page.getByRole('tab', { name: /system/i }).click()
     await page.waitForTimeout(1000)
 
     const refreshBtn = page.locator(DashboardSelectors.logs.routerRefresh)
@@ -104,7 +104,7 @@ test.describe('Logs Tab @dashboard', () => {
 
   test('LT-04: Log entries contain timestamp and level', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Logs")')
+    await page.getByRole('tab', { name: /system/i }).click()
     await page.waitForTimeout(1000)
 
     const logsList = page.locator(DashboardSelectors.logs.routerList)
