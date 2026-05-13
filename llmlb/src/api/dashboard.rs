@@ -623,6 +623,10 @@ fn collect_operations(
         .iter()
         .filter(|endpoint| endpoint.status == EndpointStatus::Error)
         .count();
+    let offline_endpoints = endpoints
+        .iter()
+        .filter(|endpoint| endpoint.status == EndpointStatus::Offline)
+        .count();
     let success_rate = if stats.total_requests > 0 {
         Some((stats.successful_requests as f64 / stats.total_requests as f64 * 100.0) as f32)
     } else {
@@ -631,7 +635,7 @@ fn collect_operations(
     let health = if stats.total_nodes == 0 {
         "empty"
     } else if error_endpoints > 0
-        || stats.offline_nodes > 0
+        || offline_endpoints > 0
         || stats.failed_requests > 0
         || stats.queued_requests > 0
     {
@@ -646,7 +650,7 @@ fn collect_operations(
         online_endpoints: stats.online_nodes,
         pending_endpoints: stats.pending_nodes,
         registering_endpoints: stats.registering_nodes,
-        offline_endpoints: stats.offline_nodes,
+        offline_endpoints,
         error_endpoints,
         total_requests: stats.total_requests,
         successful_requests: stats.successful_requests,
@@ -710,10 +714,18 @@ async fn collect_capacity(
     dashboard_endpoints: &[DashboardEndpoint],
 ) -> DashboardCapacity {
     let endpoints = state.endpoint_registry.list().await;
-    let total_models = dashboard_endpoints
-        .iter()
-        .map(|endpoint| endpoint.model_count)
-        .sum();
+    let mut model_ids = Vec::new();
+    for endpoint in dashboard_endpoints {
+        match state.endpoint_registry.list_models(endpoint.id).await {
+            Ok(models) => model_ids.extend(models.into_iter().map(|model| model.model_id)),
+            Err(e) => warn!(
+                endpoint_id = %endpoint.id,
+                "Failed to list endpoint models for dashboard capacity: {}",
+                e
+            ),
+        }
+    }
+    let total_models = count_unique_model_ids(model_ids);
     let mut gpu_capable_endpoints = 0usize;
     let mut gpu_telemetry_endpoints = 0usize;
     let mut total_gpu_memory_bytes = 0u64;
@@ -764,6 +776,14 @@ async fn collect_capacity(
     }
 }
 
+fn count_unique_model_ids(model_ids: impl IntoIterator<Item = String>) -> usize {
+    let mut unique_model_ids = HashSet::new();
+    for model_id in model_ids {
+        unique_model_ids.insert(model_id);
+    }
+    unique_model_ids.len()
+}
+
 fn collect_action_items(operations: &DashboardOperations) -> Vec<DashboardActionItem> {
     let mut items = Vec::new();
 
@@ -775,15 +795,12 @@ fn collect_action_items(operations: &DashboardOperations) -> Vec<DashboardAction
             count: operations.error_endpoints,
         });
     }
-    let offline_without_error = operations
-        .offline_endpoints
-        .saturating_sub(operations.error_endpoints);
-    if offline_without_error > 0 {
+    if operations.offline_endpoints > 0 {
         items.push(DashboardActionItem {
             severity: "warning".to_string(),
             title: "Offline endpoints".to_string(),
             detail: "Registered endpoints are offline and cannot serve traffic.".to_string(),
-            count: offline_without_error,
+            count: operations.offline_endpoints,
         });
     }
     if operations.queued_requests > 0 {
@@ -1736,7 +1753,9 @@ pub async fn update_setting(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_ip_alert_threshold;
+    use super::{
+        collect_action_items, count_unique_model_ids, parse_ip_alert_threshold, DashboardOperations,
+    };
     use crate::types::endpoint::{Endpoint, EndpointStatus, EndpointType};
 
     /// フォールバック計算: avg_response_time_ms が None の場合に
@@ -3157,6 +3176,56 @@ mod tests {
         ]);
 
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_count_unique_model_ids_deduplicates_across_endpoints() {
+        let result = count_unique_model_ids(vec![
+            "llama-3.2:3b".to_string(),
+            "qwen2.5:7b".to_string(),
+            "llama-3.2:3b".to_string(),
+        ]);
+
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn test_action_items_count_offline_and_error_endpoints_independently() {
+        let operations = DashboardOperations {
+            health: "attention".to_string(),
+            total_endpoints: 4,
+            online_endpoints: 1,
+            pending_endpoints: 0,
+            registering_endpoints: 0,
+            offline_endpoints: 2,
+            error_endpoints: 1,
+            total_requests: 0,
+            successful_requests: 0,
+            failed_requests: 0,
+            success_rate: None,
+            active_requests: 0,
+            queued_requests: 0,
+            average_response_time_ms: None,
+            output_tps: None,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_tokens: 0,
+            last_registered_at: None,
+            last_seen_at: None,
+        };
+
+        let items = collect_action_items(&operations);
+        let offline = items
+            .iter()
+            .find(|item| item.title == "Offline endpoints")
+            .expect("offline endpoints action item should exist");
+        let errors = items
+            .iter()
+            .find(|item| item.title == "Endpoint errors")
+            .expect("endpoint errors action item should exist");
+
+        assert_eq!(offline.count, 2);
+        assert_eq!(errors.count, 1);
     }
 
     // --- DashboardOverview tests ---
