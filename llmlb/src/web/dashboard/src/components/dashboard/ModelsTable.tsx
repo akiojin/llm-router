@@ -94,6 +94,7 @@ type SupportedApi =
   | 'inference'
   | 'audio_speech'
   | 'audio_transcription'
+  | 'image_input'
   | 'image_generation'
 
 interface AggregatedModel {
@@ -122,6 +123,7 @@ function emptyCapabilities(): ModelCapabilities {
     inference: false,
     text_to_speech: false,
     speech_to_text: false,
+    image_input: false,
     image_generation: false,
   }
 }
@@ -157,6 +159,11 @@ function normalizeSupportedApi(api: string): SupportedApi | null {
       return 'audio_transcription'
     case 'image':
     case 'images':
+    case 'image_input':
+    case 'vision':
+    case 'visual':
+    case 'multimodal':
+      return 'image_input'
     case 'image_generation':
     case 'images_generations':
       return 'image_generation'
@@ -179,6 +186,7 @@ function supportedApisFromCapabilities(capabilities?: ModelCapabilities): Suppor
     ...(caps.inference ? ['inference' as const] : []),
     ...(caps.text_to_speech ? ['audio_speech' as const] : []),
     ...(caps.speech_to_text ? ['audio_transcription' as const] : []),
+    ...(caps.image_input ? ['image_input' as const] : []),
     ...(caps.image_generation ? ['image_generation' as const] : []),
   ])
 }
@@ -258,7 +266,8 @@ const SUPPORTED_API_BADGES: {
   { key: 'inference', icon: Cpu, label: 'Infer' },
   { key: 'audio_speech', icon: Volume2, label: 'TTS' },
   { key: 'audio_transcription', icon: Mic, label: 'STT' },
-  { key: 'image_generation', icon: Image, label: 'Image' },
+  { key: 'image_input', icon: Image, label: 'Image' },
+  { key: 'image_generation', icon: Image, label: 'Image Gen' },
 ]
 
 interface ColumnDef {

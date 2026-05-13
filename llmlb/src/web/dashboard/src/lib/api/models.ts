@@ -21,6 +21,7 @@ export interface ModelCapabilities {
   text_to_speech: boolean
   speech_to_text: boolean
   image_generation: boolean
+  image_input?: boolean
 }
 
 // /v1/models レスポンスの model object

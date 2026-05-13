@@ -52,6 +52,10 @@ pub enum SupportedAPI {
     Responses,
     /// Embeddings API（/v1/embeddings）
     Embeddings,
+    /// Image input / vision support in chat-style requests.
+    ImageInput,
+    /// Image generation API（/v1/images/*）
+    ImageGeneration,
 }
 
 impl SupportedAPI {
@@ -61,8 +65,28 @@ impl SupportedAPI {
             Self::ChatCompletions => "chat_completions",
             Self::Responses => "responses",
             Self::Embeddings => "embeddings",
+            Self::ImageInput => "image_input",
+            Self::ImageGeneration => "image_generation",
         }
     }
+
+    /// Parse common upstream names into the normalized supported API enum.
+    pub fn from_api_str(value: &str) -> Option<Self> {
+        match normalize_api_name(value).as_str() {
+            "chat" | "chat_completion" | "chat_completions" => Some(Self::ChatCompletions),
+            "response" | "responses" => Some(Self::Responses),
+            "embedding" | "embeddings" => Some(Self::Embeddings),
+            "image_input" | "vision" | "visual" | "multimodal" => Some(Self::ImageInput),
+            "image_generation" | "images_generation" | "images_generations" => {
+                Some(Self::ImageGeneration)
+            }
+            _ => None,
+        }
+    }
+}
+
+fn normalize_api_name(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace(['-', ' '], "_")
 }
 
 impl std::fmt::Display for SupportedAPI {
@@ -693,6 +717,14 @@ mod tests {
             serde_json::to_string(&SupportedAPI::Embeddings).unwrap(),
             "\"embeddings\""
         );
+        assert_eq!(
+            serde_json::to_string(&SupportedAPI::ImageInput).unwrap(),
+            "\"image_input\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SupportedAPI::ImageGeneration).unwrap(),
+            "\"image_generation\""
+        );
     }
 
     #[test]
@@ -700,6 +732,24 @@ mod tests {
         assert_eq!(SupportedAPI::ChatCompletions.as_str(), "chat_completions");
         assert_eq!(SupportedAPI::Responses.as_str(), "responses");
         assert_eq!(SupportedAPI::Embeddings.as_str(), "embeddings");
+        assert_eq!(SupportedAPI::ImageInput.as_str(), "image_input");
+        assert_eq!(SupportedAPI::ImageGeneration.as_str(), "image_generation");
+    }
+
+    #[test]
+    fn test_supported_api_from_api_str_accepts_vision_aliases() {
+        assert_eq!(
+            SupportedAPI::from_api_str("vision"),
+            Some(SupportedAPI::ImageInput)
+        );
+        assert_eq!(
+            SupportedAPI::from_api_str("image-input"),
+            Some(SupportedAPI::ImageInput)
+        );
+        assert_eq!(
+            SupportedAPI::from_api_str("image_generation"),
+            Some(SupportedAPI::ImageGeneration)
+        );
     }
 
     #[test]
