@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { type ModelStatEntry, type ModelTpsEntry, endpointsApi } from '@/lib/api'
+import { type ModelTpsEntry, endpointsApi } from '@/lib/api'
 import {
   Table,
   TableBody,
@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Label } from '@/components/ui/label'
+import { ModelIdentity } from './ModelIdentity'
 import { Loader2, Grid3X3 } from 'lucide-react'
 import { useMemo } from 'react'
 
@@ -29,6 +30,7 @@ interface EndpointModel {
   capabilities?: string[]
   max_tokens?: number | null
   last_checked?: string
+  canonical_name?: string | null
 }
 
 interface ModelRow {
@@ -40,6 +42,7 @@ interface ModelRow {
   average_duration_ms: number | null
   successful_requests: number
   total_requests: number
+  canonical_name?: string | null
 }
 
 function formatTps(tps: number | null): string {
@@ -107,6 +110,7 @@ export function EndpointModelsTable({
         average_duration_ms: null,
         successful_requests: 0,
         total_requests: 0,
+        canonical_name: model.canonical_name,
       })
     }
 
@@ -198,7 +202,13 @@ export function EndpointModelsTable({
             <TableBody>
               {consolidatedRows.map((entry) => (
                 <TableRow key={entry.model_id}>
-                  <TableCell className="font-mono text-xs">{entry.model_id}</TableCell>
+                  <TableCell>
+                    <ModelIdentity
+                      id={entry.model_id}
+                      canonicalName={entry.canonical_name}
+                      isCanonical={entry.canonical_name === entry.model_id}
+                    />
+                  </TableCell>
                   <TableCell className="text-right">
                     {entry.max_tokens ? `${(entry.max_tokens / 1024).toFixed(0)}K` : '—'}
                   </TableCell>

@@ -273,6 +273,7 @@ export const endpointsApi = {
         capabilities?: string[]
         max_tokens?: number | null
         last_checked?: string
+        canonical_name?: string | null
       }>
     }>(`/api/endpoints/${id}/models`),
 

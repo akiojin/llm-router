@@ -442,6 +442,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
         let aliases = canonical_resolution.aliases_for(model_id);
         // canonical_nameを取得（self-fallback により null は返らない）
         let canonical_name = canonical_resolution.canonical_for(model_id);
+        let is_canonical = canonical_resolution.is_known(model_id) && canonical_name == *model_id;
         // max_tokens: endpoint 申告 → 既知 canonical テーブルの順で解決
         let max_tokens = crate::models::mapping::resolve_max_tokens(
             &canonical_name,
@@ -479,6 +480,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
                 "quantization": quantization,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
+                "is_canonical": is_canonical,
                 "aliases": aliases,
             });
             data.push(obj);
@@ -496,6 +498,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
                 "quantization": quantization,
                 "endpoint_ids": endpoint_ids,
                 "canonical_name": canonical_name,
+                "is_canonical": is_canonical,
                 "aliases": aliases,
             });
             data.push(obj);
@@ -3896,10 +3899,27 @@ mod tests {
         model_id: &str,
         apis: Vec<crate::types::endpoint::SupportedAPI>,
     ) -> uuid::Uuid {
+        add_endpoint_with_supported_apis_and_canonical_name(
+            state,
+            endpoint_name,
+            model_id,
+            apis,
+            None,
+        )
+        .await
+    }
+
+    async fn add_endpoint_with_supported_apis_and_canonical_name(
+        state: &AppState,
+        endpoint_name: &str,
+        model_id: &str,
+        apis: Vec<crate::types::endpoint::SupportedAPI>,
+        canonical_name: Option<&str>,
+    ) -> uuid::Uuid {
         use crate::types::endpoint::{Endpoint, EndpointModel, EndpointStatus, EndpointType};
         let mut endpoint = Endpoint::new(
             endpoint_name.to_string(),
-            "http://127.0.0.1:0".to_string(),
+            format!("http://127.0.0.1:0/{endpoint_name}"),
             EndpointType::OpenaiCompatible,
         );
         endpoint.status = EndpointStatus::Online;
@@ -3918,7 +3938,7 @@ mod tests {
                 max_tokens: None,
                 last_checked: None,
                 supported_apis: apis,
-                canonical_name: None,
+                canonical_name: canonical_name.map(str::to_string),
             })
             .await
             .expect("add endpoint model");
@@ -3934,6 +3954,70 @@ mod tests {
             .await
             .expect("read body");
         serde_json::from_slice::<serde_json::Value>(&bytes).expect("parse json")
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn list_models_marks_only_known_canonical_ids_as_canonical() {
+        use crate::types::endpoint::SupportedAPI;
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        add_endpoint_with_supported_apis_and_canonical_name(
+            &state,
+            "qwen-endpoint",
+            "qwen/qwen3-vl-30b",
+            vec![SupportedAPI::ChatCompletions],
+            Some("Qwen/Qwen3-VL-30B-A3B-Instruct"),
+        )
+        .await;
+        add_endpoint_with_supported_apis(
+            &state,
+            "unknown-endpoint",
+            "vendor/not-canonical",
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await;
+
+        let body = fetch_list_models(state).await;
+        let data = body["data"].as_array().expect("data array");
+
+        let canonical = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("Qwen/Qwen3-VL-30B-A3B-Instruct"))
+            .expect("canonical qwen model in /v1/models");
+        assert_eq!(
+            canonical["canonical_name"].as_str(),
+            Some("Qwen/Qwen3-VL-30B-A3B-Instruct")
+        );
+        assert_eq!(canonical["is_canonical"].as_bool(), Some(true));
+        let aliases: Vec<&str> = canonical["aliases"]
+            .as_array()
+            .expect("aliases array")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            aliases.contains(&"qwen/qwen3-vl-30b"),
+            "runtime alias must remain visible for canonical display row (got: {:?})",
+            aliases
+        );
+
+        let unknown = data
+            .iter()
+            .find(|m| m["id"].as_str() == Some("vendor/not-canonical"))
+            .expect("unknown model in /v1/models");
+        assert_eq!(
+            unknown["canonical_name"].as_str(),
+            Some("vendor/not-canonical")
+        );
+        assert_eq!(
+            unknown["is_canonical"].as_bool(),
+            Some(false),
+            "unknown self-fallbacks must not be tagged canonical"
+        );
+        std::env::remove_var("LLMLB_DATA_DIR");
     }
 
     /// A-1 RED: 登録済み embedding モデルの supported_apis に "embeddings" が含まれること

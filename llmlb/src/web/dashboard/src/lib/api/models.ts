@@ -45,6 +45,9 @@ export interface OpenAIModel {
   chat_template?: string
   max_tokens?: number | null
   endpoint_ids?: string[]
+  canonical_name?: string | null
+  aliases?: string[]
+  is_canonical?: boolean
 }
 
 // /api/models/discover-gguf response types
@@ -92,6 +95,9 @@ export interface RegisteredModelView {
   supported_apis?: string[]
   chat_template?: string
   endpoint_ids: string[]
+  canonical_name?: string
+  aliases: string[]
+  is_canonical: boolean
 }
 
 // OpenAIModel を RegisteredModelView に変換
@@ -119,6 +125,9 @@ function toRegisteredModelView(model: OpenAIModel): RegisteredModelView {
     tags: model.tags ?? [],
     chat_template: model.chat_template,
     endpoint_ids: model.endpoint_ids ?? [],
+    canonical_name: model.canonical_name ?? undefined,
+    aliases: model.aliases ?? [],
+    is_canonical: model.is_canonical ?? false,
   }
 }
 
