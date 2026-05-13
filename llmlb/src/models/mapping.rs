@@ -115,6 +115,53 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
         ],
     },
     ModelMapping {
+        canonical: "Qwen/Qwen3-VL-30B-A3B-Instruct",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "qwen/qwen3-vl-30b",
+        }],
+    },
+    ModelMapping {
+        canonical: "Qwen/Qwen3-VL-8B-Instruct",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "qwen/qwen3-vl-8b",
+        }],
+    },
+    ModelMapping {
+        canonical: "Qwen/Qwen3-VL-4B-Instruct",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "qwen/qwen3-vl-4b",
+        }],
+    },
+    ModelMapping {
+        canonical: "Qwen/Qwen3.6-35B-A3B",
+        aliases: &[
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "qwen3.6-35b-a3b",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "qwen/qwen3.6-35b-a3b",
+            },
+        ],
+    },
+    ModelMapping {
+        canonical: "Qwen/Qwen3.6-27B",
+        aliases: &[
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "qwen3.6-27b",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "qwen/qwen3.6-27b",
+            },
+        ],
+    },
+    ModelMapping {
         canonical: "meta-llama/Llama-3.3-70B-Instruct",
         aliases: &[
             EngineAlias {
@@ -264,14 +311,18 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
         ],
     },
-    // Gemma 4 (26B-A4B): `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
-    // 具体タグ `gemma4` のみを Ollama alias として保持。
+    // Gemma 4 (26B-A4B): 優先 alias は具体タグ `gemma4`。
+    // Ollama が既存 runtime ID として返す `gemma4:latest` は canonical 表示へ正規化する。
     ModelMapping {
         canonical: "google/gemma-4-26b-a4b",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
                 name: "gemma4",
+            },
+            EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4:latest",
             },
             EngineAlias {
                 engine: EndpointType::LmStudio,
@@ -751,6 +802,33 @@ mod tests {
     }
 
     #[test]
+    fn test_qwen3_vl_lm_studio_lowercase_mappings() {
+        let cases = [
+            ("qwen/qwen3-vl-30b", "Qwen/Qwen3-VL-30B-A3B-Instruct"),
+            ("qwen/qwen3-vl-8b", "Qwen/Qwen3-VL-8B-Instruct"),
+            ("qwen/qwen3-vl-4b", "Qwen/Qwen3-VL-4B-Instruct"),
+        ];
+
+        for (alias, canonical) in cases {
+            let result = resolve_canonical(alias, &EndpointType::LmStudio);
+            assert_eq!(result, Some(canonical), "failed for {alias}");
+        }
+    }
+
+    #[test]
+    fn test_qwen36_lm_studio_lowercase_mappings() {
+        let cases = [
+            ("qwen/qwen3.6-35b-a3b", "Qwen/Qwen3.6-35B-A3B"),
+            ("qwen/qwen3.6-27b", "Qwen/Qwen3.6-27B"),
+        ];
+
+        for (alias, canonical) in cases {
+            let result = resolve_canonical(alias, &EndpointType::LmStudio);
+            assert_eq!(result, Some(canonical), "failed for {alias}");
+        }
+    }
+
+    #[test]
     fn test_qwen35_mapping() {
         let result = resolve_canonical("qwen3.5:latest", &EndpointType::Ollama);
         assert_eq!(result, Some("Qwen/Qwen3.5-35B-A3B"));
@@ -862,9 +940,10 @@ mod tests {
 
     #[test]
     fn test_gemma4_ollama_resolves_to_canonical() {
-        // `gemma4:latest` は撤廃済み（将来世代の登場で意味がねじれるため）。
-        let removed = resolve_canonical("gemma4:latest", &EndpointType::Ollama);
-        assert_eq!(removed, None);
+        // `gemma4:latest` は優先 alias からは外すが、Ollama が返す既存 runtime ID は
+        // canonical 表示へ正規化する。
+        let latest = resolve_canonical("gemma4:latest", &EndpointType::Ollama);
+        assert_eq!(latest, Some("google/gemma-4-26b-a4b"));
 
         // 具体タグ `gemma4` は引き続き alias として解決される。
         let result = resolve_canonical("gemma4", &EndpointType::Ollama);

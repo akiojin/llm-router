@@ -13,7 +13,6 @@ import {
 
 import { type DashboardOverview } from '@/lib/api'
 import {
-  formatBytes,
   formatFullNumber,
   formatPercentage,
 } from '@/lib/utils'
@@ -33,10 +32,6 @@ interface MetricCellProps {
 
 function metricValue(value: number | null | undefined): string {
   return value == null ? '-' : formatFullNumber(value)
-}
-
-function byteValue(value: number | null | undefined): string {
-  return value == null ? '-' : formatBytes(value, 1)
 }
 
 function tpsValue(value: number | null | undefined): string {
@@ -215,21 +210,16 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-md border border-border/70 bg-card px-4 py-3">
-          <p className="text-xs font-medium uppercase text-muted-foreground">Model capacity</p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div
+          data-stat="available-models"
+          className="rounded-md border border-border/70 bg-card px-4 py-3"
+        >
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Available Models
+          </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? metricValue(capacity?.total_models)}
-          </p>
-        </div>
-        <div className="rounded-md border border-border/70 bg-card px-4 py-3">
-          <p className="text-xs font-medium uppercase text-muted-foreground">GPU memory</p>
-          <p className="mt-2 text-2xl font-semibold tracking-tight">
-            {loadingValue ?? byteValue(capacity?.used_gpu_memory_bytes)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {byteValue(capacity?.total_gpu_memory_bytes)} total,{' '}
-            {formatPercentage(capacity?.gpu_memory_usage_percent)}
           </p>
         </div>
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">

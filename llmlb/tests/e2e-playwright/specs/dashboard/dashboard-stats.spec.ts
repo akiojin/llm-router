@@ -51,7 +51,17 @@ test.describe('Dashboard Operations Overview @dashboard', () => {
     await expect(page.locator(DashboardSelectors.stats.actionItems)).toBeVisible();
   });
 
-  test('S-09: Overview updates on refresh', async ({ page }) => {
+  test('S-09: Available Models replaces model capacity', async ({ page }) => {
+    await expect(page.locator('[data-stat="available-models"]')).toBeVisible();
+    await expect(page.getByText('Available Models', { exact: true })).toBeVisible();
+    await expect(page.getByText('Model capacity', { exact: true })).toHaveCount(0);
+  });
+
+  test('S-10: GPU memory summary is not displayed', async ({ page }) => {
+    await expect(page.getByText('GPU memory', { exact: true })).toHaveCount(0);
+  });
+
+  test('S-11: Overview updates on refresh', async ({ page }) => {
     // Store initial values
     const initialTotal = await dashboard.totalRequests.textContent();
 

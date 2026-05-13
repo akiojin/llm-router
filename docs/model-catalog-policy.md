@@ -19,8 +19,9 @@
 - alias 名は **各エンドポイントタイプ固有の命名形式** に従う。
   - Ollama: `family:tag`（例: `gpt-oss:20b`、`gemma4`）
   - LM Studio: HuggingFace 形式（例: `openai/gpt-oss-20b`）
-- `:latest` のような **可変タグは alias に含めない**。世代交代でルックアップ先が
-  ねじれて、後方互換性を壊すため（例: `gemma4:latest` を撤廃）。
+- `:latest` のような **可変タグは優先 alias にしない**。世代交代でルックアップ先が
+  ねじれて、後方互換性を壊すため（例: `gemma4` を優先し、`gemma4:latest` は
+  runtime が返す既存 ID の canonical 正規化にだけ使う）。
 - 量子化サフィックス（`:Q4_K_M` など）は現状 ID に同居しているケースがあるが、
   正規化方針は別 SPEC で扱う（後述「量子化サフィックス方針」）。
 
