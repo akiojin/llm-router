@@ -1,2 +1,3 @@
 packages:
   - llmlb/src/web/dashboard
+  - llmlb/tests/e2e-playwright

@@ -33,7 +33,7 @@ test.describe('UX Criteria @dashboard @ux', () => {
   });
 
   test('UX-04: All tabs reachable in ≤ 1 click', async ({ page }) => {
-    const tabs = ['Endpoints', 'Models', 'Statistics', 'History', 'Clients', 'Logs'];
+    const tabs = ['Endpoints', 'Models', 'Usage', 'Requests', 'Traffic', 'System'];
     for (const tabName of tabs) {
       const tab = page.locator(`button[role="tab"]:has-text("${tabName}")`);
       if (await tab.isVisible({ timeout: 3000 }).catch(() => false)) {

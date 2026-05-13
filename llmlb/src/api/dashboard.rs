@@ -125,13 +125,94 @@ pub struct DashboardStats {
     pub total_tokens: u64,
 }
 
+/// 運用監視向けの主要状態サマリー
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DashboardOperations {
+    /// 総合状態（healthy / attention / empty）
+    pub health: String,
+    /// 登録エンドポイント総数
+    pub total_endpoints: usize,
+    /// オンラインエンドポイント数
+    pub online_endpoints: usize,
+    /// 承認待ちエンドポイント数
+    pub pending_endpoints: usize,
+    /// 登録中エンドポイント数
+    pub registering_endpoints: usize,
+    /// オフラインエンドポイント数
+    pub offline_endpoints: usize,
+    /// エラー状態エンドポイント数
+    pub error_endpoints: usize,
+    /// 累積リクエスト数
+    pub total_requests: u64,
+    /// 成功リクエスト数
+    pub successful_requests: u64,
+    /// 失敗リクエスト数
+    pub failed_requests: u64,
+    /// 成功率（0-100）
+    pub success_rate: Option<f32>,
+    /// 処理中リクエスト数
+    pub active_requests: u32,
+    /// 待機中リクエスト数
+    pub queued_requests: usize,
+    /// 平均応答時間
+    pub average_response_time_ms: Option<f32>,
+    /// 出力TPS（出力トークン数 / 生成時間秒）
+    pub output_tps: Option<f64>,
+    /// 入力トークン累計
+    pub total_input_tokens: u64,
+    /// 出力トークン累計
+    pub total_output_tokens: u64,
+    /// 総トークン累計
+    pub total_tokens: u64,
+    /// 最新登録日時
+    pub last_registered_at: Option<DateTime<Utc>>,
+    /// 最新ヘルスチェック時刻
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+/// Dashboardで使う容量・能力サマリー
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DashboardCapacity {
+    /// 登録済みモデル合計
+    pub total_models: usize,
+    /// GPU能力がある、またはGPU情報を返したエンドポイント数
+    pub gpu_capable_endpoints: usize,
+    /// GPUメモリ情報を取得できたエンドポイント数
+    pub gpu_telemetry_endpoints: usize,
+    /// GPU総メモリ（バイト）
+    pub total_gpu_memory_bytes: Option<u64>,
+    /// GPU使用中メモリ（バイト）
+    pub used_gpu_memory_bytes: Option<u64>,
+    /// GPUメモリ使用率（0-100）
+    pub gpu_memory_usage_percent: Option<f32>,
+    /// GPUテレメトリ状態（available / partial / unavailable）
+    pub telemetry_status: String,
+}
+
+/// Dashboard上の要対応項目
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DashboardActionItem {
+    /// severity（critical / warning / info）
+    pub severity: String,
+    /// 表示タイトル
+    pub title: String,
+    /// 補足説明
+    pub detail: String,
+    /// 対象件数
+    pub count: usize,
+}
+
 /// ダッシュボード概要レスポンス
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct DashboardOverview {
     /// エンドポイント一覧（SPEC-e8e9326e）
     pub endpoints: Vec<DashboardEndpoint>,
-    /// システム統計
-    pub stats: DashboardStats,
+    /// 運用監視向けサマリー
+    pub operations: DashboardOperations,
+    /// 容量・能力サマリー
+    pub capacity: DashboardCapacity,
+    /// 要対応項目
+    pub action_items: Vec<DashboardActionItem>,
     /// リクエスト履歴
     pub history: Vec<RequestHistoryPoint>,
     /// エンドポイント別TPS概要（SPEC-4bb5b55f T023）
@@ -187,13 +268,19 @@ pub async fn get_overview(State(state): State<AppState>) -> Json<DashboardOvervi
     let started = Instant::now();
     let endpoints = collect_endpoints(&state).await;
     let stats = collect_stats(&state).await;
-    let history = collect_history(&state).await;
+    let operation_token_totals = collect_operation_token_totals(&state).await;
     let endpoint_tps = state.load_manager.get_all_endpoint_tps().await;
+    let operations = collect_operations(&stats, &endpoints, operation_token_totals, &endpoint_tps);
+    let capacity = collect_capacity(&state, &endpoints).await;
+    let action_items = collect_action_items(&operations);
+    let history = collect_history(&state).await;
     let generation_time_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     let generated_at = Utc::now();
     Json(DashboardOverview {
         endpoints,
-        stats,
+        operations,
+        capacity,
+        action_items,
         history,
         endpoint_tps,
         generated_at,
@@ -524,6 +611,225 @@ async fn collect_stats(state: &AppState) -> DashboardStats {
         total_output_tokens: token_totals.total_output_tokens,
         total_tokens: token_totals.total_tokens,
     }
+}
+
+fn collect_operations(
+    stats: &DashboardStats,
+    endpoints: &[DashboardEndpoint],
+    token_totals: PersistedTokenTotals,
+    endpoint_tps: &[crate::balancer::EndpointTpsSummary],
+) -> DashboardOperations {
+    let error_endpoints = endpoints
+        .iter()
+        .filter(|endpoint| endpoint.status == EndpointStatus::Error)
+        .count();
+    let offline_endpoints = endpoints
+        .iter()
+        .filter(|endpoint| endpoint.status == EndpointStatus::Offline)
+        .count();
+    let success_rate = if stats.total_requests > 0 {
+        Some((stats.successful_requests as f64 / stats.total_requests as f64 * 100.0) as f32)
+    } else {
+        None
+    };
+    let health = if stats.total_nodes == 0 {
+        "empty"
+    } else if error_endpoints > 0
+        || offline_endpoints > 0
+        || stats.failed_requests > 0
+        || stats.queued_requests > 0
+    {
+        "attention"
+    } else {
+        "healthy"
+    };
+
+    DashboardOperations {
+        health: health.to_string(),
+        total_endpoints: stats.total_nodes,
+        online_endpoints: stats.online_nodes,
+        pending_endpoints: stats.pending_nodes,
+        registering_endpoints: stats.registering_nodes,
+        offline_endpoints,
+        error_endpoints,
+        total_requests: stats.total_requests,
+        successful_requests: stats.successful_requests,
+        failed_requests: stats.failed_requests,
+        success_rate,
+        active_requests: stats.total_active_requests,
+        queued_requests: stats.queued_requests,
+        average_response_time_ms: stats.average_response_time_ms,
+        output_tps: calculate_output_tps(endpoint_tps),
+        total_input_tokens: token_totals.total_input_tokens,
+        total_output_tokens: token_totals.total_output_tokens,
+        total_tokens: token_totals.total_tokens,
+        last_registered_at: stats.last_registered_at,
+        last_seen_at: stats.last_seen_at,
+    }
+}
+
+fn calculate_output_tps(endpoint_tps: &[crate::balancer::EndpointTpsSummary]) -> Option<f64> {
+    let mut total_output_tokens = 0.0;
+    let mut total_duration_seconds = 0.0;
+
+    for summary in endpoint_tps {
+        let Some(tps) = summary.aggregate_tps else {
+            continue;
+        };
+        if !tps.is_finite() || tps <= 0.0 || summary.total_output_tokens == 0 {
+            continue;
+        }
+
+        let output_tokens = summary.total_output_tokens as f64;
+        total_output_tokens += output_tokens;
+        total_duration_seconds += output_tokens / tps;
+    }
+
+    if total_output_tokens > 0.0 && total_duration_seconds > 0.0 {
+        Some(total_output_tokens / total_duration_seconds)
+    } else {
+        None
+    }
+}
+
+async fn collect_operation_token_totals(state: &AppState) -> PersistedTokenTotals {
+    match state.request_history.get_token_statistics().await {
+        Ok(stats) => PersistedTokenTotals {
+            total_input_tokens: stats.total_input_tokens,
+            total_output_tokens: stats.total_output_tokens,
+            total_tokens: stats.total_tokens,
+        },
+        Err(e) => {
+            warn!(
+                "Failed to query operation token totals from request history: {}",
+                e
+            );
+            PersistedTokenTotals::default()
+        }
+    }
+}
+
+async fn collect_capacity(
+    state: &AppState,
+    dashboard_endpoints: &[DashboardEndpoint],
+) -> DashboardCapacity {
+    let endpoints = state.endpoint_registry.list().await;
+    let mut model_ids = Vec::new();
+    for endpoint in dashboard_endpoints {
+        match state.endpoint_registry.list_models(endpoint.id).await {
+            Ok(models) => model_ids.extend(models.into_iter().map(|model| model.model_id)),
+            Err(e) => warn!(
+                endpoint_id = %endpoint.id,
+                "Failed to list endpoint models for dashboard capacity: {}",
+                e
+            ),
+        }
+    }
+    let total_models = count_unique_model_ids(model_ids);
+    let mut gpu_capable_endpoints = 0usize;
+    let mut gpu_telemetry_endpoints = 0usize;
+    let mut total_gpu_memory_bytes = 0u64;
+    let mut used_gpu_memory_bytes = 0u64;
+
+    for endpoint in endpoints {
+        let has_gpu_info = endpoint.gpu_device_count.unwrap_or(0) > 0
+            || endpoint.gpu_total_memory_bytes.unwrap_or(0) > 0
+            || endpoint.gpu_used_memory_bytes.unwrap_or(0) > 0;
+        let can_report_gpu = matches!(
+            endpoint.endpoint_type,
+            EndpointType::Xllm | EndpointType::Vllm | EndpointType::Llamacpp
+        );
+        if has_gpu_info || can_report_gpu {
+            gpu_capable_endpoints = gpu_capable_endpoints.saturating_add(1);
+        }
+        if let Some(total) = endpoint.gpu_total_memory_bytes {
+            if total > 0 {
+                gpu_telemetry_endpoints = gpu_telemetry_endpoints.saturating_add(1);
+                total_gpu_memory_bytes = total_gpu_memory_bytes.saturating_add(total);
+                used_gpu_memory_bytes = used_gpu_memory_bytes
+                    .saturating_add(endpoint.gpu_used_memory_bytes.unwrap_or(0));
+            }
+        }
+    }
+
+    let gpu_memory_usage_percent = if total_gpu_memory_bytes > 0 {
+        Some((used_gpu_memory_bytes as f64 / total_gpu_memory_bytes as f64 * 100.0) as f32)
+    } else {
+        None
+    };
+    let telemetry_status = if gpu_telemetry_endpoints == 0 {
+        "unavailable"
+    } else if gpu_telemetry_endpoints < gpu_capable_endpoints {
+        "partial"
+    } else {
+        "available"
+    };
+
+    DashboardCapacity {
+        total_models,
+        gpu_capable_endpoints,
+        gpu_telemetry_endpoints,
+        total_gpu_memory_bytes: (total_gpu_memory_bytes > 0).then_some(total_gpu_memory_bytes),
+        used_gpu_memory_bytes: (total_gpu_memory_bytes > 0).then_some(used_gpu_memory_bytes),
+        gpu_memory_usage_percent,
+        telemetry_status: telemetry_status.to_string(),
+    }
+}
+
+fn count_unique_model_ids(model_ids: impl IntoIterator<Item = String>) -> usize {
+    let mut unique_model_ids = HashSet::new();
+    for model_id in model_ids {
+        unique_model_ids.insert(model_id);
+    }
+    unique_model_ids.len()
+}
+
+fn collect_action_items(operations: &DashboardOperations) -> Vec<DashboardActionItem> {
+    let mut items = Vec::new();
+
+    if operations.error_endpoints > 0 {
+        items.push(DashboardActionItem {
+            severity: "critical".to_string(),
+            title: "Endpoint errors".to_string(),
+            detail: "One or more endpoints are reporting errors.".to_string(),
+            count: operations.error_endpoints,
+        });
+    }
+    if operations.offline_endpoints > 0 {
+        items.push(DashboardActionItem {
+            severity: "warning".to_string(),
+            title: "Offline endpoints".to_string(),
+            detail: "Registered endpoints are offline and cannot serve traffic.".to_string(),
+            count: operations.offline_endpoints,
+        });
+    }
+    if operations.queued_requests > 0 {
+        items.push(DashboardActionItem {
+            severity: "warning".to_string(),
+            title: "Queue pressure".to_string(),
+            detail: "Requests are waiting for an available endpoint.".to_string(),
+            count: operations.queued_requests,
+        });
+    }
+    if operations.failed_requests > 0 {
+        items.push(DashboardActionItem {
+            severity: "warning".to_string(),
+            title: "Failed requests".to_string(),
+            detail: "Recent or persisted request failures need review.".to_string(),
+            count: operations.failed_requests.min(usize::MAX as u64) as usize,
+        });
+    }
+
+    if items.is_empty() {
+        items.push(DashboardActionItem {
+            severity: "info".to_string(),
+            title: "No action required".to_string(),
+            detail: "All operational signals are nominal.".to_string(),
+            count: 0,
+        });
+    }
+
+    items
 }
 
 async fn collect_history(state: &AppState) -> Vec<RequestHistoryPoint> {
@@ -1447,7 +1753,9 @@ pub async fn update_setting(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_ip_alert_threshold;
+    use super::{
+        collect_action_items, count_unique_model_ids, parse_ip_alert_threshold, DashboardOperations,
+    };
     use crate::types::endpoint::{Endpoint, EndpointStatus, EndpointType};
 
     /// フォールバック計算: avg_response_time_ms が None の場合に
@@ -2819,40 +3127,154 @@ mod tests {
         assert_eq!(result, None);
     }
 
+    #[test]
+    fn test_calculate_output_tps_weighted_by_generated_tokens() {
+        use super::calculate_output_tps;
+        use crate::balancer::EndpointTpsSummary;
+
+        let result = calculate_output_tps(&[
+            EndpointTpsSummary {
+                endpoint_id: uuid::Uuid::nil(),
+                model_count: 1,
+                aggregate_tps: Some(50.0),
+                total_output_tokens: 100,
+                total_requests: 2,
+            },
+            EndpointTpsSummary {
+                endpoint_id: uuid::Uuid::nil(),
+                model_count: 1,
+                aggregate_tps: Some(100.0),
+                total_output_tokens: 100,
+                total_requests: 2,
+            },
+        ])
+        .expect("TPS should be computed from measured entries");
+
+        assert!((result - 66.666_666_666_7).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn test_calculate_output_tps_ignores_unmeasured_entries() {
+        use super::calculate_output_tps;
+        use crate::balancer::EndpointTpsSummary;
+
+        let result = calculate_output_tps(&[
+            EndpointTpsSummary {
+                endpoint_id: uuid::Uuid::nil(),
+                model_count: 0,
+                aggregate_tps: None,
+                total_output_tokens: 100,
+                total_requests: 1,
+            },
+            EndpointTpsSummary {
+                endpoint_id: uuid::Uuid::nil(),
+                model_count: 1,
+                aggregate_tps: Some(0.0),
+                total_output_tokens: 100,
+                total_requests: 1,
+            },
+        ]);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_count_unique_model_ids_deduplicates_across_endpoints() {
+        let result = count_unique_model_ids(vec![
+            "llama-3.2:3b".to_string(),
+            "qwen2.5:7b".to_string(),
+            "llama-3.2:3b".to_string(),
+        ]);
+
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn test_action_items_count_offline_and_error_endpoints_independently() {
+        let operations = DashboardOperations {
+            health: "attention".to_string(),
+            total_endpoints: 4,
+            online_endpoints: 1,
+            pending_endpoints: 0,
+            registering_endpoints: 0,
+            offline_endpoints: 2,
+            error_endpoints: 1,
+            total_requests: 0,
+            successful_requests: 0,
+            failed_requests: 0,
+            success_rate: None,
+            active_requests: 0,
+            queued_requests: 0,
+            average_response_time_ms: None,
+            output_tps: None,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_tokens: 0,
+            last_registered_at: None,
+            last_seen_at: None,
+        };
+
+        let items = collect_action_items(&operations);
+        let offline = items
+            .iter()
+            .find(|item| item.title == "Offline endpoints")
+            .expect("offline endpoints action item should exist");
+        let errors = items
+            .iter()
+            .find(|item| item.title == "Endpoint errors")
+            .expect("endpoint errors action item should exist");
+
+        assert_eq!(offline.count, 2);
+        assert_eq!(errors.count, 1);
+    }
+
     // --- DashboardOverview tests ---
 
     #[test]
     fn test_dashboard_overview_serialization() {
-        use super::{DashboardOverview, DashboardStats};
-
-        let stats = DashboardStats {
-            total_nodes: 0,
-            online_nodes: 0,
-            pending_nodes: 0,
-            registering_nodes: 0,
-            offline_nodes: 0,
-            total_requests: 0,
-            successful_requests: 0,
-            failed_requests: 0,
-            total_active_requests: 0,
-            queued_requests: 0,
-            average_response_time_ms: None,
-            average_gpu_usage: None,
-            average_gpu_memory_usage: None,
-            last_metrics_updated_at: None,
-            last_registered_at: None,
-            last_seen_at: None,
-            openai_key_present: false,
-            google_key_present: false,
-            anthropic_key_present: false,
-            total_input_tokens: 0,
-            total_output_tokens: 0,
-            total_tokens: 0,
+        use super::{
+            DashboardActionItem, DashboardCapacity, DashboardOperations, DashboardOverview,
         };
 
         let overview = DashboardOverview {
             endpoints: vec![],
-            stats,
+            operations: DashboardOperations {
+                health: "healthy".to_string(),
+                total_endpoints: 0,
+                online_endpoints: 0,
+                pending_endpoints: 0,
+                registering_endpoints: 0,
+                offline_endpoints: 0,
+                error_endpoints: 0,
+                total_requests: 0,
+                successful_requests: 0,
+                failed_requests: 0,
+                success_rate: None,
+                active_requests: 0,
+                queued_requests: 0,
+                average_response_time_ms: None,
+                output_tps: None,
+                total_input_tokens: 0,
+                total_output_tokens: 0,
+                total_tokens: 0,
+                last_registered_at: None,
+                last_seen_at: None,
+            },
+            capacity: DashboardCapacity {
+                total_models: 0,
+                gpu_capable_endpoints: 0,
+                gpu_telemetry_endpoints: 0,
+                total_gpu_memory_bytes: None,
+                used_gpu_memory_bytes: None,
+                gpu_memory_usage_percent: None,
+                telemetry_status: "unavailable".to_string(),
+            },
+            action_items: vec![DashboardActionItem {
+                severity: "info".to_string(),
+                title: "No action required".to_string(),
+                detail: "All operational signals are nominal.".to_string(),
+                count: 0,
+            }],
             history: vec![],
             endpoint_tps: vec![],
             generated_at: chrono::Utc::now(),
@@ -2861,7 +3283,14 @@ mod tests {
 
         let json = serde_json::to_value(&overview).unwrap();
         assert!(json["endpoints"].is_array());
-        assert!(json["stats"].is_object());
+        assert!(json["operations"].is_object());
+        assert!(json["capacity"].is_object());
+        assert!(json["action_items"].is_array());
+        assert!(json["stats"].is_null());
+        assert!(json["operations"]["health"].is_string());
+        assert!(json["operations"]["total_endpoints"].is_number());
+        assert!(json["operations"]["output_tps"].is_null());
+        assert!(json["capacity"]["gpu_capable_endpoints"].is_number());
         assert!(json["history"].is_array());
         assert!(json["endpoint_tps"].is_array());
         assert!(json["generated_at"].is_string());
@@ -2870,37 +3299,51 @@ mod tests {
 
     #[test]
     fn test_dashboard_overview_equality() {
-        use super::{DashboardOverview, DashboardStats};
+        use super::{
+            DashboardActionItem, DashboardCapacity, DashboardOperations, DashboardOverview,
+        };
 
         let now = chrono::Utc::now();
-        let stats = DashboardStats {
-            total_nodes: 0,
-            online_nodes: 0,
-            pending_nodes: 0,
-            registering_nodes: 0,
-            offline_nodes: 0,
-            total_requests: 0,
-            successful_requests: 0,
-            failed_requests: 0,
-            total_active_requests: 0,
-            queued_requests: 0,
-            average_response_time_ms: None,
-            average_gpu_usage: None,
-            average_gpu_memory_usage: None,
-            last_metrics_updated_at: None,
-            last_registered_at: None,
-            last_seen_at: None,
-            openai_key_present: false,
-            google_key_present: false,
-            anthropic_key_present: false,
-            total_input_tokens: 0,
-            total_output_tokens: 0,
-            total_tokens: 0,
-        };
 
         let overview = DashboardOverview {
             endpoints: vec![],
-            stats: stats.clone(),
+            operations: DashboardOperations {
+                health: "healthy".to_string(),
+                total_endpoints: 0,
+                online_endpoints: 0,
+                pending_endpoints: 0,
+                registering_endpoints: 0,
+                offline_endpoints: 0,
+                error_endpoints: 0,
+                total_requests: 0,
+                successful_requests: 0,
+                failed_requests: 0,
+                success_rate: None,
+                active_requests: 0,
+                queued_requests: 0,
+                average_response_time_ms: None,
+                output_tps: None,
+                total_input_tokens: 0,
+                total_output_tokens: 0,
+                total_tokens: 0,
+                last_registered_at: None,
+                last_seen_at: None,
+            },
+            capacity: DashboardCapacity {
+                total_models: 0,
+                gpu_capable_endpoints: 0,
+                gpu_telemetry_endpoints: 0,
+                total_gpu_memory_bytes: None,
+                used_gpu_memory_bytes: None,
+                gpu_memory_usage_percent: None,
+                telemetry_status: "unavailable".to_string(),
+            },
+            action_items: vec![DashboardActionItem {
+                severity: "info".to_string(),
+                title: "No action required".to_string(),
+                detail: "All operational signals are nominal.".to_string(),
+                count: 0,
+            }],
             history: vec![],
             endpoint_tps: vec![],
             generated_at: now,

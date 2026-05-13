@@ -166,7 +166,7 @@ async fn test_dashboard_stats_endpoint() {
 }
 
 #[tokio::test]
-async fn test_dashboard_overview_stats_reflects_persisted_request_totals() {
+async fn test_dashboard_overview_operations_reflects_persisted_request_totals() {
     let (app, db_pool, jwt) = build_app().await;
 
     let endpoint = Endpoint::new(
@@ -210,22 +210,34 @@ async fn test_dashboard_overview_stats_reflects_persisted_request_totals() {
         .await
         .unwrap();
     let overview: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let stats = overview["stats"]
+    assert!(
+        overview["stats"].is_null(),
+        "overview should not expose the legacy stats section"
+    );
+    assert!(
+        overview["capacity"].is_object(),
+        "overview should include capacity"
+    );
+    assert!(
+        overview["action_items"].is_array(),
+        "overview should include action items"
+    );
+    let operations = overview["operations"]
         .as_object()
-        .expect("overview should include stats");
+        .expect("overview should include operations");
 
     assert_eq!(
-        stats["total_requests"].as_u64(),
+        operations["total_requests"].as_u64(),
         Some(3),
         "Total requests in overview should reflect persisted endpoint counters"
     );
     assert_eq!(
-        stats["successful_requests"].as_u64(),
+        operations["successful_requests"].as_u64(),
         Some(2),
         "Successful requests in overview should reflect persisted endpoint counters"
     );
     assert_eq!(
-        stats["failed_requests"].as_u64(),
+        operations["failed_requests"].as_u64(),
         Some(1),
         "Failed requests in overview should reflect persisted endpoint counters"
     );

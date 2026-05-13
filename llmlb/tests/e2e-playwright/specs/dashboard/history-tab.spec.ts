@@ -50,7 +50,7 @@ test.describe('History Tab @dashboard', () => {
 
   test('HT-01: History Tab displays request history rows', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("History")')
+    await page.getByRole('tab', { name: /requests/i }).click()
     await page.waitForTimeout(1000)
 
     const tbody = page.locator(DashboardSelectors.history.historyTbody)
@@ -65,7 +65,7 @@ test.describe('History Tab @dashboard', () => {
 
   test('HT-02: Clicking a history row opens a detail modal with tabs', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("History")')
+    await page.getByRole('tab', { name: /requests/i }).click()
     await page.waitForTimeout(1000)
 
     // Click first row
@@ -83,7 +83,7 @@ test.describe('History Tab @dashboard', () => {
 
   test('HT-03: Request tab displays JSON body', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("History")')
+    await page.getByRole('tab', { name: /requests/i }).click()
     await page.waitForTimeout(1000)
 
     // Open detail modal
@@ -107,7 +107,7 @@ test.describe('History Tab @dashboard', () => {
 
   test('HT-04: Response tab displays JSON response', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("History")')
+    await page.getByRole('tab', { name: /requests/i }).click()
     await page.waitForTimeout(1000)
 
     // Open detail modal
@@ -130,7 +130,7 @@ test.describe('History Tab @dashboard', () => {
 
   test('HT-05: Pagination information is displayed', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("History")')
+    await page.getByRole('tab', { name: /requests/i }).click()
     await page.waitForTimeout(1000)
 
     // Pagination info should be visible
@@ -151,7 +151,7 @@ test.describe('History Tab @dashboard', () => {
 
   test('HT-06: Tab buttons remain visible within modal on Request/Response tabs', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("History")')
+    await page.getByRole('tab', { name: /requests/i }).click()
     await page.waitForTimeout(1000)
 
     await page.locator(DashboardSelectors.history.historyTbody).locator('tr').first().click()

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
@@ -25,7 +25,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Server, Clock, AlertCircle, Save, Play, RefreshCw, MessageSquare, Box, Loader2, Download, Activity } from 'lucide-react'
+import {
+  Server,
+  Clock,
+  AlertCircle,
+  Save,
+  Play,
+  RefreshCw,
+  MessageSquare,
+  Download,
+  Activity,
+} from 'lucide-react'
 import { ModelDownloadDialog } from './ModelDownloadDialog'
 import { EndpointModelsTable } from './EndpointModelsTable'
 import { EndpointRequestChart } from './EndpointRequestChart'
@@ -111,6 +121,29 @@ function getTypeBadgeVariant(
 }
 
 export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDetailModalProps) {
+  if (!endpoint) return null
+
+  return (
+    <EndpointDetailModalContent
+      key={endpoint.id}
+      endpoint={endpoint}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  )
+}
+
+interface EndpointDetailModalContentProps {
+  endpoint: DashboardEndpoint
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+function EndpointDetailModalContent({
+  endpoint,
+  open,
+  onOpenChange,
+}: EndpointDetailModalContentProps) {
   const queryClient = useQueryClient()
   const errorDisplay = classifyEndpointLastError(endpoint?.last_error)
   const [name, setName] = useState(endpoint?.name || '')
@@ -128,23 +161,10 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
     endpoint?.endpoint_type
   )
 
-  // Reset form when endpoint changes
-  useEffect(() => {
-    if (endpoint) {
-      setName(endpoint.name || '')
-      setNotes(endpoint.notes || '')
-      setHealthCheckInterval(endpoint.health_check_interval_secs?.toString() || '30')
-      setInferenceTimeout(
-        endpoint.inference_timeout_secs?.toString()
-          || getRecommendedInferenceTimeout(endpoint.endpoint_type).toString()
-      )
-    }
-  }, [endpoint])
-
   // SPEC-8c32349f: Fetch today's request statistics
   const { data: todayStats, isLoading: isLoadingTodayStats } = useQuery({
     queryKey: ['endpoint-today-stats', endpoint?.id],
-    queryFn: () => endpointsApi.getTodayStats(endpoint!.id),
+    queryFn: () => endpointsApi.getTodayStats(endpoint.id),
     enabled: !!endpoint?.id && open,
   })
 
@@ -158,7 +178,7 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: (data: Parameters<typeof endpointsApi.update>[1]) =>
-      endpointsApi.update(endpoint!.id, data),
+      endpointsApi.update(endpoint.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
@@ -177,7 +197,7 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
 
   // Test connection mutation
   const testMutation = useMutation({
-    mutationFn: () => endpointsApi.test(endpoint!.id),
+    mutationFn: () => endpointsApi.test(endpoint.id),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
@@ -197,7 +217,7 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
 
   // Sync models mutation
   const syncMutation = useMutation({
-    mutationFn: () => endpointsApi.sync(endpoint!.id),
+    mutationFn: () => endpointsApi.sync(endpoint.id),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
@@ -228,8 +248,6 @@ export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDe
           : undefined,
     })
   }
-
-  if (!endpoint) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

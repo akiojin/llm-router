@@ -1,6 +1,5 @@
 import { ApiError, type ChatMessage } from '@/lib/api'
 
-export const API_KEY_STORAGE_KEY = 'lb_playground_api_key'
 export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 
 export interface MessageAttachment {
@@ -41,7 +40,7 @@ export function getErrorMessage(error: number | ApiError): string {
 
   switch (status) {
     case 401:
-      return 'Invalid API key. Please check your settings.'
+      return 'Session expired. Please sign in again.'
     case 403:
       return 'Access denied to this resource.'
     case 404:

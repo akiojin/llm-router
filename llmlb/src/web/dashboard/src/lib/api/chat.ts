@@ -1,6 +1,6 @@
 // Chat API (OpenAI compatible)
 
-import { API_BASE, createApiErrorFromResponse } from './client'
+import { API_BASE, createApiErrorFromResponse, getCsrfToken } from './client'
 import type { OpenAIModelsResponse } from './models'
 
 export interface ChatMessage {
@@ -42,7 +42,6 @@ function extractAssistantDeltaText(parsed: {
 export const chatApi = {
   complete: async (
     request: ChatCompletionRequest,
-    apiKey?: string,
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
   ) => {
@@ -50,14 +49,16 @@ export const chatApi = {
       'Content-Type': 'application/json',
     }
 
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`
+    const csrfToken = getCsrfToken()
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken
     }
 
-    const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+    const response = await fetch(`${API_BASE}/api/dashboard/playground/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify(request),
+      credentials: 'include',
       signal,
     })
 
@@ -103,12 +104,10 @@ export const chatApi = {
     return response.json()
   },
 
-  getModels: async (apiKey?: string): Promise<OpenAIModelsResponse> => {
-    const headers: HeadersInit = {}
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`
-    }
-    const response = await fetch(`${API_BASE}/v1/models`, { headers })
+  getModels: async (): Promise<OpenAIModelsResponse> => {
+    const response = await fetch(`${API_BASE}/api/dashboard/playground/models`, {
+      credentials: 'include',
+    })
     if (!response.ok) {
       throw await createApiErrorFromResponse(response)
     }

@@ -18,7 +18,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useDashboardWebSocket } from '@/hooks/useWebSocket'
 import { toast } from '@/hooks/use-toast'
 import { Header } from '@/components/dashboard/Header'
-import { StatsCards } from '@/components/dashboard/StatsCards'
+import { OperationsOverview } from '@/components/dashboard/OperationsOverview'
 import { EndpointTable } from '@/components/dashboard/EndpointTable'
 import { ModelsTable } from '@/components/dashboard/ModelsTable'
 import { RequestHistoryTable } from '@/components/dashboard/RequestHistoryTable'
@@ -854,9 +854,8 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="relative mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
         {!isViewer && updateBanner}
-        {/* Stats Cards */}
         <section className="mb-8">
-          <StatsCards stats={data?.stats} endpoints={endpointsData} isLoading={isLoading} />
+          <OperationsOverview overview={data} isLoading={isLoading} />
         </section>
 
         {isViewer ? (
@@ -884,19 +883,19 @@ export default function Dashboard() {
               </TabsTrigger>
               <TabsTrigger value="statistics" className="gap-2">
                 <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Statistics</span>
+                <span className="hidden sm:inline">Usage</span>
               </TabsTrigger>
               <TabsTrigger value="history" className="gap-2">
                 <History className="h-4 w-4" />
-                <span className="hidden sm:inline">History</span>
+                <span className="hidden sm:inline">Requests</span>
               </TabsTrigger>
               <TabsTrigger value="clients" className="gap-2">
                 <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Clients</span>
+                <span className="hidden sm:inline">Traffic</span>
               </TabsTrigger>
               <TabsTrigger value="logs" className="gap-2">
                 <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">Logs</span>
+                <span className="hidden sm:inline">System</span>
               </TabsTrigger>
             </TabsList>
 

@@ -16,7 +16,6 @@ import {
   PlaygroundBase,
   getErrorMessage,
   transformMessage,
-  API_KEY_STORAGE_KEY,
   type Message,
 } from '@/components/playground'
 import { Button } from '@/components/ui/button'
@@ -34,7 +33,6 @@ import {
   Network,
   MessageSquare,
   Send,
-  KeyRound,
   AlertCircle,
   RefreshCw,
   Gauge,
@@ -42,8 +40,7 @@ import {
   Square,
   Loader2,
   Code,
-  Eye,
-  EyeOff,
+  ShieldCheck,
 } from 'lucide-react'
 
 const DEFAULT_LOAD_TEST_SETTINGS = {
@@ -162,13 +159,6 @@ function buildDistributionRows(records: RequestResponseRecord[]): DistributionRo
 
 export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBalancerPlaygroundProps) {
   const [mode, setMode] = useState<PlaygroundMode>('chat')
-  const [apiKey, setApiKey] = useState(() => {
-    try {
-      return localStorage.getItem(API_KEY_STORAGE_KEY) ?? ''
-    } catch {
-      return ''
-    }
-  })
 
   const [loadTestTotalRequests, setLoadTestTotalRequests] = useState(
     String(DEFAULT_LOAD_TEST_SETTINGS.totalRequests)
@@ -198,29 +188,17 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
     },
   })
 
-  const [showApiKey, setShowApiKey] = useState(false)
-  const hasApiKey = apiKey.trim().length > 0
-
   const {
     data: modelsData,
     isLoading: isLoadingModels,
     error: modelsError,
     refetch: refetchModels,
   } = useQuery<OpenAIModelsResponse>({
-    queryKey: ['lb-playground-models', apiKey.trim()],
-    queryFn: () => chatApi.getModels(apiKey.trim()),
-    enabled: hasApiKey,
+    queryKey: ['lb-playground-models'],
+    queryFn: () => chatApi.getModels(),
     retry: false,
     staleTime: 5000,
   })
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(API_KEY_STORAGE_KEY, apiKey)
-    } catch {
-      // Ignore storage failures
-    }
-  }, [apiKey])
 
   useEffect(() => {
     if (!modelsError) return
@@ -273,17 +251,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
     }
   }, [])
 
-  const clearApiKey = useCallback(() => {
-    setApiKey('')
-    pg.setSelectedModel('')
-    try {
-      localStorage.removeItem(API_KEY_STORAGE_KEY)
-    } catch {
-      // Ignore storage failures
-    }
-    toast({ title: 'API key removed' })
-  }, [pg.setSelectedModel])
-
   const fetchDistributionForRun = useCallback(async (runId: string, expectedCount: number) => {
     setIsRefreshingDistribution(true)
     setDistributionError(null)
@@ -326,15 +293,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   }, [])
 
   const sendMessage = async () => {
-    if (!hasApiKey) {
-      toast({
-        title: 'API key required',
-        description: 'Enter an API key to send requests through the load balancer.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     if ((!pg.input.trim() && pg.attachments.length === 0) || !pg.selectedModel || pg.isStreaming) return
 
     const runId = generateRunId()
@@ -374,7 +332,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             max_tokens: effectiveMaxTokens,
             user: runTag,
           },
-          apiKey.trim(),
           (chunk) => {
             assistantContent += chunk
             pg.setMessages((prev) => {
@@ -395,7 +352,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             max_tokens: effectiveMaxTokens,
             user: runTag,
           },
-          apiKey.trim(),
           undefined,
           pg.abortControllerRef.current.signal
         )
@@ -431,15 +387,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   }
 
   const startLoadTest = async () => {
-    if (!hasApiKey) {
-      toast({
-        title: 'API key required',
-        description: 'Enter an API key before running load tests.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     if (!pg.selectedModel || isLoadTesting) return
 
     const totalRequests = Math.max(1, toNumberValue(loadTestTotalRequests, DEFAULT_LOAD_TEST_SETTINGS.totalRequests))
@@ -490,7 +437,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               max_tokens: effectiveMaxTokens,
               user: runTag,
             },
-            apiKey.trim(),
             undefined,
             requestAbortController.signal
           )
@@ -552,13 +498,10 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       ? ([{ role: 'system', content: pg.systemPrompt } as ChatMessage].concat(pg.messages.map(transformMessage)))
       : pg.messages.map(transformMessage)
 
-    if (!hasApiKey) {
-      return '# Error: API key is required. Set API key and retry.'
-    }
-
-    return `curl -X POST '/v1/chat/completions' \\
+    return `curl -X POST '/api/dashboard/playground/chat/completions' \\
   -H 'Content-Type: application/json' \\
-  -H 'Authorization: Bearer ${apiKey.trim()}' \\
+  -H 'X-CSRF-Token: <llmlb_csrf cookie value>' \\
+  -b 'llmlb_jwt=<dashboard cookie>; llmlb_csrf=<csrf cookie>' \\
   -d '${JSON.stringify(
     {
       model: pg.selectedModel,
@@ -577,7 +520,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
     [modelsData]
   )
 
-  const canSendChat = hasApiKey && (pg.input.trim().length > 0 || pg.attachments.length > 0) && !!pg.selectedModel
+  const canSendChat = (pg.input.trim().length > 0 || pg.attachments.length > 0) && !!pg.selectedModel
   const progressRate =
     loadTestProgress && loadTestProgress.total > 0
       ? Math.round((loadTestProgress.completed / loadTestProgress.total) * 100)
@@ -672,7 +615,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   ) : (
     <Button
       onClick={() => void startLoadTest()}
-      disabled={!hasApiKey || !pg.selectedModel}
+      disabled={!pg.selectedModel}
       className="shrink-0"
       id="lb-start-load-test"
     >
@@ -768,12 +711,13 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       }
       sidebarInfo={
         <div className="p-3 space-y-2">
-          <div className="text-xs text-muted-foreground flex items-center gap-2">
-            <KeyRound className="h-3 w-3" />
-            <span className="font-medium">API Key:</span>
-            <Badge variant={hasApiKey ? 'default' : 'secondary'}>
-              {hasApiKey ? 'Configured' : 'Missing'}
-            </Badge>
+          <div
+            id="lb-session-auth"
+            className="text-xs text-muted-foreground flex items-center gap-2"
+          >
+            <ShieldCheck className="h-3 w-3" />
+            <span className="font-medium">Dashboard session:</span>
+            <Badge variant="default">Active</Badge>
           </div>
           <div className="text-xs text-muted-foreground">
             <span className="font-medium">Models:</span> {modelOptions.length}
@@ -790,39 +734,11 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             variant="outline"
             className="w-full justify-start"
             onClick={() => refetchModels()}
-            disabled={!hasApiKey || isLoadingModels}
+            disabled={isLoadingModels}
           >
             <RefreshCw className={cn('mr-2 h-4 w-4', isLoadingModels && 'animate-spin')} />
             Refresh Models
           </Button>
-          <div className="mt-2">
-            <Label htmlFor="lb-api-key" className="text-xs">API Key (stored in localStorage)</Label>
-            <div className="mt-2 flex gap-2">
-              <Input
-                id="lb-api-key"
-                type={showApiKey ? 'text' : 'password'}
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="h-8"
-                autoComplete="off"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowApiKey(!showApiKey)}
-                disabled={!hasApiKey}
-              >
-                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-              <Button size="sm" variant="outline" onClick={clearApiKey} disabled={!hasApiKey}>
-                Clear
-              </Button>
-            </div>
-            <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-              The API key is saved as plain text in your browser storage.
-            </p>
-          </div>
         </>
       }
       headerContent={
@@ -852,12 +768,10 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
 
           <Select value={pg.selectedModel} onValueChange={pg.setSelectedModel}>
             <SelectTrigger className="w-80" id="lb-model-select">
-              <SelectValue placeholder={hasApiKey ? 'Select a model' : 'Set API key first'} />
+              <SelectValue placeholder="Select a model" />
             </SelectTrigger>
             <SelectContent>
-              {!hasApiKey ? (
-                <SelectItem value="__missing_key__" disabled>API key required</SelectItem>
-              ) : isLoadingModels ? (
+              {isLoadingModels ? (
                 <SelectItem value="__loading__" disabled>Loading models...</SelectItem>
               ) : modelOptions.length === 0 ? (
                 <SelectItem value="__empty__" disabled>No models available</SelectItem>
@@ -884,7 +798,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       messages={pg.messages}
       messagesEndRef={pg.messagesEndRef}
       emptyTitle="Start a load balancer conversation"
-      emptyDescription="Configure an API key, choose a model, and send requests through /v1/chat/completions."
+      emptyDescription="Choose a model and send requests through the load balancer."
       input={pg.input}
       onInputChange={pg.setInput}
       onSend={() => {

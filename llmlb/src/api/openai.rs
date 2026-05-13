@@ -257,6 +257,26 @@ pub async fn chat_completions(
     .await
 }
 
+/// POST /api/dashboard/playground/chat/completions - Dashboardセッション用チャットAPI
+///
+/// LB Playgroundからの試行リクエストを、APIキーではなくJWTセッションで受け付ける。
+/// 外部クライアント向けの`/v1/chat/completions`は引き続きAPIキー必須。
+pub async fn dashboard_playground_chat_completions(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Response, AppError> {
+    chat_completions(
+        ConnectInfo(addr),
+        headers,
+        State(state),
+        None,
+        Json(payload),
+    )
+    .await
+}
+
 /// POST /v1/completions - OpenAI互換テキスト補完API
 pub async fn completions(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,

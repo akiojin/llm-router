@@ -525,6 +525,7 @@ export async function getEndpointByName(
 export interface EndpointDetail extends EndpointInfo {
   health_check_interval_secs: number
   inference_timeout_secs: number
+  last_error?: string | null
   notes?: string
 }
 

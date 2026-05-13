@@ -49,7 +49,7 @@ test.describe('Statistics Tab @dashboard', () => {
 
   test('ST-01: Daily tab displays token statistics', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Statistics")')
+    await page.getByRole('tab', { name: /usage/i }).click()
     await page.waitForTimeout(1000)
 
     // The Statistics tab content should now be visible
@@ -68,7 +68,7 @@ test.describe('Statistics Tab @dashboard', () => {
 
   test('ST-02: Monthly tab displays monthly statistics', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Statistics")')
+    await page.getByRole('tab', { name: /usage/i }).click()
     await page.waitForTimeout(1000)
 
     // Switch to Monthly sub-tab
@@ -85,7 +85,7 @@ test.describe('Statistics Tab @dashboard', () => {
 
   test('ST-03: Statistics cards layout is correct', async ({ page }) => {
     await ensureDashboardLogin(page)
-    await page.click('button[role="tab"]:has-text("Statistics")')
+    await page.getByRole('tab', { name: /usage/i }).click()
     await page.waitForTimeout(1000)
 
     // Check that stat cards are rendered

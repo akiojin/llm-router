@@ -62,6 +62,7 @@ import {
   Filter,
   Plus,
   Trash2,
+  Server,
 } from 'lucide-react'
 import { ModelAddWizard } from './ModelAddWizard'
 import { ModelDeleteDialog } from './ModelDeleteDialog'
@@ -78,16 +79,28 @@ interface ModelsTableProps {
   viewerMode?: boolean
 }
 
-type SortField = 'id' | 'bestStatus' | 'sizeBytes' | 'ownedBy' | 'totalRequests'
+type SortField =
+  | 'id'
+  | 'bestStatus'
+  | 'endpointCount'
+  | 'totalRequests'
 type SortDirection = 'asc' | 'desc'
+type SupportedApi =
+  | 'chat_completions'
+  | 'completions'
+  | 'responses'
+  | 'embeddings'
+  | 'fine_tune'
+  | 'inference'
+  | 'audio_speech'
+  | 'audio_transcription'
+  | 'image_generation'
 
 interface AggregatedModel {
   id: string
   bestStatus: LifecycleStatus
   ready: boolean
-  capabilities: ModelCapabilities
-  sizeBytes?: number
-  ownedBy?: string
+  supportedApis: SupportedApi[]
   maxTokens?: number | null
   source?: string
   tags: string[]
@@ -100,40 +113,111 @@ interface AggregatedModel {
   endpointCount: number
 }
 
+function emptyCapabilities(): ModelCapabilities {
+  return {
+    chat_completion: false,
+    completion: false,
+    embeddings: false,
+    fine_tune: false,
+    inference: false,
+    text_to_speech: false,
+    speech_to_text: false,
+    image_generation: false,
+  }
+}
+
+function normalizeSupportedApi(api: string): SupportedApi | null {
+  switch (api) {
+    case 'chat':
+    case 'chat_completion':
+    case 'chat_completions':
+      return 'chat_completions'
+    case 'completion':
+    case 'completions':
+      return 'completions'
+    case 'response':
+    case 'responses':
+      return 'responses'
+    case 'embedding':
+    case 'embeddings':
+      return 'embeddings'
+    case 'fine_tune':
+    case 'fine_tuning':
+      return 'fine_tune'
+    case 'inference':
+      return 'inference'
+    case 'text_to_speech':
+    case 'tts':
+    case 'audio_speech':
+      return 'audio_speech'
+    case 'speech_to_text':
+    case 'asr':
+    case 'audio_transcription':
+    case 'audio_transcriptions':
+      return 'audio_transcription'
+    case 'image':
+    case 'images':
+    case 'image_generation':
+    case 'images_generations':
+      return 'image_generation'
+    default:
+      return null
+  }
+}
+
+function uniqueApis(apis: SupportedApi[]): SupportedApi[] {
+  return Array.from(new Set(apis))
+}
+
+function supportedApisFromCapabilities(capabilities?: ModelCapabilities): SupportedApi[] {
+  const caps = capabilities ?? emptyCapabilities()
+  return uniqueApis([
+    ...(caps.chat_completion ? ['chat_completions' as const] : []),
+    ...(caps.completion ? ['completions' as const] : []),
+    ...(caps.embeddings ? ['embeddings' as const] : []),
+    ...(caps.fine_tune ? ['fine_tune' as const] : []),
+    ...(caps.inference ? ['inference' as const] : []),
+    ...(caps.text_to_speech ? ['audio_speech' as const] : []),
+    ...(caps.speech_to_text ? ['audio_transcription' as const] : []),
+    ...(caps.image_generation ? ['image_generation' as const] : []),
+  ])
+}
+
+function normalizeSupportedApis(
+  supportedApis?: string[],
+  capabilities?: ModelCapabilities
+): SupportedApi[] {
+  const apis = uniqueApis(
+    (supportedApis ?? [])
+      .map(normalizeSupportedApi)
+      .filter((api): api is SupportedApi => api != null)
+  )
+  return apis.length > 0 ? apis : supportedApisFromCapabilities(capabilities)
+}
+
 function aggregateModels(models: RegisteredModelView[]): AggregatedModel[] {
-  return models.map((model) => ({
-    id: model.name,
-    bestStatus: model.lifecycle_status,
-    ready: model.ready,
-    capabilities: model.capabilities ?? {
-      chat_completion: false,
-      completion: false,
-      embeddings: false,
-      fine_tune: false,
-      inference: false,
-      text_to_speech: false,
-      speech_to_text: false,
-      image_generation: false,
-    },
-    sizeBytes:
-      typeof model.size_gb === 'number'
-        ? Math.round(model.size_gb * 1024 * 1024 * 1024)
-        : undefined,
-    ownedBy: model.owned_by,
-    maxTokens: undefined,
-    source: model.source,
-    tags: model.tags ?? [],
-    description: model.description,
-    repo: model.repo,
-    filename: model.filename,
-    requiredMemoryBytes:
-      typeof model.required_memory_gb === 'number'
-        ? Math.round(model.required_memory_gb * 1024 * 1024 * 1024)
-        : undefined,
-    chatTemplate: model.chat_template,
-    endpointIds: model.endpoint_ids ?? [],
-    endpointCount: (model.endpoint_ids ?? []).length,
-  }))
+  return models.map((model) => {
+    const endpointIds = model.endpoint_ids ?? []
+    return {
+      id: model.name,
+      bestStatus: model.lifecycle_status,
+      ready: model.ready,
+      supportedApis: normalizeSupportedApis(model.supported_apis, model.capabilities),
+      maxTokens: undefined,
+      source: model.source,
+      tags: model.tags ?? [],
+      description: model.description,
+      repo: model.repo,
+      filename: model.filename,
+      requiredMemoryBytes:
+        typeof model.required_memory_gb === 'number'
+          ? Math.round(model.required_memory_gb * 1024 * 1024 * 1024)
+          : undefined,
+      chatTemplate: model.chat_template,
+      endpointIds,
+      endpointCount: endpointIds.length,
+    }
+  })
 }
 
 const LIFECYCLE_PRIORITY: Record<LifecycleStatus, number> = {
@@ -161,18 +245,19 @@ function getLifecycleLabel(status: LifecycleStatus): string {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
-const CAPABILITY_ICONS: {
-  key: keyof ModelCapabilities
+const SUPPORTED_API_BADGES: {
+  key: SupportedApi
   icon: typeof MessageSquare
   label: string
 }[] = [
-  { key: 'chat_completion', icon: MessageSquare, label: 'Chat' },
-  { key: 'completion', icon: FileText, label: 'Completion' },
+  { key: 'chat_completions', icon: MessageSquare, label: 'Chat' },
+  { key: 'completions', icon: FileText, label: 'Completion' },
+  { key: 'responses', icon: MessageSquare, label: 'Responses' },
   { key: 'embeddings', icon: Layers, label: 'Embed' },
   { key: 'fine_tune', icon: Settings, label: 'Tune' },
   { key: 'inference', icon: Cpu, label: 'Infer' },
-  { key: 'text_to_speech', icon: Volume2, label: 'TTS' },
-  { key: 'speech_to_text', icon: Mic, label: 'STT' },
+  { key: 'audio_speech', icon: Volume2, label: 'TTS' },
+  { key: 'audio_transcription', icon: Mic, label: 'STT' },
   { key: 'image_generation', icon: Image, label: 'Image' },
 ]
 
@@ -183,17 +268,20 @@ interface ColumnDef {
   render: (model: AggregatedModel) => React.ReactNode
 }
 
-function CapabilityBadges({ capabilities }: { capabilities: ModelCapabilities }) {
-  const active = CAPABILITY_ICONS.filter((c) => capabilities[c.key])
-  if (active.length === 0) return <span className="text-muted-foreground text-xs">-</span>
+function SupportedApiBadges({ apis }: { apis: SupportedApi[] }) {
+  const active = SUPPORTED_API_BADGES.filter((api) => apis.includes(api.key))
+  if (active.length === 0) {
+    return <span className="text-xs text-muted-foreground">Not reported</span>
+  }
   return (
     <TooltipProvider>
       <div className="flex gap-1 flex-wrap">
         {active.map(({ key, icon: Icon, label }) => (
           <Tooltip key={key}>
             <TooltipTrigger asChild>
-              <Badge variant="outline" className="px-1.5 py-0.5">
+              <Badge variant="outline" className="gap-1 px-2 py-0.5">
                 <Icon className="h-3 w-3" />
+                <span>{label}</span>
               </Badge>
             </TooltipTrigger>
             <TooltipContent>{label}</TooltipContent>
@@ -201,6 +289,41 @@ function CapabilityBadges({ capabilities }: { capabilities: ModelCapabilities })
         ))}
       </div>
     </TooltipProvider>
+  )
+}
+
+function TrafficCell({ stat }: { stat?: ModelStatEntry }) {
+  const total = stat?.total_requests ?? 0
+  const successful = stat?.successful_requests ?? 0
+  const failed = stat?.failed_requests ?? 0
+  if (total === 0) {
+    return <span className="text-sm tabular-nums text-muted-foreground">0</span>
+  }
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-sm tabular-nums">{total.toLocaleString()}</span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div className="text-xs space-y-0.5">
+            <div className="text-green-400">OK: {successful.toLocaleString()}</div>
+            <div className="text-red-400">Fail: {failed.toLocaleString()}</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+function EndpointCountCell({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Server className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className={count === 0 ? 'text-sm tabular-nums text-muted-foreground' : 'text-sm tabular-nums'}>
+        {count.toLocaleString()}
+      </span>
+    </div>
   )
 }
 
@@ -241,6 +364,9 @@ function EndpointStatsRow({
   })
 
   const modelStat = stats?.find((s) => s.model_id === modelId)
+  const totalRequests = modelStat?.total_requests ?? 0
+  const successfulRequests = modelStat?.successful_requests ?? 0
+  const failedRequests = modelStat?.failed_requests ?? 0
   const modelTps = (tpsEntries ?? [])
     .filter((entry) => entry.model_id === modelId && entry.source === 'production')
     .sort((a, b) => a.api_kind.localeCompare(b.api_kind))
@@ -263,12 +389,12 @@ function EndpointStatsRow({
         <span className="truncate font-medium">{endpoint.name}</span>
       </div>
       <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-        <span>Total: {modelStat ? modelStat.total_requests.toLocaleString() : '-'}</span>
+        <span>Total: {totalRequests.toLocaleString()}</span>
         <span className="text-green-600">
-          OK: {modelStat ? modelStat.successful_requests.toLocaleString() : '-'}
+          OK: {successfulRequests.toLocaleString()}
         </span>
         <span className="text-red-600">
-          Fail: {modelStat ? modelStat.failed_requests.toLocaleString() : '-'}
+          Fail: {failedRequests.toLocaleString()}
         </span>
         <span>TPS: {modelTpsSummary}</span>
         <a
@@ -318,10 +444,9 @@ export function ModelsTable({
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
     id: true,
     bestStatus: true,
+    endpointCount: true,
     totalRequests: true,
-    capabilities: true,
-    sizeBytes: true,
-    ownedBy: true,
+    supportedApis: true,
     maxTokens: false,
     source: false,
     tags: false,
@@ -360,16 +485,7 @@ export function ModelsTable({
         id: stat.model_id,
         bestStatus: 'registered',
         ready: false,
-        capabilities: {
-          chat_completion: false,
-          completion: false,
-          embeddings: false,
-          fine_tune: false,
-          inference: false,
-          text_to_speech: false,
-          speech_to_text: false,
-          image_generation: false,
-        },
+        supportedApis: [],
         tags: [],
         endpointIds: [],
         endpointCount: 0,
@@ -407,50 +523,22 @@ export function ModelsTable({
         ),
       },
       {
+        key: 'endpointCount',
+        label: 'Endpoints',
+        defaultVisible: true,
+        render: (m) => <EndpointCountCell count={m.endpointCount} />,
+      },
+      {
         key: 'totalRequests',
-        label: 'Requests',
+        label: 'Routed Requests',
         defaultVisible: true,
-        render: (m) => {
-          const stat = modelStatsMap.get(m.id)
-          if (!stat || stat.total_requests === 0) {
-            return <span className="text-sm text-muted-foreground">-</span>
-          }
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm tabular-nums">{stat.total_requests.toLocaleString()}</span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="text-xs space-y-0.5">
-                    <div className="text-green-400">OK: {stat.successful_requests.toLocaleString()}</div>
-                    <div className="text-red-400">Fail: {stat.failed_requests.toLocaleString()}</div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )
-        },
+        render: (m) => <TrafficCell stat={modelStatsMap.get(m.id)} />,
       },
       {
-        key: 'capabilities',
-        label: 'Capabilities',
+        key: 'supportedApis',
+        label: 'APIs',
         defaultVisible: true,
-        render: (m) => <CapabilityBadges capabilities={m.capabilities} />,
-      },
-      {
-        key: 'sizeBytes',
-        label: 'Size',
-        defaultVisible: true,
-        render: (m) => (
-          <span className="text-sm">{m.sizeBytes ? formatBytes(m.sizeBytes) : '-'}</span>
-        ),
-      },
-      {
-        key: 'ownedBy',
-        label: 'Owned By',
-        defaultVisible: true,
-        render: (m) => <span className="text-sm">{m.ownedBy ?? '-'}</span>,
+        render: (m) => <SupportedApiBadges apis={m.supportedApis} />,
       },
       {
         key: 'maxTokens',
@@ -538,7 +626,7 @@ export function ModelsTable({
     [columns, columnVisibility]
   )
 
-  const activeCapFilters = useMemo(
+  const activeApiFilters = useMemo(
     () => Object.entries(capabilityFilters).filter(([, v]) => v).map(([k]) => k),
     [capabilityFilters]
   )
@@ -547,14 +635,14 @@ export function ModelsTable({
     return aggregatedWithStatsFallback.filter((m) => {
       if (search && !m.id.toLowerCase().includes(search.toLowerCase())) return false
       if (statusFilter !== 'all' && m.bestStatus !== statusFilter) return false
-      if (activeCapFilters.length > 0) {
-        for (const cap of activeCapFilters) {
-          if (!m.capabilities[cap as keyof ModelCapabilities]) return false
+      if (activeApiFilters.length > 0) {
+        for (const api of activeApiFilters) {
+          if (!m.supportedApis.includes(api as SupportedApi)) return false
         }
       }
       return true
     })
-  }, [aggregatedWithStatsFallback, search, statusFilter, activeCapFilters])
+  }, [aggregatedWithStatsFallback, search, statusFilter, activeApiFilters])
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -566,11 +654,8 @@ export function ModelsTable({
         case 'bestStatus':
           cmp = LIFECYCLE_PRIORITY[a.bestStatus] - LIFECYCLE_PRIORITY[b.bestStatus]
           break
-        case 'sizeBytes':
-          cmp = (a.sizeBytes ?? 0) - (b.sizeBytes ?? 0)
-          break
-        case 'ownedBy':
-          cmp = (a.ownedBy ?? '').localeCompare(b.ownedBy ?? '')
+        case 'endpointCount':
+          cmp = a.endpointCount - b.endpointCount
           break
         case 'totalRequests':
           cmp = (modelStatsMap.get(a.id)?.total_requests ?? 0) - (modelStatsMap.get(b.id)?.total_requests ?? 0)
@@ -773,16 +858,16 @@ export function ModelsTable({
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
                 <Filter className="h-4 w-4 mr-1" />
-                Capabilities
-                {activeCapFilters.length > 0 && (
+                APIs
+                {activeApiFilters.length > 0 && (
                   <Badge variant="secondary" className="ml-1 text-xs">
-                    {activeCapFilters.length}
+                    {activeApiFilters.length}
                   </Badge>
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {CAPABILITY_ICONS.map(({ key, label }) => (
+              {SUPPORTED_API_BADGES.map(({ key, label }) => (
                 <DropdownMenuCheckboxItem
                   key={key}
                   checked={!!capabilityFilters[key]}
@@ -826,7 +911,12 @@ export function ModelsTable({
               <TableRow>
                 <TableHead className="w-8" />
                 {visibleColumns.map((col) => {
-                  const sortable: SortField[] = ['id', 'bestStatus', 'sizeBytes', 'ownedBy', 'totalRequests']
+                  const sortable: SortField[] = [
+                    'id',
+                    'bestStatus',
+                    'endpointCount',
+                    'totalRequests',
+                  ]
                   const isSortable = sortable.includes(col.key as SortField)
                   return (
                     <TableHead
@@ -849,7 +939,7 @@ export function ModelsTable({
                     colSpan={visibleColumns.length + 2}
                     className="text-center py-8 text-muted-foreground"
                   >
-                    {search || statusFilter !== 'all' || activeCapFilters.length > 0
+                    {search || statusFilter !== 'all' || activeApiFilters.length > 0
                       ? 'No models match the filter criteria'
                       : 'No models registered'}
                   </TableCell>

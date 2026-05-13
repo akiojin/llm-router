@@ -28,16 +28,18 @@ export const DashboardSelectors = {
     signOut: '[role="menuitem"]:has-text("Sign out")',
   },
 
-  // Stats Grid - These match the actual data-stat attributes in StatsCards.tsx
-  // Note: Online/Offline counts are shown in subtitle of the totalEndpoints card, not as separate cards
-  // Note: Success/Failed counts are shown in subtitle of totalRequests and successRate cards
+  // Operations summary - these match the actual data-stat attributes in OperationsOverview.tsx
   stats: {
+    operationalHealth: '[data-stat="operational-health"]',
     totalEndpoints: '[data-stat="total-endpoints"]',
     totalRequests: '[data-stat="total-requests"]',
+    activeRequests: '[data-stat="active-requests"]',
+    queuedRequests: '[data-stat="queued-requests"]',
     successRate: '[data-stat="success-rate"]',
-    averageResponseTime: '[data-stat="average-response-time-ms"]',
-    averageGpuUsage: '[data-stat="average-gpu-usage"]',
-    averageGpuMemory: '[data-stat="average-gpu-memory-usage"]',
+    outputTps: '[data-stat="output-tps"]',
+    totalTokens: '[data-stat="total-tokens"]',
+    gpuCapacity: '[data-stat="gpu-capacity"]',
+    actionItems: '[data-section="action-items"]',
   },
 
   // Models Tab

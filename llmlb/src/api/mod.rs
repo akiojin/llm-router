@@ -227,6 +227,7 @@ pub fn create_app(state: AppState) -> Router {
     let dashboard_general_routes = Router::new()
         .route("/dashboard/endpoints", get(dashboard::get_endpoints))
         .route("/dashboard/models", get(dashboard::get_models))
+        .route("/dashboard/playground/models", get(openai::list_models))
         .route("/dashboard/stats", get(dashboard::get_stats))
         .route(
             "/dashboard/request-history",
@@ -305,6 +306,27 @@ pub fn create_app(state: AppState) -> Router {
         )
         .route("/catalog/{*repo_id}", get(catalog::get_catalog_model));
 
+    let dashboard_playground_routes = Router::new()
+        .route(
+            "/dashboard/playground/chat/completions",
+            post(openai::dashboard_playground_chat_completions),
+        )
+        .layer(DefaultBodyLimit::max(OPENAI_BODY_LIMIT_BYTES))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::require_password_changed_middleware,
+        ))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::csrf_protect_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.jwt_secret.clone(),
+            crate::auth::middleware::jwt_auth_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.inference_gate.clone(),
+            crate::inference_gate::inference_gate_middleware,
+        ));
+
     // 監査ログAPI (SPEC-8301d106): adminロールのみ
     let dashboard_audit_routes = Router::new()
         .route("/dashboard/audit-logs", get(audit_log::list_audit_logs))
@@ -337,7 +359,9 @@ pub fn create_app(state: AppState) -> Router {
                 state.jwt_secret.clone(),
                 crate::auth::middleware::jwt_auth_middleware,
             ));
-        dashboard_general_routes.merge(dashboard_audit_routes)
+        dashboard_general_routes
+            .merge(dashboard_audit_routes)
+            .merge(dashboard_playground_routes)
     };
 
     // システムAPI（更新状態/適用）

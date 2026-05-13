@@ -58,6 +58,8 @@ test.describe('Real Local Streaming And Failure Paths @workflows @api @real-runt
   }) => {
     test.setTimeout(20 * 60_000)
     test.skip(!runtimeSelection, skipReason)
+    const selection = runtimeSelection
+    if (!selection) return
 
     await page.setViewportSize({ width: 1440, height: 960 })
     await page
@@ -75,18 +77,18 @@ test.describe('Real Local Streaming And Failure Paths @workflows @api @real-runt
       endpointType: 'ollama',
       typeLabel: 'Ollama',
     })
-    await waitForModelVisibleInDetails(page, endpointName, runtimeSelection.ollamaModel)
+    await waitForModelVisibleInDetails(page, endpointName, selection.ollamaModel)
 
     const createdApiKey = await createApiKeyViaUi(page, apiKeyName)
     apiKeyId = createdApiKey.id
     await page.keyboard.press('Escape')
 
-    await waitForApiModelVisible(request, createdApiKey.key, runtimeSelection.ollamaModel)
+    await waitForApiModelVisible(request, createdApiKey.key, selection.ollamaModel)
 
     const streamingResponse = await postStreamingChatCompletion(
       request,
       createdApiKey.key,
-      runtimeSelection.ollamaModel,
+      selection.ollamaModel,
       'Reply with a short confirmation for the streaming test.'
     )
     expect(streamingResponse.response.headers()['content-type']).toContain('text/event-stream')
@@ -111,7 +113,7 @@ test.describe('Real Local Streaming And Failure Paths @workflows @api @real-runt
         Authorization: `Bearer ${createdApiKey.key}`,
       },
       data: {
-        model: `${runtimeSelection.ollamaModel}-missing`,
+        model: `${selection.ollamaModel}-missing`,
         messages: [{ role: 'user', content: 'This should fail.' }],
         stream: false,
       },
