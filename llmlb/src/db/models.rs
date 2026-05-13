@@ -281,6 +281,7 @@ impl ModelStorage {
                 "TextToSpeech" => Some(ModelCapability::TextToSpeech),
                 "SpeechToText" => Some(ModelCapability::SpeechToText),
                 "ImageGeneration" => Some(ModelCapability::ImageGeneration),
+                "ImageInput" => Some(ModelCapability::ImageInput),
                 "Embedding" => Some(ModelCapability::Embedding),
                 _ => None,
             })
@@ -688,6 +689,7 @@ mod tests {
             ModelCapability::TextToSpeech,
             ModelCapability::SpeechToText,
             ModelCapability::ImageGeneration,
+            ModelCapability::ImageInput,
             ModelCapability::Embedding,
         ];
 
@@ -708,7 +710,7 @@ mod tests {
 
         storage.save_model(&model).await.unwrap();
         let loaded = storage.load_model("all-caps").await.unwrap().unwrap();
-        assert_eq!(loaded.capabilities.len(), 5);
+        assert_eq!(loaded.capabilities.len(), 6);
         for cap in &all_caps {
             assert!(loaded.capabilities.contains(cap));
         }
