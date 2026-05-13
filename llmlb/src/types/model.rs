@@ -66,6 +66,8 @@ pub enum ModelCapability {
     SpeechToText,
     /// 画像生成 (/v1/images/generations)
     ImageGeneration,
+    /// 画像入力/視覚理解（/v1/chat/completions の image_url 等）
+    ImageInput,
     /// 埋め込み生成 (/v1/embeddings)
     Embedding,
 }
@@ -105,6 +107,9 @@ pub struct ModelCapabilities {
     pub speech_to_text: bool,
     /// 画像生成対応 (/v1/images/generations)
     pub image_generation: bool,
+    /// 画像入力対応（chat request 内の image_url 等）
+    #[serde(default)]
+    pub image_input: bool,
 }
 
 impl From<&[ModelCapability]> for ModelCapabilities {
@@ -117,6 +122,7 @@ impl From<&[ModelCapability]> for ModelCapabilities {
             text_to_speech: caps.contains(&ModelCapability::TextToSpeech),
             speech_to_text: caps.contains(&ModelCapability::SpeechToText),
             image_generation: caps.contains(&ModelCapability::ImageGeneration),
+            image_input: caps.contains(&ModelCapability::ImageInput),
             fine_tune: false, // 未対応
         }
     }
@@ -190,6 +196,10 @@ mod tests {
             "\"image_generation\""
         );
         assert_eq!(
+            serde_json::to_string(&ModelCapability::ImageInput).unwrap(),
+            "\"image_input\""
+        );
+        assert_eq!(
             serde_json::to_string(&ModelCapability::Embedding).unwrap(),
             "\"embedding\""
         );
@@ -233,6 +243,7 @@ mod tests {
         assert!(!caps.text_to_speech);
         assert!(!caps.speech_to_text);
         assert!(!caps.image_generation);
+        assert!(!caps.image_input);
         assert!(!caps.fine_tune);
     }
 
@@ -247,6 +258,7 @@ mod tests {
             text_to_speech: false,
             speech_to_text: false,
             image_generation: false,
+            image_input: false,
         };
 
         let json = serde_json::to_string(&caps).unwrap();
@@ -330,6 +342,7 @@ mod tests {
         assert!(!caps.text_to_speech);
         assert!(!caps.speech_to_text);
         assert!(!caps.image_generation);
+        assert!(!caps.image_input);
         assert!(!caps.fine_tune);
     }
 
@@ -373,6 +386,7 @@ mod tests {
             text_to_speech: true,
             speech_to_text: false,
             image_generation: true,
+            image_input: true,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let deserialized: ModelCapabilities = serde_json::from_str(&json).unwrap();
@@ -386,6 +400,7 @@ mod tests {
             ModelCapability::TextToSpeech,
             ModelCapability::SpeechToText,
             ModelCapability::ImageGeneration,
+            ModelCapability::ImageInput,
             ModelCapability::Embedding,
         ] {
             let json = serde_json::to_string(&cap).unwrap();
@@ -574,6 +589,7 @@ mod tests {
             ModelCapability::TextToSpeech,
             ModelCapability::SpeechToText,
             ModelCapability::ImageGeneration,
+            ModelCapability::ImageInput,
             ModelCapability::Embedding,
         ];
         let caps: ModelCapabilities = all.into();
@@ -636,6 +652,7 @@ mod tests {
             text_to_speech: true,
             speech_to_text: true,
             image_generation: true,
+            image_input: true,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let deserialized: ModelCapabilities = serde_json::from_str(&json).unwrap();
@@ -653,6 +670,7 @@ mod tests {
             text_to_speech: false,
             speech_to_text: false,
             image_generation: false,
+            image_input: false,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let deserialized: ModelCapabilities = serde_json::from_str(&json).unwrap();

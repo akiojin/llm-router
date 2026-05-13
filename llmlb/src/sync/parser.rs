@@ -2,6 +2,11 @@
 //!
 //! OpenAI形式とOllama形式の両方をパース
 
+use crate::sync::capabilities::{
+    capability_from_supported_api, push_unique_api, push_unique_capability,
+    supported_apis_from_capabilities,
+};
+use crate::types::endpoint::SupportedAPI;
 use serde::Deserialize;
 
 /// パースされたモデル情報
@@ -9,6 +14,10 @@ use serde::Deserialize;
 pub struct ParsedModel {
     /// モデルID/名前
     pub id: String,
+    /// Upstream-reported capabilities such as chat, embeddings, or image_input.
+    pub capabilities: Option<Vec<String>>,
+    /// Upstream-reported API surfaces.
+    pub supported_apis: Vec<SupportedAPI>,
 }
 
 /// OpenAI形式のモデルレスポンス
@@ -82,7 +91,7 @@ pub fn parse_models_response(json: &serde_json::Value) -> (Vec<ParsedModel>, Res
             .iter()
             .filter_map(|model| {
                 let id = model.get("id").and_then(|id| id.as_str())?;
-                Some(ParsedModel { id: id.to_string() })
+                Some(parsed_model_from_value(id, model))
             })
             .collect();
         return (models, ResponseFormat::OpenAi);
@@ -99,7 +108,7 @@ pub fn parse_models_response(json: &serde_json::Value) -> (Vec<ParsedModel>, Res
                     .and_then(|n| n.as_str())
                     .or_else(|| model.get("model").and_then(|m| m.as_str()));
                 let id = id.filter(|s| !s.is_empty())?;
-                Some(ParsedModel { id: id.to_string() })
+                Some(parsed_model_from_value(id, model))
             })
             .collect();
         return (models, ResponseFormat::Ollama);
@@ -107,6 +116,84 @@ pub fn parse_models_response(json: &serde_json::Value) -> (Vec<ParsedModel>, Res
 
     // どちらにも該当しない
     (Vec::new(), ResponseFormat::Unknown)
+}
+
+fn parsed_model_from_value(id: &str, model: &serde_json::Value) -> ParsedModel {
+    let mut capabilities = extract_capabilities(model);
+    let mut supported_apis = extract_supported_apis(model);
+
+    for api in supported_apis.clone() {
+        if let Some(capability) = capability_from_supported_api(api) {
+            push_unique_capability(&mut capabilities, capability);
+        }
+    }
+    for api in supported_apis_from_capabilities(&capabilities) {
+        push_unique_api(&mut supported_apis, api);
+    }
+    supported_apis.sort_by_key(|api| api.as_str());
+    capabilities.sort();
+
+    ParsedModel {
+        id: id.to_string(),
+        capabilities: (!capabilities.is_empty()).then_some(capabilities),
+        supported_apis,
+    }
+}
+
+fn extract_capabilities(model: &serde_json::Value) -> Vec<String> {
+    let mut capabilities = Vec::new();
+    if let Some(value) = model.get("capabilities") {
+        collect_capabilities(value, &mut capabilities);
+    }
+    for key in ["vision", "supports_vision", "image_input"] {
+        if model.get(key).and_then(|value| value.as_bool()) == Some(true) {
+            push_unique_capability(&mut capabilities, key);
+        }
+    }
+    capabilities
+}
+
+fn collect_capabilities(value: &serde_json::Value, capabilities: &mut Vec<String>) {
+    if let Some(items) = value.as_array() {
+        for item in items {
+            if let Some(capability) = item.as_str() {
+                push_unique_capability(capabilities, capability);
+            }
+        }
+        return;
+    }
+
+    if let Some(object) = value.as_object() {
+        for (key, enabled) in object {
+            if enabled.as_bool() == Some(false) || enabled.is_null() {
+                continue;
+            }
+            if enabled.as_bool() == Some(true)
+                || enabled.is_object()
+                || enabled.is_array()
+                || enabled.is_string()
+            {
+                push_unique_capability(capabilities, key);
+            }
+        }
+    }
+}
+
+fn extract_supported_apis(model: &serde_json::Value) -> Vec<SupportedAPI> {
+    let mut apis = Vec::new();
+    let Some(items) = model
+        .get("supported_apis")
+        .and_then(|value| value.as_array())
+    else {
+        return apis;
+    };
+    for item in items {
+        let Some(api) = item.as_str().and_then(SupportedAPI::from_api_str) else {
+            continue;
+        };
+        push_unique_api(&mut apis, api);
+    }
+    apis
 }
 
 /// レスポンス形式を検出
@@ -140,6 +227,32 @@ mod tests {
         assert_eq!(models.len(), 2);
         assert_eq!(models[0].id, "gpt-4");
         assert_eq!(models[1].id, "gpt-3.5-turbo");
+    }
+
+    #[test]
+    fn test_parse_openai_model_preserves_vision_capability() {
+        let json = serde_json::json!({
+            "data": [{
+                "id": "qwen/qwen3-vl-30b",
+                "object": "model",
+                "capabilities": {
+                    "chat_completion": true,
+                    "vision": true
+                }
+            }]
+        });
+
+        let (models, format) = parse_models_response(&json);
+
+        assert_eq!(format, ResponseFormat::OpenAi);
+        assert_eq!(models.len(), 1);
+        assert_eq!(
+            models[0].capabilities.as_deref(),
+            Some(&["chat".to_string(), "image_input".to_string()][..])
+        );
+        assert!(models[0]
+            .supported_apis
+            .contains(&crate::types::endpoint::SupportedAPI::ImageInput));
     }
 
     #[test]

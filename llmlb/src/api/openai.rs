@@ -44,6 +44,12 @@ fn build_supported_apis(
                 ModelCapability::Embedding => {
                     set.insert(SupportedAPI::Embeddings);
                 }
+                ModelCapability::ImageInput => {
+                    set.insert(SupportedAPI::ImageInput);
+                }
+                ModelCapability::ImageGeneration => {
+                    set.insert(SupportedAPI::ImageGeneration);
+                }
                 _ => {}
             }
         }

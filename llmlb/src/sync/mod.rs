@@ -6,7 +6,8 @@ pub mod capabilities;
 pub mod parser;
 
 pub use capabilities::{
-    capabilities_to_strings, capability_from_str, detect_capabilities, Capability,
+    capabilities_to_strings, capability_from_str, detect_capabilities, push_unique_api,
+    push_unique_capability, supported_apis_from_capabilities, Capability,
 };
 pub use parser::{parse_models_response, ParsedModel, ResponseFormat};
 
@@ -16,7 +17,7 @@ use crate::types::endpoint::{EndpointModel, EndpointType, SupportedAPI};
 use chrono::Utc;
 use reqwest::Client;
 use sqlx::SqlitePool;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tracing::debug;
 use uuid::Uuid;
@@ -149,6 +150,10 @@ pub async fn sync_models_with_type(
 
     // 新しいモデルIDのセット
     let new_model_ids: HashSet<String> = parsed_models.iter().map(|m| m.id.clone()).collect();
+    let parsed_by_id: HashMap<&str, &ParsedModel> = parsed_models
+        .iter()
+        .map(|model| (model.id.as_str(), model))
+        .collect();
 
     // 差分を計算
     let added_ids: Vec<_> = new_model_ids.difference(&existing_models).collect();
@@ -169,8 +174,10 @@ pub async fn sync_models_with_type(
     let mut synced_models = Vec::new();
 
     for model_id in &added_ids {
-        let caps = detect_capabilities(model_id);
-        let caps_vec = Some(capabilities_to_strings(&caps));
+        let (caps_vec, supported_apis) = build_endpoint_model_capability_view(
+            model_id,
+            parsed_by_id.get(model_id.as_str()).copied(),
+        );
 
         // マッピングテーブルからcanonical_nameを解決
         let canonical_name = endpoint_type
@@ -183,7 +190,7 @@ pub async fn sync_models_with_type(
             capabilities: caps_vec,
             max_tokens: None,
             last_checked: Some(now),
-            supported_apis: vec![SupportedAPI::ChatCompletions],
+            supported_apis,
             canonical_name,
         };
 
@@ -193,8 +200,10 @@ pub async fn sync_models_with_type(
 
     // 既存モデルのlast_checkedを更新
     for model_id in &updated_ids {
-        let caps = detect_capabilities(model_id);
-        let caps_vec = Some(capabilities_to_strings(&caps));
+        let (caps_vec, supported_apis) = build_endpoint_model_capability_view(
+            model_id,
+            parsed_by_id.get(model_id.as_str()).copied(),
+        );
 
         let canonical_name = endpoint_type
             .and_then(|et| crate::models::mapping::resolve_canonical(model_id, &et))
@@ -206,7 +215,7 @@ pub async fn sync_models_with_type(
             capabilities: caps_vec,
             max_tokens: None,
             last_checked: Some(now),
-            supported_apis: vec![SupportedAPI::ChatCompletions],
+            supported_apis,
             canonical_name,
         };
 
@@ -277,6 +286,41 @@ pub async fn sync_models_with_type(
     })
 }
 
+fn build_endpoint_model_capability_view(
+    model_id: &str,
+    parsed: Option<&ParsedModel>,
+) -> (Option<Vec<String>>, Vec<SupportedAPI>) {
+    let detected = detect_capabilities(model_id);
+    let mut capabilities = capabilities_to_strings(&detected);
+
+    if let Some(parsed) = parsed {
+        if let Some(reported_capabilities) = parsed.capabilities.as_deref() {
+            for capability in reported_capabilities {
+                push_unique_capability(&mut capabilities, capability);
+            }
+        }
+        for api in &parsed.supported_apis {
+            if let Some(capability) = capabilities::capability_from_supported_api(*api) {
+                push_unique_capability(&mut capabilities, capability);
+            }
+        }
+    }
+
+    capabilities.sort();
+    let mut supported_apis = supported_apis_from_capabilities(&capabilities);
+    if let Some(parsed) = parsed {
+        for api in &parsed.supported_apis {
+            push_unique_api(&mut supported_apis, *api);
+        }
+    }
+    if supported_apis.is_empty() {
+        supported_apis.push(SupportedAPI::ChatCompletions);
+    }
+    supported_apis.sort_by_key(|api| api.as_str());
+
+    (Some(capabilities), supported_apis)
+}
+
 /// 2つのモデルセット間の差分を計算
 ///
 /// # Returns
@@ -340,6 +384,24 @@ mod tests {
         assert!(added.is_empty());
         assert!(removed.is_empty());
         assert_eq!(updated.len(), 2);
+    }
+
+    #[test]
+    fn test_build_endpoint_model_capability_view_preserves_reported_image_input() {
+        let parsed = ParsedModel {
+            id: "qwen/qwen3-vl-30b".to_string(),
+            capabilities: Some(vec!["vision".to_string()]),
+            supported_apis: vec![SupportedAPI::ImageInput],
+        };
+
+        let (capabilities, supported_apis) =
+            build_endpoint_model_capability_view(&parsed.id, Some(&parsed));
+
+        let capabilities = capabilities.expect("capabilities should be present");
+        assert!(capabilities.contains(&"chat".to_string()));
+        assert!(capabilities.contains(&"image_input".to_string()));
+        assert!(supported_apis.contains(&SupportedAPI::ChatCompletions));
+        assert!(supported_apis.contains(&SupportedAPI::ImageInput));
     }
 
     #[test]
