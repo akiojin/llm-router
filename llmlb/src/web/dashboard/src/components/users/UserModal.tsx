@@ -151,22 +151,42 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     setFormRole('viewer')
   }
 
-  // Populate form when editing
-  useEffect(() => {
-    if (editUser) {
-      setFormUsername(editUser.username)
-      setFormPassword('')
-      setFormRole(editUser.role as 'admin' | 'viewer')
-    } else {
-      resetForm()
-    }
-  }, [editUser])
-
   useEffect(() => {
     if (!open) {
       cleanupManualCopyBuffer()
     }
   }, [open])
+
+  const handleMainOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      cleanupManualCopyBuffer()
+    }
+    onOpenChange(nextOpen)
+  }
+
+  const handleCreateOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetForm()
+    }
+    setCreateOpen(nextOpen)
+  }
+
+  const handleOpenCreateDialog = () => {
+    resetForm()
+    setCreateOpen(true)
+  }
+
+  const handleOpenEditDialog = (user: User) => {
+    setFormUsername(user.username)
+    setFormPassword('')
+    setFormRole(user.role as 'admin' | 'viewer')
+    setEditUser(user)
+  }
+
+  const handleCloseEditDialog = () => {
+    setEditUser(null)
+    resetForm()
+  }
 
   const handleCreate = () => {
     createMutation.mutate({
@@ -225,7 +245,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleMainOpenChange}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -240,7 +260,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
           <div className="space-y-4 py-4">
             {/* Actions */}
             <div className="flex justify-between">
-              <Button onClick={() => setCreateOpen(true)}>
+              <Button onClick={handleOpenCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add User
               </Button>
@@ -286,7 +306,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
                               variant="outline"
                               size="icon"
                               className="h-8 w-8"
-                              onClick={() => setEditUser(user)}
+                              onClick={() => handleOpenEditDialog(user)}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -311,7 +331,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       </Dialog>
 
       {/* Create User Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
@@ -343,7 +363,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
               Cancel
             </Button>
             <Button
@@ -411,7 +431,14 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       </Dialog>
 
       {/* Edit User Dialog */}
-      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+      <Dialog
+        open={!!editUser}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            handleCloseEditDialog()
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
@@ -452,7 +479,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditUser(null)}>
+            <Button variant="outline" onClick={handleCloseEditDialog}>
               Cancel
             </Button>
             <Button

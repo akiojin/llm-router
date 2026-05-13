@@ -59,6 +59,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttemptRef = useRef(0)
+  const connectRef = useRef<() => void>(() => {})
+  const shouldReconnectRef = useRef(false)
   const [isConnected, setIsConnected] = useState(false)
   const [lastEvent, setLastEvent] = useState<DashboardEvent | null>(null)
 
@@ -75,12 +77,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     onDisconnectRef.current = onDisconnect
   })
 
+  const scheduleReconnect = useCallback(() => {
+    if (!shouldReconnectRef.current) return
+
+    const delay = getReconnectDelay(reconnectAttemptRef.current)
+    reconnectAttemptRef.current += 1
+    reconnectTimeoutRef.current = setTimeout(() => connectRef.current(), delay)
+  }, [])
+
   const connect = useCallback(() => {
-    const scheduleReconnect = () => {
-      const delay = getReconnectDelay(reconnectAttemptRef.current)
-      reconnectAttemptRef.current += 1
-      reconnectTimeoutRef.current = setTimeout(connect, delay)
-    }
+    shouldReconnectRef.current = true
 
     // Determine WebSocket URL based on current location
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -138,10 +144,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         wsRef.current = null
 
         // Schedule reconnection with exponential backoff
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current)
+        if (shouldReconnectRef.current) {
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current)
+          }
+          scheduleReconnect()
         }
-        scheduleReconnect()
       }
 
       // Browser fires onclose automatically after onerror; no manual ws.close() needed
@@ -153,9 +161,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       // Schedule reconnection with exponential backoff
       scheduleReconnect()
     }
-  }, [queryClient])
+  }, [queryClient, scheduleReconnect])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   const disconnect = useCallback(() => {
+    shouldReconnectRef.current = false
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
@@ -165,7 +178,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       wsRef.current.close()
       wsRef.current = null
     }
-    setIsConnected(false)
   }, [])
 
   useEffect(() => {

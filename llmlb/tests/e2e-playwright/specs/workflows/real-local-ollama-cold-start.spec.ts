@@ -58,6 +58,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
     test.setTimeout(20 * 60_000)
     test.skip(!coldStartModel, skipReason)
     const model = coldStartModel
+    if (!model) return
 
     await page.setViewportSize({ width: 1440, height: 960 })
     await page

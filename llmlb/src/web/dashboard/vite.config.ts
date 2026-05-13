@@ -1,6 +1,20 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+
+const devApiProxy: ProxyOptions = {
+  target: 'http://localhost:32768',
+  changeOrigin: true,
+  configure: (proxy) => {
+    proxy.on('proxyReq', (proxyReq, req) => {
+      const forwardedHost = req.headers.host
+      if (forwardedHost) {
+        proxyReq.setHeader('x-forwarded-host', forwardedHost)
+      }
+      proxyReq.setHeader('x-forwarded-proto', 'http')
+    })
+  },
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -31,14 +45,8 @@ export default defineConfig({
   base: '/dashboard/',
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:32768',
-        changeOrigin: true,
-      },
-      '/v1': {
-        target: 'http://localhost:32768',
-        changeOrigin: true,
-      },
+      '/api': devApiProxy,
+      '/v1': devApiProxy,
     },
   },
 })

@@ -349,6 +349,8 @@ test.describe('Real Local Runtimes @workflows @real-runtimes', () => {
   }) => {
     test.setTimeout(15 * 60_000)
     test.skip(!runtimeSelection, skipReason)
+    const selection = runtimeSelection
+    if (!selection) return
 
     await page.setViewportSize({ width: 1440, height: 960 })
     await page
@@ -384,12 +386,12 @@ test.describe('Real Local Runtimes @workflows @real-runtimes', () => {
     await waitForModelVisibleInDetails(
       page,
       ollamaEndpointName,
-      runtimeSelection.ollamaModel
+      selection.ollamaModel
     )
     await waitForModelVisibleInDetails(
       page,
       lmStudioEndpointName,
-      runtimeSelection.lmStudioModel
+      selection.lmStudioModel
     )
 
     // Create an API key in the UI and verify clipboard readback.
@@ -401,12 +403,12 @@ test.describe('Real Local Runtimes @workflows @real-runtimes', () => {
     const ollamaApiModelId = await waitForApiModelVisible(
       request,
       createdApiKey.key,
-      runtimeSelection.ollamaModel
+      selection.ollamaModel
     )
     const lmStudioApiModelId = await waitForApiModelVisible(
       request,
       createdApiKey.key,
-      runtimeSelection.lmStudioModel
+      selection.lmStudioModel
     )
 
     // Run real inference through llmlb with the UI-created API key.

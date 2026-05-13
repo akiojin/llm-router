@@ -21,7 +21,7 @@ export class DashboardPage {
   readonly totalEndpoints: Locator;
   readonly totalRequests: Locator;
   readonly successRate: Locator;
-  readonly averageResponseTime: Locator;
+  readonly outputTps: Locator;
 
   // Models - Tabs
   // NOTE: Model Hub タブは SPEC-6cd7f960 により廃止されました
@@ -66,7 +66,7 @@ export class DashboardPage {
     this.totalEndpoints = page.locator(DashboardSelectors.stats.totalEndpoints);
     this.totalRequests = page.locator(DashboardSelectors.stats.totalRequests);
     this.successRate = page.locator(DashboardSelectors.stats.successRate);
-    this.averageResponseTime = page.locator(DashboardSelectors.stats.averageResponseTime);
+    this.outputTps = page.locator(DashboardSelectors.stats.outputTps);
 
     // Models - Tabs
     // NOTE: Model Hub タブは SPEC-6cd7f960 により廃止されました
