@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [5.9.0](https://github.com/akiojin/llmlb/compare/v5.8.0...v5.9.0) (2026-05-15)
+
+### Added
+
+- Models: 量子化サフィックスを `quantization` フィールドへ分離し、canonical name 集約後も元モデルの量子化情報を扱えるよう改善 (#575)
+- Sync: 単一エンドポイントによる大量モデル申告を warn ログで検知し、モデルカタログ運用異常を発見しやすく改善 (#575)
+- Dashboard: 管理トップを operations / capacity / action item 中心の KPI へ刷新し、ダッシュボードセッション経由で LB Playground を利用できるようにした (#649)
+
+### Fixed
+
+- API: `/v1/models` で embedding capability、`created`、`supported_apis` の順序、`ready` 判定、`owned_by` を OpenAI 互換レスポンスとして安定化 (#575)
+- Models: canonical テーブルの補正、`max_tokens` フォールバック、endpoint 申告 API のマージ処理を修正 (#575)
+- Dashboard: image input capability をモデル同期から保持し、Models テーブルで `Image` API バッジとして表示するよう修正 (#651)
+- Dashboard: operations capacity counts と E2E タブラベル期待値を修正 (#649)
+
+### Docs
+
+- Catalog: モデルカタログ運用ポリシーを追加し、G-3 暫定実装と follow-up Issue #643 を反映 (#575)
+
+### Chore
+
+- Deps: Dependabot による Cargo 依存更新を取り込み（`tokio` 1.52.3、`reqwest` 0.13.3、`jsonwebtoken` 10.4.0、`sysinfo` 0.39.1、`tray-icon` 0.24.0 など）
+- Dashboard: operations overview / Playground / Models 表示更新に伴い静的アセットを再生成
+
 ## [5.8.0](https://github.com/akiojin/llmlb/compare/v5.7.2...v5.8.0) (2026-04-23)
 
 ### Added

@@ -3,7 +3,7 @@ members = ["llmlb"]
 resolver = "2"
 
 [workspace.package]
-version = "5.8.0"
+version = "5.9.0"
 edition = "2021"
 authors = ["LLM Router Contributors"]
 license = "Apache-2.0"
@@ -11,7 +11,7 @@ repository = "https://github.com/akiojin/llmlb"
 
 [workspace.dependencies]
 # 共通依存クレート
-tokio = { version = "1.51", features = ["full"] }
+tokio = { version = "1.52", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.23", features = ["v4", "serde"] }
@@ -29,7 +29,7 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 
 # Node専用
-sysinfo = "0.38"
+sysinfo = "0.39"
 
 [profile.release]
 opt-level = 3

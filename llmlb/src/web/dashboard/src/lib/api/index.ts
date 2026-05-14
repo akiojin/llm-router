@@ -9,6 +9,9 @@ export type { RegisterRequest, RegisterResponse } from './auth'
 export { dashboardApi } from './dashboard'
 export type {
   DashboardStats,
+  DashboardOperations,
+  DashboardCapacity,
+  DashboardActionItem,
   SyncState,
   SyncProgress,
   RequestHistoryItem,

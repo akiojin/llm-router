@@ -246,6 +246,12 @@ heartbeats to the load balancer (there is no `POST /api/health`).
 LLM Load Balancer routes requests across registered inference endpoints and optionally proxies to
 cloud LLM providers via model prefixes.
 
+Related documents:
+
+- [`docs/architecture.md`](docs/architecture.md) — Detailed component design.
+- [`docs/model-catalog-policy.md`](docs/model-catalog-policy.md) — Catalog operation policy
+  (alias naming, canonical resolution, max_tokens fallback, quantization suffix policy).
+
 ### Components
 - **LLM Load Balancer (Rust)**: Receives OpenAI-compatible traffic, chooses a path, and proxies requests. Exposes dashboard, metrics, and admin APIs.
 - **Registered Endpoints**: LM Studio, Ollama, vLLM, xLLM, llama.cpp, and other OpenAI-compatible servers registered with the load balancer.

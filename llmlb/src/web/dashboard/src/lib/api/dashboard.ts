@@ -38,6 +38,46 @@ export interface DashboardStats {
   total_tokens: number
 }
 
+export interface DashboardOperations {
+  health: 'healthy' | 'attention' | 'empty' | string
+  total_endpoints: number
+  online_endpoints: number
+  pending_endpoints: number
+  registering_endpoints: number
+  offline_endpoints: number
+  error_endpoints: number
+  total_requests: number
+  successful_requests: number
+  failed_requests: number
+  success_rate: number | null
+  active_requests: number
+  queued_requests: number
+  average_response_time_ms: number | null
+  output_tps: number | null
+  total_input_tokens: number
+  total_output_tokens: number
+  total_tokens: number
+  last_registered_at: string | null
+  last_seen_at: string | null
+}
+
+export interface DashboardCapacity {
+  total_models: number
+  gpu_capable_endpoints: number
+  gpu_telemetry_endpoints: number
+  total_gpu_memory_bytes: number | null
+  used_gpu_memory_bytes: number | null
+  gpu_memory_usage_percent: number | null
+  telemetry_status: 'available' | 'partial' | 'unavailable' | string
+}
+
+export interface DashboardActionItem {
+  severity: 'critical' | 'warning' | 'info' | string
+  title: string
+  detail: string
+  count: number
+}
+
 export type SyncState = 'idle' | 'running' | 'success' | 'failed'
 
 export interface SyncProgress {
@@ -101,7 +141,9 @@ export type TpsSource = 'production' | 'benchmark'
 
 export interface DashboardOverview {
   endpoints: DashboardEndpoint[]
-  stats: DashboardStats
+  operations: DashboardOperations
+  capacity: DashboardCapacity
+  action_items: DashboardActionItem[]
   history: RequestHistoryItem[]
   endpoint_tps: EndpointTpsSummary[]
   generated_at: string

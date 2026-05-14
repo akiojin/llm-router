@@ -24,6 +24,7 @@ use serial_test::serial;
 #[derive(Clone)]
 struct ModelNodeState {
     model_id: String,
+    capabilities: Option<Value>,
 }
 
 /// Responses API対応のモックノードを起動
@@ -37,17 +38,20 @@ async fn spawn_model_node(state: ModelNodeState) -> TestServer {
 }
 
 async fn models_handler(State(state): State<Arc<ModelNodeState>>) -> impl IntoResponse {
+    let mut model = json!({
+        "id": state.model_id,
+        "object": "model",
+        "created": 0,
+        "owned_by": "test"
+    });
+    if let Some(capabilities) = &state.capabilities {
+        model["capabilities"] = capabilities.clone();
+    }
+
     (
         StatusCode::OK,
         Json(json!({
-            "data": [
-                {
-                    "id": state.model_id,
-                    "object": "model",
-                    "created": 0,
-                    "owned_by": "test"
-                }
-            ]
+            "data": [model]
         })),
     )
 }
@@ -69,6 +73,7 @@ async fn responses_handler() -> impl IntoResponse {
 async fn v1_models_includes_supported_apis_field() {
     let node_state = ModelNodeState {
         model_id: "test-model-with-responses".to_string(),
+        capabilities: None,
     };
     let stub = spawn_model_node(node_state).await;
 
@@ -126,6 +131,51 @@ async fn v1_models_includes_supported_apis_field() {
     );
 }
 
+#[tokio::test]
+#[serial]
+async fn v1_models_preserves_upstream_vision_capability_as_image_input() {
+    let node_state = ModelNodeState {
+        model_id: "qwen/qwen3-vl-30b".to_string(),
+        capabilities: Some(json!({
+            "chat_completion": true,
+            "vision": true
+        })),
+    };
+    let stub = spawn_model_node(node_state).await;
+    let lb = spawn_test_lb().await;
+
+    let _endpoint_id = register_responses_endpoint(lb.addr(), stub.addr(), "qwen/qwen3-vl-30b")
+        .await
+        .expect("register vision endpoint");
+
+    let client = Client::new();
+    let response = client
+        .get(format!("http://{}/v1/models", lb.addr()))
+        .header("authorization", "Bearer sk_debug")
+        .send()
+        .await
+        .expect("list models request");
+
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+
+    let body: Value = response.json().await.expect("parse json");
+    let data = body["data"].as_array().expect("data array");
+    let model = data
+        .iter()
+        .find(|m| m["id"].as_str() == Some("qwen/qwen3-vl-30b"))
+        .expect("vision model should be in /v1/models response");
+    let supported_apis = model["supported_apis"]
+        .as_array()
+        .expect("supported_apis should be array");
+
+    assert!(
+        supported_apis
+            .iter()
+            .any(|api| api.as_str() == Some("image_input")),
+        "vision capability should be exposed as image_input"
+    );
+}
+
 // ===== SPEC-6cd7f960 4.7: エンドポイント集約動作テスト =====
 
 /// 4.7: エンドポイント集約 - 複数エンドポイントのモデルが/v1/modelsに集約される
@@ -135,9 +185,11 @@ async fn v1_models_aggregates_multiple_endpoints() {
     // 2つの異なるモデルを持つエンドポイントを起動
     let node1_state = ModelNodeState {
         model_id: "model-from-endpoint-1".to_string(),
+        capabilities: None,
     };
     let node2_state = ModelNodeState {
         model_id: "model-from-endpoint-2".to_string(),
+        capabilities: None,
     };
     let stub1 = spawn_model_node(node1_state).await;
     let stub2 = spawn_model_node(node2_state).await;

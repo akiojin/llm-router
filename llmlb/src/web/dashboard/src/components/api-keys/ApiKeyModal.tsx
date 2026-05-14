@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   apiKeysApi,
@@ -96,14 +96,12 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [showKey, setShowKey] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [manualSelectionText, setManualSelectionText] = useState<string | null>(null)
   const createdKeyCodeRef = useRef<HTMLElement | null>(null)
 
   // Fetch API keys
   const {
     data: apiKeys,
     isLoading,
-    isFetching,
     refetch,
   } = useQuery({
     queryKey: ['api-keys'],
@@ -115,6 +113,55 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
     refetchInterval: false,
     refetchOnWindowFocus: false,
   })
+
+  const clearCreatedKeyState = () => {
+    setCreatedKey(null)
+    setShowKey(null)
+    setCopiedId(null)
+    cleanupManualCopyBuffer()
+  }
+
+  const resetCreateForm = () => {
+    setNewKeyName('')
+    setNewKeyExpires('')
+    setSelectedPermissions(VIEWER_FIXED_PERMISSIONS)
+  }
+
+  const handleMainOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      clearCreatedKeyState()
+    }
+    onOpenChange(nextOpen)
+  }
+
+  const handleCreateOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetCreateForm()
+    }
+    setCreateOpen(nextOpen)
+  }
+
+  const handleOpenCreateDialog = () => {
+    resetCreateForm()
+    setCreateOpen(true)
+  }
+
+  const selectCreatedKeyForManualCopy = (text: string) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return
+    }
+
+    const selection = window.getSelection()
+    if (selection && createdKeyCodeRef.current) {
+      const range = document.createRange()
+      range.selectNodeContents(createdKeyCodeRef.current)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      return
+    }
+
+    selectTextForManualCopy(text)
+  }
 
   // Create API key mutation
   const createMutation = useMutation({
@@ -144,8 +191,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       setCreatedKey(data.key)
       setShowKey(null)
       setCopiedId(null)
-      setNewKeyName('')
-      setNewKeyExpires('')
+      resetCreateForm()
       setCreateOpen(false)
       toast({ title: 'API key created' })
     },
@@ -175,65 +221,6 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
     },
   })
 
-  // Reset created key when modal closes
-  useEffect(() => {
-    if (!open) {
-      setCreatedKey(null)
-      setShowKey(null)
-      setCopiedId(null)
-      setManualSelectionText(null)
-      cleanupManualCopyBuffer()
-    }
-  }, [open])
-
-  // Enforce: plaintext keys are copyable only immediately after creation.
-  // Any background refetch/refresh should make copying impossible, requiring re-creation.
-  useEffect(() => {
-    if (!open) return
-    if (!createdKey) return
-    if (!isFetching) return
-    setCreatedKey(null)
-    setShowKey(null)
-    setCopiedId(null)
-    setManualSelectionText(null)
-    cleanupManualCopyBuffer()
-  }, [open, createdKey, isFetching])
-
-  useEffect(() => {
-    if (!createOpen) {
-      setNewKeyName('')
-      setNewKeyExpires('')
-      setSelectedPermissions(VIEWER_FIXED_PERMISSIONS)
-    }
-  }, [createOpen])
-
-  useEffect(() => {
-    if (isAdmin) return
-    setSelectedPermissions(VIEWER_FIXED_PERMISSIONS)
-  }, [isAdmin])
-
-  useEffect(() => {
-    if (!manualSelectionText) return
-    if (showKey !== 'created') return
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      setManualSelectionText(null)
-      return
-    }
-
-    const selection = window.getSelection()
-    if (selection && createdKeyCodeRef.current) {
-      const range = document.createRange()
-      range.selectNodeContents(createdKeyCodeRef.current)
-      selection.removeAllRanges()
-      selection.addRange(range)
-      setManualSelectionText(null)
-      return
-    }
-
-    selectTextForManualCopy(manualSelectionText)
-    setManualSelectionText(null)
-  }, [manualSelectionText, showKey])
-
   const handleCopy = async (text: string, id: string) => {
     try {
       const { method } = await copyToClipboard(text)
@@ -247,7 +234,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       setCopiedId(null)
       if (id === 'created') {
         setShowKey('created')
-        setManualSelectionText(text)
+        window.setTimeout(() => selectCreatedKeyForManualCopy(text), 0)
       } else {
         selectTextForManualCopy(text)
       }
@@ -278,6 +265,8 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
   }
 
   const handleTogglePermission = (permission: ApiKeyPermission, checked: boolean) => {
+    if (!isAdmin) return
+
     setSelectedPermissions((prev) => {
       if (checked) {
         if (prev.includes(permission)) return prev
@@ -294,7 +283,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleMainOpenChange}>
         <DialogContent id="api-keys-modal" className="max-w-3xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -309,7 +298,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
           <div className="space-y-4 py-4">
             {/* Actions */}
             <div className="flex justify-between">
-              <Button id="create-api-key" onClick={() => setCreateOpen(true)}>
+              <Button id="create-api-key" onClick={handleOpenCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Key
               </Button>
@@ -321,9 +310,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                 onClick={() => {
                   // Enforce: plaintext keys are copyable only immediately after creation.
                   // Any "refresh" action should make copying impossible, requiring re-creation.
-                  setCreatedKey(null)
-                  setShowKey(null)
-                  setCopiedId(null)
+                  clearCreatedKeyState()
                   refetch()
                 }}
               >
@@ -459,7 +446,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       </Dialog>
 
       {/* Create Key Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto border-border bg-card text-card-foreground">
           <DialogHeader>
             <DialogTitle>Create API Key</DialogTitle>
@@ -527,7 +514,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
               Cancel
             </Button>
             <Button

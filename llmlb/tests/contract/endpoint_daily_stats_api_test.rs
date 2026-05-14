@@ -382,3 +382,63 @@ async fn test_dashboard_models_includes_non_online_endpoint_models() {
         "pending endpoint id should be included"
     );
 }
+
+#[tokio::test]
+#[serial]
+async fn test_dashboard_models_preserves_image_input_supported_api() {
+    let (app, db_pool, jwt) = build_app().await;
+
+    let endpoint_id = create_endpoint(
+        &db_pool,
+        "vision-endpoint",
+        llmlb::types::endpoint::EndpointStatus::Online,
+    )
+    .await;
+    let model = llmlb::types::endpoint::EndpointModel {
+        endpoint_id,
+        model_id: "qwen/qwen3-vl-30b".to_string(),
+        capabilities: Some(vec!["chat".to_string(), "image_input".to_string()]),
+        max_tokens: None,
+        last_checked: None,
+        supported_apis: vec![
+            llmlb::types::endpoint::SupportedAPI::ChatCompletions,
+            llmlb::types::endpoint::SupportedAPI::ImageInput,
+        ],
+        canonical_name: None,
+    };
+    llmlb::db::endpoints::add_endpoint_model(&db_pool, &model)
+        .await
+        .expect("add vision endpoint model");
+
+    let response = app
+        .oneshot(
+            admin_request(&jwt)
+                .method("GET")
+                .uri("/api/dashboard/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_json: Value = serde_json::from_slice(&body).unwrap();
+    let models = body_json["data"]
+        .as_array()
+        .expect("dashboard/models data should be array");
+    let model = models
+        .iter()
+        .find(|entry| entry["id"] == Value::String("qwen/qwen3-vl-30b".to_string()))
+        .expect("vision model should be listed on dashboard/models");
+    let supported_apis = model["supported_apis"]
+        .as_array()
+        .expect("supported_apis should be an array");
+
+    assert!(
+        supported_apis
+            .iter()
+            .any(|api| api == &Value::String("image_input".to_string())),
+        "image_input should be preserved for Dashboard APIs badges"
+    );
+}

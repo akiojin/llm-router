@@ -21,6 +21,7 @@ export interface ModelCapabilities {
   text_to_speech: boolean
   speech_to_text: boolean
   image_generation: boolean
+  image_input?: boolean
 }
 
 // /v1/models レスポンスの model object
@@ -29,7 +30,8 @@ export interface OpenAIModel {
   object: 'model'
   created: number
   owned_by: string
-  capabilities: ModelCapabilities
+  capabilities?: ModelCapabilities
+  supported_apis?: string[]
   // Dashboard extended fields
   lifecycle_status: LifecycleStatus
   download_progress?: DownloadProgress | null
@@ -88,6 +90,7 @@ export interface RegisteredModelView {
   required_memory_gb?: number
   tags: string[]
   capabilities?: ModelCapabilities
+  supported_apis?: string[]
   chat_template?: string
   endpoint_ids: string[]
 }
@@ -113,6 +116,7 @@ function toRegisteredModelView(model: OpenAIModel): RegisteredModelView {
     size_gb: sizeGb,
     required_memory_gb: requiredGb,
     capabilities: model.capabilities,
+    supported_apis: model.supported_apis,
     tags: model.tags ?? [],
     chat_template: model.chat_template,
     endpoint_ids: model.endpoint_ids ?? [],

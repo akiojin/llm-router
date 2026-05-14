@@ -18,7 +18,7 @@ const screenshotProjects =
           name: 'screenshots',
           use: {
             ...devices['Desktop Chrome'],
-            screenshot: 'on',
+            screenshot: 'on' as const,
             headless: false,
           },
           testMatch: '**/navigation-screenshots.spec.ts',

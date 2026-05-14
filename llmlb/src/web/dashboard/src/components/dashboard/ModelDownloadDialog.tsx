@@ -34,30 +34,28 @@ export function ModelDownloadDialog({
   open,
   onOpenChange,
 }: ModelDownloadDialogProps) {
+  return (
+    <ModelDownloadDialogContent
+      key={`${endpoint?.id ?? 'empty'}:${open ? 'open' : 'closed'}`}
+      endpoint={endpoint}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  )
+}
+
+function ModelDownloadDialogContent({
+  endpoint,
+  open,
+  onOpenChange,
+}: ModelDownloadDialogProps) {
   const queryClient = useQueryClient()
   const [modelName, setModelName] = useState('')
   const [status, setStatus] = useState<DownloadStatus>('idle')
-  const [taskId, setTaskId] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [progressMessage, setProgressMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const pollingRef = useRef<number | null>(null)
-
-  // Reset form when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setModelName('')
-      setStatus('idle')
-      setTaskId(null)
-      setProgress(0)
-      setProgressMessage('')
-      setErrorMessage('')
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-    }
-  }, [open])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -74,7 +72,6 @@ export function ModelDownloadDialog({
       endpointsApi.downloadModel(endpoint!.id, data),
     onSuccess: (data) => {
       setStatus('downloading')
-      setTaskId(data.task_id)
       setProgress(0)
       setProgressMessage('Starting download...')
       // Start polling for progress

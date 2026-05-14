@@ -31,7 +31,7 @@ export function mockOpenAIModels(page: Page): Promise<void> {
         ],
       }),
     });
-  });
+  }).then(() => undefined);
 }
 
 export function mockChatCompletionsStream(
@@ -46,5 +46,5 @@ export function mockChatCompletionsStream(
         `data: ${JSON.stringify({ choices: [{ delta: { content: assistantText } }] })}\n\n` +
         'data: [DONE]\n\n',
     });
-  });
+  }).then(() => undefined);
 }

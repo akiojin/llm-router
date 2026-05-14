@@ -73,7 +73,7 @@ test.describe('Screen Navigation @dashboard @navigation', () => {
   });
 
   test('NAV-07: Tab switching cycles through all tabs', async ({ page }) => {
-    const tabs = ['Endpoints', 'Models', 'Statistics', 'History', 'Clients', 'Logs'];
+    const tabs = ['Endpoints', 'Models', 'Usage', 'Requests', 'Traffic', 'System'];
 
     for (const tabName of tabs) {
       const tab = page.locator(`button[role="tab"]:has-text("${tabName}")`);

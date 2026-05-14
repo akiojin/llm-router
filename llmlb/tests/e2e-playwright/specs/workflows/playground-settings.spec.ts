@@ -131,9 +131,6 @@ test.describe('Playground Settings @playground', () => {
     await expect(page).toHaveURL(/#lb-playground/)
     await expect(page.locator('#lb-playground-sidebar')).toBeVisible({ timeout: 10000 })
 
-    // Enter API key
-    await page.fill('#lb-api-key', 'sk_debug')
-
     // Adjust temperature if available
     const tempInput = page.locator('#lb-temperature, [data-testid="lb-temperature"]')
     if (await tempInput.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -169,9 +166,6 @@ test.describe('Playground Settings @playground', () => {
 
     await expect(page).toHaveURL(/#lb-playground/)
 
-    // Enter API key
-    await page.fill('#lb-api-key', 'sk_debug')
-
     // Look for cURL button in LB Playground
     const copyCurl = page.locator(
       '#lb-copy-curl, [data-testid="lb-copy-curl"], button:has-text("cURL")'
@@ -182,8 +176,8 @@ test.describe('Playground Settings @playground', () => {
       const curlText = page.locator('[data-testid="curl-command"], pre:has-text("curl")')
       if (await curlText.isVisible({ timeout: 5000 }).catch(() => false)) {
         const text = await curlText.textContent()
-        expect(text).toContain('/v1/chat/completions')
-        expect(text).toContain('Authorization')
+        expect(text).toContain('/api/dashboard/playground/chat/completions')
+        expect(text).toContain('X-CSRF-Token')
       }
     }
   })

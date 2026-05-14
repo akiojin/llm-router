@@ -19,14 +19,14 @@ import {
 
 const API_BASE = process.env.BASE_URL || 'http://127.0.0.1:32768'
 
-function formatPercentage(value: number | null | undefined, decimals = 1): string {
-  if (value == null) return '-'
-  return `${value.toFixed(decimals)}%`
-}
-
 function formatFullNumber(value: number | null | undefined): string {
   if (value == null) return '-'
   return value.toLocaleString('ja-JP')
+}
+
+function formatTps(value: number | null | undefined): string {
+  if (value == null) return '-'
+  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} tok/s`
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -91,11 +91,17 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
     expect(endpointsResponse.ok()).toBeTruthy()
     const endpointsJson = (await endpointsResponse.json()) as Array<{ id: string }>
 
-    const statsResponse = await page.request.get(`${API_BASE}/api/dashboard/stats`)
-    expect(statsResponse.ok()).toBeTruthy()
-    const statsJson = (await statsResponse.json()) as {
-      average_gpu_usage: number | null
-      average_gpu_memory_usage: number | null
+    const overviewResponse = await page.request.get(`${API_BASE}/api/dashboard/overview`)
+    expect(overviewResponse.ok()).toBeTruthy()
+    const overviewJson = (await overviewResponse.json()) as {
+      operations: {
+        total_endpoints: number
+        total_requests: number
+        output_tps: number | null
+      }
+      capacity: {
+        gpu_capable_endpoints: number
+      }
     }
 
     await expect(page.locator('#current-version')).toContainText(`Current v${systemVersion}`)
@@ -103,13 +109,17 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
 
     await expect(
       page.locator('[data-stat="total-endpoints"]').locator('p.text-3xl')
-    ).toHaveText(formatFullNumber(endpointsJson.length))
+    ).toHaveText(formatFullNumber(overviewJson.operations.total_endpoints))
     await expect(
-      page.locator('[data-stat="average-gpu-usage"]').locator('p.text-3xl')
-    ).toHaveText(formatPercentage(statsJson.average_gpu_usage))
+      page.locator('[data-stat="total-requests"]').locator('p.text-3xl')
+    ).toHaveText(formatFullNumber(overviewJson.operations.total_requests))
     await expect(
-      page.locator('[data-stat="average-gpu-memory-usage"]').locator('p.text-3xl')
-    ).toHaveText(formatPercentage(statsJson.average_gpu_memory_usage))
+      page.locator('[data-stat="output-tps"]').locator('p.text-3xl')
+    ).toHaveText(formatTps(overviewJson.operations.output_tps))
+    await expect(
+      page.locator('[data-stat="gpu-capacity"]').locator('p.text-3xl')
+    ).toHaveText(formatFullNumber(overviewJson.capacity.gpu_capable_endpoints))
+    expect(endpointsJson.length).toBe(overviewJson.operations.total_endpoints)
   })
 
   test('dashboard endpoint row and detail show real error classification badges', async ({
@@ -119,6 +129,8 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
     test.setTimeout(10 * 60_000)
     test.skip(!runtimeSelection, skipReason)
     test.skip(!coldStartModel, 'No installed Ollama model reproduced a cold-start timeout')
+    const model = coldStartModel
+    if (!model) return
 
     await page.setViewportSize({ width: 1440, height: 960 })
 
@@ -141,9 +153,9 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
     })
     await detailsDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
 
-    await ensureOllamaModelUnloaded(request, coldStartModel)
+    await ensureOllamaModelUnloaded(request, model)
     await gotoEndpointPlayground(page, endpoint.id)
-    await selectEndpointPlaygroundModel(page, coldStartModel)
+    await selectEndpointPlaygroundModel(page, model)
     await sendPlaygroundMessage(page, 'Reply with OK only.')
     await expect(page.getByText('Failed to send message', { exact: true }).first()).toBeVisible({
       timeout: 180000,

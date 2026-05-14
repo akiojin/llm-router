@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   type CatalogSearchResult,
-  type CatalogModelDetail,
   type RecommendedEndpoint,
   catalogApi,
   endpointsApi,
@@ -39,6 +38,16 @@ interface ModelAddWizardProps {
 type WizardStep = 'search' | 'detail' | 'endpoints' | 'download'
 
 export function ModelAddWizard({ open, onOpenChange }: ModelAddWizardProps) {
+  return (
+    <ModelAddWizardContent
+      key={open ? 'open' : 'closed'}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  )
+}
+
+function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<WizardStep>('search')
   const [searchQuery, setSearchQuery] = useState('')
@@ -50,17 +59,14 @@ export function ModelAddWizard({ open, onOpenChange }: ModelAddWizardProps) {
   >({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Reset state when dialog closes
+  // Cancel pending search debounce when this dialog session is discarded.
   useEffect(() => {
-    if (!open) {
-      setStep('search')
-      setSearchQuery('')
-      setDebouncedQuery('')
-      setSelectedModel(null)
-      setSelectedEndpointIds(new Set())
-      setDownloadStatuses({})
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
     }
-  }, [open])
+  }, [])
 
   // Debounce search input
   const handleSearchChange = useCallback((value: string) => {

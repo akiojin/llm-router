@@ -50,6 +50,8 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
   test('exercise endpoint playground for Ollama and LM Studio', async ({ page, request }) => {
     test.setTimeout(20 * 60_000)
     test.skip(!runtimeSelection, skipReason)
+    const selection = runtimeSelection
+    if (!selection) return
 
     await page.setViewportSize({ width: 1440, height: 960 })
 
@@ -72,8 +74,8 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
       typeLabel: 'LM Studio',
     })
 
-    await waitForModelVisibleInDetails(page, ollamaEndpointName, runtimeSelection.ollamaModel)
-    await waitForModelVisibleInDetails(page, lmStudioEndpointName, runtimeSelection.lmStudioModel)
+    await waitForModelVisibleInDetails(page, ollamaEndpointName, selection.ollamaModel)
+    await waitForModelVisibleInDetails(page, lmStudioEndpointName, selection.lmStudioModel)
 
     await gotoEndpointPlayground(page, ollamaEndpoint.id)
     let settingsDialog = await openPlaygroundSettings(page)
@@ -82,7 +84,7 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
     )
     await setStreaming(settingsDialog, true)
     await settingsDialog.getByRole('button', { name: 'Done' }).click()
-    await selectEndpointPlaygroundModel(page, runtimeSelection.ollamaModel)
+    await selectEndpointPlaygroundModel(page, selection.ollamaModel)
     await sendPlaygroundMessage(page, 'Respond with a short confirmation for the endpoint playground test.')
     await waitForAssistantBubbleCount(page, 1)
     await waitForAssistantText(page)
@@ -92,7 +94,7 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
     let curlDialog = page.getByRole('dialog').filter({ hasText: 'cURL Command' })
     await expect(curlDialog).toBeVisible({ timeout: 10000 })
     await expect(curlDialog.locator('pre')).toContainText(OLLAMA_BASE)
-    await expect(curlDialog.locator('pre')).toContainText(runtimeSelection.ollamaModel)
+    await expect(curlDialog.locator('pre')).toContainText(selection.ollamaModel)
     await expect(curlDialog.locator('pre')).toContainText('"stream": true')
     await curlDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
 
@@ -106,7 +108,7 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
     )
     await setStreaming(settingsDialog, false)
     await settingsDialog.getByRole('button', { name: 'Done' }).click()
-    await selectEndpointPlaygroundModel(page, runtimeSelection.lmStudioModel)
+    await selectEndpointPlaygroundModel(page, selection.lmStudioModel)
     await sendPlaygroundMessage(page, 'Respond with a short confirmation for the endpoint playground test.')
     await waitForAssistantBubbleCount(page, 1)
     await expect(page.getByText('Failed to send message')).toHaveCount(0)
@@ -115,7 +117,7 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
     curlDialog = page.getByRole('dialog').filter({ hasText: 'cURL Command' })
     await expect(curlDialog).toBeVisible({ timeout: 10000 })
     await expect(curlDialog.locator('pre')).toContainText(LM_STUDIO_BASE)
-    await expect(curlDialog.locator('pre')).toContainText(runtimeSelection.lmStudioModel)
+    await expect(curlDialog.locator('pre')).toContainText(selection.lmStudioModel)
     await expect(curlDialog.locator('pre')).toContainText('"stream": false')
     await curlDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
   })

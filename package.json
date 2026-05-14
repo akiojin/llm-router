@@ -29,7 +29,8 @@
     "markdownlint-cli2": "^0.22.0"
   },
   "workspaces": [
-    "llmlb/src/web/dashboard"
+    "llmlb/src/web/dashboard",
+    "llmlb/tests/e2e-playwright"
   ],
   "pnpm": {
     "overrides": {

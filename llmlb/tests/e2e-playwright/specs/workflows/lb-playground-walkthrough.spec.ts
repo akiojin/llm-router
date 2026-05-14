@@ -65,7 +65,7 @@ test.describe('Load Balancer Playground Walkthrough @playground', () => {
     return endpoint.id
   }
 
-  test('header -> lb playground -> api key -> chat -> load test distribution', async ({
+  test('header -> lb playground -> chat -> load test distribution', async ({
     page,
     request,
   }) => {
@@ -97,11 +97,8 @@ test.describe('Load Balancer Playground Walkthrough @playground', () => {
 
     await expect(page).toHaveURL(/#lb-playground/)
     await expect(page.locator('#lb-playground-sidebar')).toBeVisible({ timeout: 10000 })
-
-    await page.fill('#lb-chat-input', 'API key required check')
-    await expect(page.locator('#lb-send-chat')).toBeDisabled()
-
-    await page.fill('#lb-api-key', 'sk_debug')
+    await expect(page.locator('#lb-session-auth')).toContainText('Dashboard session')
+    await expect(page.locator('#lb-api-key')).toHaveCount(0)
 
     const modelSelect = page.locator('#lb-model-select')
     await modelSelect.click()
