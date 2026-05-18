@@ -17,6 +17,7 @@ import { listEndpoints } from '../../helpers/api-helpers'
 
 const DEBUG_API_KEY = 'sk_debug'
 const TARGET_MODEL = 'google/gemma-4-26b-a4b'
+const RUN_LMSTUDIO_GEMMA4_E2E = process.env.RUN_LMSTUDIO_GEMMA4_E2E === '1'
 const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACHSURBVHhe7dAhAQAADITA719681QAcQbJbjuzMdg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsHQ4jh0hEeUY0AAAAASUVORK5CYII='
 
@@ -104,6 +105,11 @@ async function postVisionChatWithModelReloadRetry(
 test.describe.configure({ mode: 'serial' })
 
 test.describe('LM Studio Gemma4 vision chat @workflows @real-runtimes', () => {
+  test.skip(
+    !RUN_LMSTUDIO_GEMMA4_E2E,
+    'Set RUN_LMSTUDIO_GEMMA4_E2E=1 to run the external LM Studio Gemma4 vision E2E'
+  )
+
   test('register LM Studio endpoint and run image_url chat completion through llmlb', async ({
     page,
     request,
