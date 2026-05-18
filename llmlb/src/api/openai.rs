@@ -71,7 +71,10 @@ use crate::common::{
     error::{CommonError, LbError},
     protocol::{RecordStatus, RequestResponseRecord, RequestType, TpsApiKind},
 };
-use crate::types::model::{ModelCapabilities, ModelCapability};
+use crate::types::{
+    endpoint::SupportedAPI,
+    model::{ModelCapabilities, ModelCapability},
+};
 use axum::{
     body::Body,
     extract::{ConnectInfo, Path, State},
@@ -103,7 +106,8 @@ use crate::{
         proxy::{
             forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
             save_request_record, select_available_endpoint,
-            select_available_endpoint_with_queue_for_model, QueueSelection,
+            select_available_endpoint_with_queue_for_model,
+            select_available_endpoint_with_queue_for_model_and_api, QueueSelection,
         },
     },
     balancer::RequestOutcome,
@@ -233,6 +237,7 @@ pub async fn chat_completions(
     } else {
         parse_quantized_model_name(&model).map_err(AppError::from)?
     };
+    let requires_image_input = payload_requires_image_input(&payload);
 
     // モデルの TextGeneration capability を検証
     let models = list_registered_models(&state.db_pool).await?;
@@ -242,12 +247,13 @@ pub async fn chat_completions(
                 format!("Model '{}' does not support text generation", parsed.raw),
             ))));
         }
+        if requires_image_input && !model_info.has_capability(ModelCapability::ImageInput) {
+            return Err(AppError::from(LbError::Common(CommonError::Validation(
+                format!("Model '{}' does not support image input", parsed.raw),
+            ))));
+        }
     }
     // 登録されていないモデルはエンドポイント側で処理（クラウドモデル等）
-
-    if let Some(response) = reject_image_payload(&payload) {
-        return Ok(response);
-    }
 
     let stream = extract_stream(&payload);
     proxy_openai_post(
@@ -680,8 +686,10 @@ fn extract_stream(payload: &Value) -> bool {
         .unwrap_or(false)
 }
 
-fn reject_image_payload(payload: &Value) -> Option<Response> {
-    let messages = payload.get("messages").and_then(|v| v.as_array())?;
+fn payload_requires_image_input(payload: &Value) -> bool {
+    let Some(messages) = payload.get("messages").and_then(|v| v.as_array()) else {
+        return false;
+    };
 
     for message in messages {
         let Some(parts) = message.get("content").and_then(|v| v.as_array()) else {
@@ -689,15 +697,12 @@ fn reject_image_payload(payload: &Value) -> Option<Response> {
         };
         for part in parts {
             if part.get("type").and_then(|v| v.as_str()) == Some("image_url") {
-                return Some(openai_error_response(
-                    "Image inputs are not supported",
-                    StatusCode::BAD_REQUEST,
-                ));
+                return true;
             }
         }
     }
 
-    None
+    false
 }
 
 fn parse_cloud_model(model: &str) -> Option<(String, String)> {
@@ -885,18 +890,33 @@ async fn proxy_openai_post(
 
     let request_body = sanitize_openai_payload_for_history(&payload);
     let tps_api_kind = TpsApiKind::from_request_type(request_type);
+    let required_supported_api = if payload_requires_image_input(&payload) {
+        Some(SupportedAPI::ImageInput)
+    } else {
+        None
+    };
     let queue_config = state.queue_config;
     let mut queued_wait_ms: Option<u128> = None;
 
     // FR-004: エンドポイント選択失敗時もリクエスト履歴に記録する
-    let endpoint = match select_available_endpoint_with_queue_for_model(
-        state,
-        queue_config,
-        &resolved_model,
-        tps_api_kind,
-    )
-    .await
-    {
+    let endpoint = match if let Some(required_api) = required_supported_api {
+        select_available_endpoint_with_queue_for_model_and_api(
+            state,
+            queue_config,
+            &resolved_model,
+            required_api,
+            tps_api_kind,
+        )
+        .await
+    } else {
+        select_available_endpoint_with_queue_for_model(
+            state,
+            queue_config,
+            &resolved_model,
+            tps_api_kind,
+        )
+        .await
+    } {
         Ok(QueueSelection::Ready {
             endpoint,
             queued_wait_ms: wait_ms,
@@ -1518,11 +1538,11 @@ mod tests {
         db::test_utils::{TestAppStateBuilder, TEST_LOCK},
         AppState,
     };
-    use axum::body::to_bytes;
     use axum::http::{HeaderMap, HeaderValue, StatusCode};
+    use axum::{body::to_bytes, Json};
     use serde_json::json;
     use serial_test::serial;
-    use std::net::IpAddr;
+    use std::net::{IpAddr, SocketAddr};
     use tempfile::tempdir;
     use tokio::time::{sleep, Duration};
     use wiremock::matchers::{body_partial_json, method, path};
@@ -1565,7 +1585,30 @@ mod tests {
         inference_timeout_secs: u32,
         endpoint_type: crate::types::endpoint::EndpointType,
     ) -> uuid::Uuid {
-        use crate::types::endpoint::{Endpoint, EndpointModel, EndpointStatus, SupportedAPI};
+        use crate::types::endpoint::SupportedAPI;
+
+        add_online_chat_endpoint_with_supported_apis(
+            state,
+            endpoint_name,
+            base_url,
+            model_id,
+            inference_timeout_secs,
+            endpoint_type,
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await
+    }
+
+    async fn add_online_chat_endpoint_with_supported_apis(
+        state: &AppState,
+        endpoint_name: &str,
+        base_url: String,
+        model_id: &str,
+        inference_timeout_secs: u32,
+        endpoint_type: crate::types::endpoint::EndpointType,
+        supported_apis: Vec<crate::types::endpoint::SupportedAPI>,
+    ) -> uuid::Uuid {
+        use crate::types::endpoint::{Endpoint, EndpointModel, EndpointStatus};
 
         let mut endpoint = Endpoint::new(endpoint_name.to_string(), base_url, endpoint_type);
         endpoint.status = EndpointStatus::Online;
@@ -1584,7 +1627,7 @@ mod tests {
                 capabilities: None,
                 max_tokens: None,
                 last_checked: None,
-                supported_apis: vec![SupportedAPI::ChatCompletions],
+                supported_apis,
                 canonical_name: None,
             })
             .await
@@ -1886,6 +1929,111 @@ mod tests {
 
         std::env::remove_var("ANTHROPIC_API_KEY");
         std::env::remove_var("ANTHROPIC_API_BASE_URL");
+        std::env::remove_var("LLMLB_DATA_DIR");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn chat_image_input_routes_to_image_input_endpoint() {
+        use crate::types::endpoint::{EndpointType, SupportedAPI};
+        use axum::extract::{ConnectInfo, State};
+
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let text_only_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(json!({
+                "error": {
+                    "message": "text-only endpoint should not receive image input"
+                }
+            })))
+            .mount(&text_only_server)
+            .await;
+
+        let image_input_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "chatcmpl-image-input",
+                "object": "chat.completion",
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "vision-ok"},
+                    "finish_reason": "stop"
+                }]
+            })))
+            .mount(&image_input_server)
+            .await;
+
+        add_online_chat_endpoint_with_supported_apis(
+            &state,
+            "text-only-endpoint",
+            text_only_server.uri(),
+            "vision-model",
+            60,
+            EndpointType::LmStudio,
+            vec![SupportedAPI::ChatCompletions],
+        )
+        .await;
+        add_online_chat_endpoint_with_supported_apis(
+            &state,
+            "image-input-endpoint",
+            image_input_server.uri(),
+            "vision-model",
+            60,
+            EndpointType::LmStudio,
+            vec![SupportedAPI::ChatCompletions, SupportedAPI::ImageInput],
+        )
+        .await;
+
+        let response = super::chat_completions(
+            ConnectInfo("127.0.0.1:0".parse::<SocketAddr>().unwrap()),
+            HeaderMap::new(),
+            State(state),
+            None,
+            Json(json!({
+                "model": "vision-model",
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe this image briefly."},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}
+                    ]
+                }],
+                "stream": false
+            })),
+        )
+        .await
+        .expect("image input chat response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), 1_000_000)
+            .await
+            .expect("response body");
+        let body: serde_json::Value = serde_json::from_slice(&bytes).expect("json body");
+        assert_eq!(
+            body["choices"][0]["message"]["content"].as_str(),
+            Some("vision-ok")
+        );
+
+        assert_eq!(
+            text_only_server
+                .received_requests()
+                .await
+                .expect("text-only requests")
+                .len(),
+            0
+        );
+        assert_eq!(
+            image_input_server
+                .received_requests()
+                .await
+                .expect("image input requests")
+                .len(),
+            1
+        );
         std::env::remove_var("LLMLB_DATA_DIR");
     }
 
@@ -3095,30 +3243,30 @@ mod tests {
         assert!(!extract_stream(&payload));
     }
 
-    // ===== reject_image_payload tests =====
+    // ===== payload_requires_image_input tests =====
 
     #[test]
-    fn reject_image_payload_returns_none_for_text_only() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_returns_false_for_text_only() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": [
                 {"role": "user", "content": "Hello"}
             ]
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_returns_none_when_no_messages() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_returns_false_when_no_messages() {
+        use super::payload_requires_image_input;
         let payload = json!({"model": "llama-3"});
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_rejects_image_url_content() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_detects_image_url_content() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": [
@@ -3131,13 +3279,12 @@ mod tests {
                 }
             ]
         });
-        let response = reject_image_payload(&payload);
-        assert!(response.is_some());
+        assert!(payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_allows_text_parts_array() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_allows_text_parts_array() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": [
@@ -3149,12 +3296,12 @@ mod tests {
                 }
             ]
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_skips_string_content_messages() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_skips_string_content_messages() {
+        use super::payload_requires_image_input;
         // messages with string content should be skipped (no array parts)
         let payload = json!({
             "model": "llama-3",
@@ -3168,7 +3315,7 @@ mod tests {
                 }
             ]
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     // ===== cloud_virtual_node tests =====
@@ -3594,55 +3741,55 @@ mod tests {
         assert!(!extract_stream(&payload));
     }
 
-    // --- reject_image_payload edge cases ---
+    // --- payload_requires_image_input edge cases ---
 
     #[test]
-    fn reject_image_payload_empty_messages_array() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_empty_messages_array() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": []
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_messages_not_array_returns_none() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_messages_not_array_returns_false() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": "not an array"
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_null_content_is_skipped() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_null_content_is_skipped() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": [
                 {"role": "user", "content": null}
             ]
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_empty_content_array() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_empty_content_array() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": [
                 {"role": "user", "content": []}
             ]
         });
-        assert!(reject_image_payload(&payload).is_none());
+        assert!(!payload_requires_image_input(&payload));
     }
 
     #[test]
-    fn reject_image_payload_multiple_messages_detects_image_in_second() {
-        use super::reject_image_payload;
+    fn payload_requires_image_input_multiple_messages_detects_image_in_second() {
+        use super::payload_requires_image_input;
         let payload = json!({
             "model": "llama-3",
             "messages": [
@@ -3655,7 +3802,7 @@ mod tests {
                 }
             ]
         });
-        assert!(reject_image_payload(&payload).is_some());
+        assert!(payload_requires_image_input(&payload));
     }
 
     // --- parse_client_ip_from_forwarded_value edge cases ---
