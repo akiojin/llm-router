@@ -696,7 +696,8 @@ fn payload_requires_image_input(payload: &Value) -> bool {
             continue;
         };
         for part in parts {
-            if part.get("type").and_then(|v| v.as_str()) == Some("image_url") {
+            let part_type = part.get("type").and_then(|v| v.as_str());
+            if matches!(part_type, Some("image_url" | "input_image")) {
                 return true;
             }
         }
@@ -3275,6 +3276,24 @@ mod tests {
                     "content": [
                         {"type": "text", "text": "What is in this image?"},
                         {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}
+                    ]
+                }
+            ]
+        });
+        assert!(payload_requires_image_input(&payload));
+    }
+
+    #[test]
+    fn payload_requires_image_input_detects_input_image_content() {
+        use super::payload_requires_image_input;
+        let payload = json!({
+            "model": "llama-3",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is in this image?"},
+                        {"type": "input_image", "image_url": "https://example.com/img.png"}
                     ]
                 }
             ]
