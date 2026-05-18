@@ -14,6 +14,7 @@ use axum::{
 use chrono::Utc;
 
 use super::error::AppError;
+use crate::auth::middleware::AuthBypassContext;
 use serde::{Deserialize, Serialize};
 
 /// ログインリクエスト
@@ -300,8 +301,18 @@ fn is_request_secure(headers: &HeaderMap) -> bool {
 /// * `500 Internal Server Error` - サーバーエラー
 pub async fn me(
     Extension(claims): Extension<Claims>,
+    maybe_bypass: Option<Extension<AuthBypassContext>>,
     State(app_state): State<AppState>,
 ) -> Result<Json<MeResponse>, Response> {
+    if maybe_bypass.is_some() {
+        return Ok(Json(MeResponse {
+            user_id: claims.sub,
+            username: "anonymous".to_string(),
+            role: "admin".to_string(),
+            must_change_password: false,
+        }));
+    }
+
     // ユーザーIDをパース
     let user_id = claims.sub.parse::<uuid::Uuid>().map_err(|e| {
         tracing::error!("Failed to parse user ID: {}", e);

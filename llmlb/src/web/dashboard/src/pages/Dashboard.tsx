@@ -3,10 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   dashboardApi,
   modelsApi,
+  settingsApi,
   systemApi,
   type SystemInfo,
   type UpdateState,
   type ScheduleInfo,
+  type ApiKeyRequiredSetting,
   type DashboardOverview,
   type DashboardEndpoint,
   type RequestHistoryItem,
@@ -49,6 +51,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   AlertCircle,
   AlertTriangle,
@@ -67,6 +71,7 @@ import {
   Clock,
   Zap,
   Package,
+  ShieldCheck,
 } from 'lucide-react'
 
 const SYSTEM_INFO_QUERY_KEY = ['system-info'] as const
@@ -91,6 +96,7 @@ function formatCountdown(targetIso: string): string | null {
 export default function Dashboard() {
   const { user } = useAuth()
   const isViewer = user?.role === 'viewer'
+  const isAdmin = user?.role === 'admin'
   const { isConnected: wsConnected } = useDashboardWebSocket({ enabled: !isViewer })
   const queryClient = useQueryClient()
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
@@ -107,6 +113,7 @@ export default function Dashboard() {
   const [scheduleMode, setScheduleMode] = useState<'immediate' | 'idle' | 'scheduled'>('immediate')
   const [scheduledAt, setScheduledAt] = useState('')
   const [isScheduling, setIsScheduling] = useState(false)
+  const [isSavingApiKeyRequired, setIsSavingApiKeyRequired] = useState(false)
   const [drainCountdown, setDrainCountdown] = useState<string | null>(null)
   const [applyTimeoutCountdown, setApplyTimeoutCountdown] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('endpoints')
@@ -211,6 +218,38 @@ export default function Dashboard() {
     refetchInterval: pollingInterval,
   })
 
+  const {
+    data: apiKeyRequiredSetting,
+    isLoading: isLoadingApiKeyRequiredSetting,
+  } = useQuery<ApiKeyRequiredSetting>({
+    queryKey: ['settings', 'api_key_required'],
+    queryFn: () => settingsApi.getApiKeyRequired(),
+    enabled: isAdmin,
+  })
+
+  const onApiKeyRequiredChange = useCallback(
+    async (required: boolean) => {
+      setIsSavingApiKeyRequired(true)
+      try {
+        await settingsApi.updateApiKeyRequired(required)
+        toast({
+          title: 'Authentication setting updated',
+          description: required ? 'API keys are now required.' : 'API keys are now optional.',
+        })
+        await queryClient.invalidateQueries({ queryKey: ['settings', 'api_key_required'] })
+      } catch (e) {
+        toast({
+          title: 'Failed to update authentication setting',
+          description: e instanceof Error ? e.message : String(e),
+          variant: 'destructive',
+        })
+      } finally {
+        setIsSavingApiKeyRequired(false)
+      }
+    },
+    [queryClient]
+  )
+
   // Map RequestResponseRecord to RequestHistoryItem
   const historyItems: RequestHistoryItem[] = useMemo(() => {
     if (!requestResponsesData?.records) return []
@@ -232,7 +271,6 @@ export default function Dashboard() {
   const updateBanner = useMemo(() => {
     const update = systemInfo?.update as UpdateState | undefined
     const updateState = update?.state
-    const isAdmin = user?.role === 'admin'
     const hasAvailableUpdate = updateState === 'available'
     const isPayloadReady =
       hasAvailableUpdate && update?.payload?.payload === 'ready'
@@ -536,22 +574,26 @@ export default function Dashboard() {
               )}
 
               {/* Settings button */}
-              {isAdmin && hasAvailableUpdate && (
+              {isAdmin && (
                 <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="icon" title="Update settings">
+                    <Button variant="outline" size="icon" title="Settings">
                       <Settings className="h-4 w-4" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                      <DialogTitle>Update Settings</DialogTitle>
+                      <DialogTitle>Settings</DialogTitle>
                       <DialogDescription>
-                        Configure update scheduling and view history.
+                        Configure access control, update scheduling, and history.
                       </DialogDescription>
                     </DialogHeader>
-                    <Tabs defaultValue="schedule">
-                      <TabsList className="grid w-full grid-cols-2">
+                    <Tabs defaultValue="authentication">
+                      <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="authentication">
+                          <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                          Auth
+                        </TabsTrigger>
                         <TabsTrigger value="schedule">
                           <Calendar className="mr-1.5 h-3.5 w-3.5" />
                           Schedule
@@ -561,6 +603,41 @@ export default function Dashboard() {
                           History
                         </TabsTrigger>
                       </TabsList>
+
+                      <TabsContent value="authentication" className="space-y-4 pt-4">
+                        <div className="rounded-lg border border-border p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                              <Label htmlFor="api-key-required" className="text-sm font-medium">
+                                Require API key
+                              </Label>
+                              <p className="text-sm text-muted-foreground">
+                                External and management APIs require a valid key or dashboard session.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge variant={apiKeyRequiredSetting?.effective_value === 'true' ? 'default' : 'secondary'}>
+                                {apiKeyRequiredSetting?.effective_value === 'true' ? 'Required' : 'Optional'}
+                              </Badge>
+                              <Switch
+                                id="api-key-required"
+                                checked={apiKeyRequiredSetting?.effective_value === 'true'}
+                                disabled={
+                                  isLoadingApiKeyRequiredSetting ||
+                                  isSavingApiKeyRequired ||
+                                  apiKeyRequiredSetting?.env_override === true
+                                }
+                                onCheckedChange={(checked) => void onApiKeyRequiredChange(checked)}
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                            {apiKeyRequiredSetting?.env_override
+                              ? 'Controlled by LLMLB_API_KEY_REQUIRED.'
+                              : `Source: ${apiKeyRequiredSetting?.source ?? 'loading'}.`}
+                          </div>
+                        </div>
+                      </TabsContent>
 
                       <TabsContent value="schedule" className="space-y-4 pt-4">
                         <div className="space-y-3">
@@ -800,6 +877,10 @@ export default function Dashboard() {
     isRollbackDialogOpen,
     isRollingBack,
     isSettingsOpen,
+    apiKeyRequiredSetting,
+    isLoadingApiKeyRequiredSetting,
+    isSavingApiKeyRequired,
+    onApiKeyRequiredChange,
     scheduleMode,
     scheduledAt,
     isScheduling,
