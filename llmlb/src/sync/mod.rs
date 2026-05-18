@@ -120,36 +120,27 @@ pub async fn sync_models_with_type(
     // GET /v1/models でモデル一覧を取得。
     // LM Studio は OpenAI 互換の /v1/models だけでは vision capability を返さないため、
     // LM Studio 固有の /api/v1/models を優先して supported_apis を同期する。
+    // ただし互換実装や古い環境では /api/v1/models が無いことがあるため、その場合は
+    // OpenAI 互換の /v1/models にフォールバックする。
     let url = if endpoint_type == Some(EndpointType::LmStudio) {
         format!("{}/api/v1/models", base_url.trim_end_matches('/'))
     } else {
         format!("{}/v1/models", base_url.trim_end_matches('/'))
     };
 
-    let mut request = client.get(&url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
-
-    let response = request
-        .timeout(Duration::from_secs(timeout_secs))
-        .send()
-        .await
-        .map_err(|e| SyncError::ConnectionError(e.to_string()))?;
-
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(SyncError::HttpError(status, body));
-    }
-
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| SyncError::ParseError(e.to_string()))?;
+    let json = match fetch_models_json(client, &url, api_key, timeout_secs).await {
+        Ok(json) => json,
+        Err(SyncError::HttpError(404, body)) if endpoint_type == Some(EndpointType::LmStudio) => {
+            debug!(
+                endpoint_id = %endpoint_id,
+                error = %body,
+                "LM Studio /api/v1/models unavailable; falling back to /v1/models"
+            );
+            let fallback_url = format!("{}/v1/models", base_url.trim_end_matches('/'));
+            fetch_models_json(client, &fallback_url, api_key, timeout_secs).await?
+        }
+        Err(err) => return Err(err),
+    };
 
     // モデル一覧をパース
     let (parsed_models, format) = parse_models_response(&json);
@@ -279,6 +270,38 @@ pub async fn sync_models_with_type(
         updated,
         format,
     })
+}
+
+async fn fetch_models_json(
+    client: &Client,
+    url: &str,
+    api_key: Option<&str>,
+    timeout_secs: u64,
+) -> Result<serde_json::Value, SyncError> {
+    let mut request = client.get(url);
+    if let Some(key) = api_key {
+        request = request.header("Authorization", format!("Bearer {}", key));
+    }
+
+    let response = request
+        .timeout(Duration::from_secs(timeout_secs))
+        .send()
+        .await
+        .map_err(|e| SyncError::ConnectionError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(SyncError::HttpError(status, body));
+    }
+
+    response
+        .json()
+        .await
+        .map_err(|e| SyncError::ParseError(e.to_string()))
 }
 
 fn build_endpoint_model_capability_view(
