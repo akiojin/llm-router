@@ -341,6 +341,7 @@ LM Studio / Ollama / vLLM / xLLM / OpenAI 互換サーバー側のセットア�
 | `LLMLB_JWT_SECRET` | 自動生成 | JWT署名シークレット |
 | `LLMLB_ADMIN_USERNAME` | `admin` | 初期管理者ユーザー名 |
 | `LLMLB_ADMIN_PASSWORD` | - | 初期管理者パスワード |
+| `LLMLB_API_KEY_REQUIRED` | `false` | 保護APIでAPIキー/JWTを必須化（ダッシュボード設定より優先） |
 | `LLMLB_LOG_LEVEL` | `info` | ログレベル |
 | `LLMLB_LOG_DIR` | `~/.llmlb/logs` | ログ保存先 |
 | `LLMLB_LOG_RETENTION_DAYS` | `7` | ログ保持日数 |
@@ -587,9 +588,11 @@ APIキー管理はJWTで本人用エンドポイントを利用します:
 - `/api/auth/login` は無認証で、JWTをHttpOnly Cookieに設定します（Authorizationヘッダーも利用可）。
 - Cookie認証で変更系操作を行う場合は、`llmlb_csrf` Cookieの値を `X-CSRF-Token` ヘッダーで送信します。
 - Cookie認証の変更系操作では Origin/Referer が同一オリジンである必要があります。
-- `/api/dashboard/*` は JWTのみ（APIキー不可）。
-- `/v1/*` は APIキー必須（permissionsに応じて 403/401）。
-- デバッグビルドでは `sk_debug*` 系 API キーが利用可能（`docs/authentication.md` 参照）。
+- API認証はデフォルトでは不要です。Dashboard Settings > Authentication または
+  `LLMLB_API_KEY_REQUIRED=true` で必須化できます。
+- 認証必須時は `/api/dashboard/*` は JWTのみ（APIキー不可）です。
+- 認証必須時は `/v1/*` は APIキー必須（permissionsに応じて 403/401）です。
+- デバッグビルドでは、認証必須時に `sk_debug*` 系 API キーが利用可能（`docs/authentication.md` 参照）。
 
 ### ロードバランサー（Load Balancer）
 
@@ -653,7 +656,7 @@ APIキー管理はJWTで本人用エンドポイントを利用します:
 
 注記:
 - `POST /api/endpoints/:id/chat/completions` は Endpoint Playground（`#playground/:endpointId`）専用です。
-- LB Playground（`#lb-playground`）は OpenAI 互換API（`/v1/models`, `/v1/chat/completions`）を APIキー認証で利用します。
+- LB Playground（`#lb-playground`）は OpenAI 互換API（`/v1/models`, `/v1/chat/completions`）を利用し、APIキー認証は必須化されている場合のみ適用されます。
 
 ### ランタイム（Runtime）
 

@@ -39,6 +39,14 @@ pub async fn dashboard_ws_handler(
     Query(query): Query<WsAuthQuery>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    if !crate::config::effective_api_key_required(&state.db_pool)
+        .await
+        .required
+    {
+        debug!("WebSocket accepted without authentication because API key auth is optional");
+        return Ok(ws.on_upgrade(move |socket| handle_socket(socket, state.event_bus.clone())));
+    }
+
     let token = if let Some(auth_header) = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
