@@ -61,6 +61,25 @@ pub struct ApiKeyAuthContext {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// 認証不要モードで保護ミドルウェアを通過したことを示すマーカー。
+#[derive(Debug, Clone, Copy)]
+pub struct AuthBypassContext;
+
+fn anonymous_admin_claims() -> Claims {
+    Claims {
+        sub: Uuid::nil().to_string(),
+        role: UserRole::Admin,
+        exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
+        must_change_password: false,
+    }
+}
+
+async fn api_key_auth_required(pool: &sqlx::SqlitePool) -> bool {
+    crate::config::effective_api_key_required(pool)
+        .await
+        .required
+}
+
 fn has_permission(
     permissions: &[crate::common::auth::ApiKeyPermission],
     required: crate::common::auth::ApiKeyPermission,
@@ -93,6 +112,14 @@ fn extract_jwt_from_headers(headers: &HeaderMap) -> Option<String> {
         }
     }
     extract_jwt_cookie(headers)
+}
+
+#[allow(clippy::result_large_err)]
+fn verify_jwt_claims(token: &str, jwt_secret: &str) -> Result<Claims, Response> {
+    crate::auth::jwt::verify_jwt(token, jwt_secret).map_err(|e| {
+        tracing::warn!("JWT verification failed: {}", e);
+        (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)).into_response()
+    })
 }
 
 pub(crate) fn extract_jwt_cookie(headers: &HeaderMap) -> Option<String> {
@@ -364,10 +391,7 @@ pub async fn jwt_auth_middleware(
     };
 
     // JWTを検証
-    let claims = crate::auth::jwt::verify_jwt(&token, &jwt_secret).map_err(|e| {
-        tracing::warn!("JWT verification failed: {}", e);
-        (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)).into_response()
-    })?;
+    let claims = verify_jwt_claims(&token, &jwt_secret)?;
 
     // 検証済みのClaimsをrequestの拡張データに格納
     let claims_for_response = claims.clone();
@@ -380,11 +404,46 @@ pub async fn jwt_auth_middleware(
     Ok(response)
 }
 
+/// 設定に応じてJWT認証を要求するミドルウェア。
+///
+/// APIキー不要モードでは匿名admin相当のClaimsを注入し、ダッシュボード/APIの
+/// 既存ハンドラーが期待する認証済みコンテキストを満たす。
+pub async fn optional_jwt_auth_middleware(
+    State(app_state): State<AppState>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    if !api_key_auth_required(&app_state.db_pool).await {
+        if let Some(token) = extract_jwt_from_headers(request.headers()) {
+            let claims = verify_jwt_claims(&token, &app_state.jwt_secret)?;
+            let claims_for_response = claims.clone();
+            request.extensions_mut().insert(claims);
+            let mut response = next.run(request).await;
+            // 監査ログミドルウェア (SPEC-8301d106) がresponse extensionsからアクター情報を取得
+            response.extensions_mut().insert(claims_for_response);
+            return Ok(response);
+        }
+
+        let claims = anonymous_admin_claims();
+        request.extensions_mut().insert(AuthBypassContext);
+        request.extensions_mut().insert(claims);
+        let mut response = next.run(request).await;
+        response.extensions_mut().insert(AuthBypassContext);
+        return Ok(response);
+    }
+
+    jwt_auth_middleware(State(app_state.jwt_secret.clone()), request, next).await
+}
+
 /// JWT claims に admin ロールを要求するミドルウェア
 pub async fn require_admin_role_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if request.extensions().get::<AuthBypassContext>().is_some() {
+        return Ok(next.run(request).await);
+    }
+
     let claims = request.extensions().get::<Claims>().ok_or_else(|| {
         (
             StatusCode::UNAUTHORIZED,
@@ -408,6 +467,10 @@ pub async fn require_password_changed_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if request.extensions().get::<AuthBypassContext>().is_some() {
+        return Ok(next.run(request).await);
+    }
+
     let claims = request.extensions().get::<Claims>().ok_or_else(|| {
         (
             StatusCode::UNAUTHORIZED,
@@ -430,6 +493,10 @@ pub async fn require_password_changed_middleware(
 /// CookieベースのJWT認証時にCSRFトークンを要求するミドルウェア
 pub async fn csrf_protect_middleware(request: Request, next: Next) -> Result<Response, Response> {
     if !method_requires_csrf(request.method()) {
+        return Ok(next.run(request).await);
+    }
+
+    if request.extensions().get::<AuthBypassContext>().is_some() {
         return Ok(next.run(request).await);
     }
 
@@ -494,6 +561,13 @@ pub async fn api_key_auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if !api_key_auth_required(&pool).await {
+        request.extensions_mut().insert(AuthBypassContext);
+        let mut response = next.run(request).await;
+        response.extensions_mut().insert(AuthBypassContext);
+        return Ok(response);
+    }
+
     let api_key = extract_api_key(&request)?;
     let auth_context = authenticate_api_key(&pool, &api_key).await?;
     let auth_context_for_response = auth_context.clone();
@@ -548,6 +622,13 @@ pub async fn anthropic_api_key_auth_middleware(
 ) -> Result<Response, Response> {
     require_anthropic_version_header(&request)?;
 
+    if !api_key_auth_required(&pool).await {
+        request.extensions_mut().insert(AuthBypassContext);
+        let mut response = next.run(request).await;
+        response.extensions_mut().insert(AuthBypassContext);
+        return Ok(response);
+    }
+
     let api_key = extract_api_key(&request).map_err(|_| {
         anthropic_error_response(
             StatusCode::UNAUTHORIZED,
@@ -576,6 +657,10 @@ pub async fn require_api_key_permission_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if request.extensions().get::<AuthBypassContext>().is_some() {
+        return Ok(next.run(request).await);
+    }
+
     let auth_context = request
         .extensions()
         .get::<ApiKeyAuthContext>()
@@ -604,6 +689,10 @@ pub async fn require_anthropic_api_key_permission_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if request.extensions().get::<AuthBypassContext>().is_some() {
+        return Ok(next.run(request).await);
+    }
+
     let auth_context = request
         .extensions()
         .get::<ApiKeyAuthContext>()
@@ -652,13 +741,18 @@ pub async fn jwt_or_api_key_permission_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if !api_key_auth_required(&config.app_state.db_pool).await {
+        let claims = anonymous_admin_claims();
+        request.extensions_mut().insert(AuthBypassContext);
+        request.extensions_mut().insert(claims);
+        let mut response = next.run(request).await;
+        response.extensions_mut().insert(AuthBypassContext);
+        return Ok(response);
+    }
+
     // JWTがあれば優先
     if let Some(token) = extract_jwt_from_headers(request.headers()) {
-        let claims =
-            crate::auth::jwt::verify_jwt(&token, &config.app_state.jwt_secret).map_err(|e| {
-                tracing::warn!("JWT verification failed: {}", e);
-                (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)).into_response()
-            })?;
+        let claims = verify_jwt_claims(&token, &config.app_state.jwt_secret)?;
 
         if let Some(required_role) = config.jwt_required_role {
             if claims.role != required_role {
@@ -738,6 +832,13 @@ mod tests {
     use axum::{body::Body, http::Request, middleware as axum_middleware, routing::get, Router};
     use tower::ServiceExt;
 
+    async fn enable_api_key_auth(pool: &sqlx::SqlitePool) {
+        crate::db::settings::SettingsStorage::new(pool.clone())
+            .set_setting(crate::config::API_KEY_REQUIRED_SETTING_KEY, "true")
+            .await
+            .expect("set api_key_required");
+    }
+
     #[test]
     fn test_hash_with_sha256() {
         let input = "test_api_key_12345";
@@ -796,6 +897,7 @@ mod tests {
             .await
             .build()
             .await;
+        enable_api_key_auth(&state.db_pool).await;
 
         let cfg = JwtOrApiKeyPermissionConfig {
             app_state: state,
@@ -828,6 +930,7 @@ mod tests {
             .await
             .build()
             .await;
+        enable_api_key_auth(&state.db_pool).await;
 
         let cfg = JwtOrApiKeyPermissionConfig {
             app_state: state,
@@ -861,6 +964,7 @@ mod tests {
     #[tokio::test]
     async fn debug_api_key_is_accepted_in_debug_build_without_db() {
         let pool = crate::db::test_utils::test_db_pool().await;
+        enable_api_key_auth(&pool).await;
 
         let app = axum::Router::new()
             .route(
@@ -902,6 +1006,7 @@ mod tests {
     #[tokio::test]
     async fn debug_api_key_is_rejected_in_release_build() {
         let pool = crate::db::test_utils::test_db_pool().await;
+        enable_api_key_auth(&pool).await;
 
         let app = axum::Router::new()
             .route("/t", axum::routing::get(|| async { "ok" }))

@@ -4,7 +4,7 @@
 //! WebSocket・静的アセット・ヘルスチェック等のノイズパスは除外。
 
 use crate::audit::types::{ActorType, AuditLogEntry, AuthFailureInfo, TokenUsage};
-use crate::auth::middleware::ApiKeyAuthContext;
+use crate::auth::middleware::{ApiKeyAuthContext, AuthBypassContext};
 use crate::common::auth::Claims;
 use crate::AppState;
 use axum::{
@@ -143,6 +143,10 @@ fn extract_actor_info(
 ) -> (ActorType, Option<String>, Option<String>, Option<String>) {
     let extensions = response.extensions();
 
+    if extensions.get::<AuthBypassContext>().is_some() {
+        return (ActorType::Anonymous, None, None, None);
+    }
+
     // JWT認証済み（Claims）
     if let Some(claims) = extensions.get::<Claims>() {
         // APIキー認証の場合はApiKeyAuthContextも存在する
@@ -196,6 +200,13 @@ mod tests {
 
     async fn create_test_pool() -> sqlx::SqlitePool {
         crate::db::test_utils::test_db_pool().await
+    }
+
+    async fn enable_api_key_auth(pool: &sqlx::SqlitePool) {
+        crate::db::settings::SettingsStorage::new(pool.clone())
+            .set_setting(crate::config::API_KEY_REQUIRED_SETTING_KEY, "true")
+            .await
+            .expect("set api_key_required");
     }
 
     async fn create_test_state(pool: sqlx::SqlitePool) -> AppState {
@@ -613,6 +624,7 @@ mod tests {
     #[tokio::test]
     async fn test_audit_records_api_key_actor() {
         let pool = create_test_pool().await;
+        enable_api_key_auth(&pool).await;
         let state = create_test_state(pool.clone()).await;
 
         // APIキー認証ミドルウェア + 監査ミドルウェア付きRouter

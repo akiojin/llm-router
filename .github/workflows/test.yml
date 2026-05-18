@@ -181,6 +181,8 @@ jobs:
         if: needs.changes.outputs.e2e == 'true'
         run: |
           mkdir -p llmlb/tests/e2e-playwright/.llmlb/logs
+          # The broad E2E suite verifies protected-route behavior.
+          LLMLB_API_KEY_REQUIRED=true \
           LLMLB_DATABASE_URL=sqlite:llmlb/tests/e2e-playwright/.llmlb/router.db \
           LLMLB_LOG_DIR=llmlb/tests/e2e-playwright/.llmlb/logs \
           ADMIN_USERNAME=admin \
