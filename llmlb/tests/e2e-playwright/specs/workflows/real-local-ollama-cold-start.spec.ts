@@ -14,6 +14,10 @@ import {
   openDashboard,
   openEndpointDetails,
   prepareEndpointViaUi,
+  REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
+  REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
+  REAL_LOCAL_RUNTIME_JIT_TIMEOUT_SECS,
+  REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
   retestEndpointConnection,
   resolveApiModelIdForRuntimeModel,
   selectEndpointPlaygroundModel,
@@ -55,7 +59,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
   })
 
   test('cold-start requests honor endpoint inference timeout', async ({ page, request }) => {
-    test.setTimeout(20 * 60_000)
+    test.setTimeout(30 * 60_000)
     test.skip(!coldStartModel, skipReason)
     const model = coldStartModel
     if (!model) return
@@ -81,7 +85,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
     await detailsDialog.locator('#inferenceTimeout').fill('1')
     await detailsDialog.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Update Complete', { exact: true }).first()).toBeVisible({
-      timeout: 10000,
+      timeout: REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
     })
     await detailsDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
     await expect(detailsDialog).toBeHidden({ timeout: 10000 })
@@ -98,9 +102,11 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
     await selectEndpointPlaygroundModel(page, model)
     await sendPlaygroundMessage(page, 'Reply with OK only.')
     await expect(page.getByText('Failed to send message', { exact: true }).first()).toBeVisible({
-      timeout: 180000,
+      timeout: REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
     })
-    await expect(page.getByText(/still loading/i).first()).toBeVisible({ timeout: 180000 })
+    await expect(page.getByText(/still loading/i).first()).toBeVisible({
+      timeout: REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
+    })
     await retestEndpointConnection(request, endpoint.id, endpointName, 'ollama')
 
     const apiKey = await createApiKeyWithPermissions(request, apiKeyName, [
@@ -125,7 +131,7 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
         status: 504,
         errorType: 'model_loading',
         errorMessageIncludes: 'still loading',
-        timeout: 180000,
+        timeout: REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
         maxTokens: 4,
       }
     )
@@ -133,10 +139,10 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
 
     await openDashboard(page)
     detailsDialog = await openEndpointDetails(page, endpointName)
-    await detailsDialog.locator('#inferenceTimeout').fill('300')
+    await detailsDialog.locator('#inferenceTimeout').fill(String(REAL_LOCAL_RUNTIME_JIT_TIMEOUT_SECS))
     await detailsDialog.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Update Complete', { exact: true }).first()).toBeVisible({
-      timeout: 10000,
+      timeout: REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
     })
     await detailsDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
     await expect(detailsDialog).toBeHidden({ timeout: 10000 })
@@ -146,12 +152,12 @@ test.describe('Real Local Ollama Cold Start @workflows @dashboard @real-runtimes
         timeout: 30000,
         intervals: [500, 1000, 2000],
       })
-      .toBe(300)
+      .toBe(REAL_LOCAL_RUNTIME_JIT_TIMEOUT_SECS)
 
     await retestEndpointConnection(request, endpoint.id, endpointName, 'ollama')
     await ensureOllamaModelUnloaded(request, model)
     await expectChatCompletion(request, apiKey.key, apiModelId, 'Reply with OK only.', {
-      timeout: 300000,
+      timeout: REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
       maxTokens: 4,
     })
   })

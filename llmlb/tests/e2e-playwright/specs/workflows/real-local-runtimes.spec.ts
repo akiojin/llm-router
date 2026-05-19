@@ -6,6 +6,10 @@ import {
   listApiKeys,
   listEndpoints,
 } from '../../helpers/api-helpers'
+import {
+  REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
+  REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS,
+} from '../../helpers/real-local-runtime'
 
 const API_BASE = process.env.BASE_URL || 'http://127.0.0.1:32768'
 const DASHBOARD_ORIGIN = new URL(API_BASE).origin
@@ -139,7 +143,15 @@ async function registerEndpointViaUi(page: Page, endpointName: string, baseUrl: 
   await page.getByRole('button', { name: 'Add Endpoint' }).click()
   await page.fill('#endpoint-name', endpointName)
   await page.fill('#endpoint-url', baseUrl)
+  const createResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/endpoints') &&
+      response.request().method() === 'POST' &&
+      response.status() >= 200 &&
+      response.status() < 300
+  )
   await page.getByRole('button', { name: 'Create Endpoint' }).click()
+  await createResponse
   return searchEndpointRow(page, endpointName)
 }
 
@@ -156,7 +168,7 @@ async function waitForEndpointTypeAndStatus(
         if (!endpoint) return 'missing'
         return `${endpoint.status}|${endpoint.endpoint_type ?? ''}`
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .toBe(`online|${endpointType}`)
 }
@@ -170,7 +182,9 @@ async function waitForModelVisibleInDetails(
   await row.locator('button[title="Details"]').click()
   const detailsDialog = page.getByRole('dialog').filter({ hasText: endpointName })
   await expect(detailsDialog).toBeVisible({ timeout: 20000 })
-  await expect(detailsDialog.getByText(expectedModel)).toBeVisible({ timeout: 120000 })
+  await expect(detailsDialog.getByText(expectedModel)).toBeVisible({
+    timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS,
+  })
   await page.keyboard.press('Escape')
   await expect(detailsDialog).toBeHidden({ timeout: 20000 })
 }
@@ -201,7 +215,7 @@ async function waitForApiModelVisible(
         resolvedModelId = match?.id?.trim() ?? ''
         return resolvedModelId
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .not.toBe('')
 
@@ -278,7 +292,7 @@ async function expectChatCompletion(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    timeout: 300000,
+    timeout: REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
   })
   expect(response.ok()).toBeTruthy()
 
@@ -347,7 +361,7 @@ test.describe('Real Local Runtimes @workflows @real-runtimes', () => {
     page,
     request,
   }) => {
-    test.setTimeout(15 * 60_000)
+    test.setTimeout(30 * 60_000)
     test.skip(!runtimeSelection, skipReason)
     const selection = runtimeSelection
     if (!selection) return

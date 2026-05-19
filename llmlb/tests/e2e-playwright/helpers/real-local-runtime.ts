@@ -3,7 +3,6 @@ import { spawnSync } from 'node:child_process'
 import { DashboardPage } from '../pages/dashboard.page'
 import {
   deleteApiKey,
-  deleteEndpointsByBaseUrl,
   deleteEndpointsByName,
   listApiKeys,
   listEndpoints,
@@ -15,6 +14,25 @@ export const DASHBOARD_ORIGIN = new URL(API_BASE).origin
 export const OLLAMA_BASE = 'http://127.0.0.1:11434'
 export const LM_STUDIO_BASE = 'http://127.0.0.1:1234'
 const DEBUG_AUTH_HEADERS = { Authorization: 'Bearer sk_debug' }
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export const REAL_LOCAL_RUNTIME_JIT_TIMEOUT_SECS = positiveIntEnv(
+  'LLMLB_E2E_REAL_LOCAL_JIT_TIMEOUT_SECS',
+  600
+)
+export const REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS = REAL_LOCAL_RUNTIME_JIT_TIMEOUT_SECS * 1000
+export const REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS =
+  positiveIntEnv('LLMLB_E2E_REAL_LOCAL_READINESS_TIMEOUT_SECS', 300) * 1000
+export const REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS =
+  positiveIntEnv('LLMLB_E2E_REAL_LOCAL_FAILURE_TIMEOUT_SECS', 180) * 1000
+export const REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS =
+  positiveIntEnv('LLMLB_E2E_REAL_LOCAL_SAVE_TIMEOUT_SECS', 30) * 1000
 
 export type OllamaTagsResponse = {
   models?: Array<{ name?: string }>
@@ -480,7 +498,7 @@ export async function waitForEndpointStatus(
         const endpoint = (await listEndpoints(request)).find((entry) => entry.name === endpointName)
         return expected.includes(endpoint?.status ?? '')
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .toBeTruthy()
 }
@@ -498,7 +516,7 @@ export async function waitForEndpointTypeAndStatus(
         if (!endpoint) return 'missing'
         return `${endpoint.status}|${endpoint.endpoint_type ?? ''}`
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .toBe(`online|${endpointType}`)
 }
@@ -561,7 +579,7 @@ export async function prepareEndpointViaUi(
     typeLabel: 'Ollama' | 'LM Studio'
   }
 ) {
-  await deleteEndpointsByBaseUrl(request, options.baseUrl)
+  await deleteEndpointsByName(request, options.endpointName)
   let row = await registerEndpointViaUi(page, options.endpointName, options.baseUrl)
   await waitForEndpointRegistered(request, options.endpointName)
   await row.locator('button[title="Test Connection"]').click()
@@ -575,7 +593,7 @@ export async function prepareEndpointViaUi(
     .poll(async () => {
       const endpoint = await getEndpointByName(request, options.endpointName)
       return endpoint?.model_count ?? 0
-    }, { timeout: 120000, intervals: [1000, 2000, 5000] })
+    }, { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] })
     .toBeGreaterThan(0)
 
   const endpoint = await getEndpointByName(request, options.endpointName)
@@ -606,7 +624,7 @@ export async function waitForModelVisibleInDetails(
   const detailsDialog = page.getByRole('dialog').filter({ hasText: endpointName })
   await expect(detailsDialog).toBeVisible({ timeout: 20000 })
   await expect(detailsDialog.getByText(expectedModel, { exact: true })).toBeVisible({
-    timeout: 120000,
+    timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS,
   })
   await page.keyboard.press('Escape')
   await expect(detailsDialog).toBeHidden({ timeout: 20000 })
@@ -634,7 +652,7 @@ export async function waitForApiModelVisible(
         resolvedModelId = match?.id?.trim() ?? ''
         return resolvedModelId
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .not.toBe('')
 
@@ -695,7 +713,7 @@ export async function resolveApiModelIdForRuntimeModel(
         resolvedModelId = match?.id?.trim() ?? ''
         return resolvedModelId
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_READINESS_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .not.toBe('')
 
@@ -804,7 +822,7 @@ export async function expectChatCompletion(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      timeout: options?.timeout ?? 120000,
+      timeout: options?.timeout ?? REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
     })
     if (!response.ok()) {
       const bodyText = await response.text()
@@ -866,7 +884,7 @@ export async function expectChatCompletionError(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      timeout: options.timeout ?? 120000,
+      timeout: options.timeout ?? REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
     })
     expect(response.status()).toBe(options.status)
 
@@ -904,7 +922,7 @@ export async function expectEmbeddings(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      timeout: 120000,
+      timeout: REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
     })
     expect(response.ok()).toBeTruthy()
 
@@ -945,7 +963,7 @@ export async function postStreamingChatCompletion(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    timeout: 300000,
+    timeout: REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
   })
   expect(response.ok()).toBeTruthy()
   const text = await response.text()
@@ -982,7 +1000,9 @@ export async function sendPlaygroundMessage(page: Page, message: string) {
 
 export async function waitForAssistantBubbleCount(page: Page, expectedCount: number) {
   const assistantIcons = page.locator('svg.lucide-bot')
-  await expect(assistantIcons).toHaveCount(expectedCount, { timeout: 120000 })
+  await expect(assistantIcons).toHaveCount(expectedCount, {
+    timeout: REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS,
+  })
 }
 
 export async function waitForAssistantText(page: Page) {
@@ -998,7 +1018,7 @@ export async function waitForAssistantText(page: Page) {
         return messages.map((message) => message.trim()).filter((message) => message.length > 0)
           .length
       },
-      { timeout: 120000, intervals: [1000, 2000, 5000] }
+      { timeout: REAL_LOCAL_RUNTIME_JIT_TIMEOUT_MS, intervals: [1000, 2000, 5000] }
     )
     .toBeGreaterThan(0)
 }

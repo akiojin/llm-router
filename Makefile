@@ -56,7 +56,7 @@ test-hooks:
 # Automatically starts the server via playwright.config.ts webServer.
 # Set SKIP_SERVER=1 to use an already-running server.
 e2e-playwright:
-	@cd llmlb/tests/e2e-playwright && pnpm exec playwright test --project=chromium || \
+	@cd llmlb/tests/e2e-playwright && pnpm exec playwright test --project=chromium --grep-invert @real-runtimes || \
 		(echo "⚠️  Some Playwright E2E tests failed. Review the report above." && exit 0)
 
 # Playwright E2E screenshot capture (headed mode)
