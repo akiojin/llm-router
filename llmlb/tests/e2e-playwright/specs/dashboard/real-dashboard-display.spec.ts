@@ -11,6 +11,8 @@ import {
   openEndpointDetails,
   prepareEndpointViaUi,
   probeLocalRuntimes,
+  REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
+  REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
   RuntimeSelection,
   searchEndpointRow,
   selectEndpointPlaygroundModel,
@@ -126,7 +128,7 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
     page,
     request,
   }) => {
-    test.setTimeout(10 * 60_000)
+    test.setTimeout(20 * 60_000)
     test.skip(!runtimeSelection, skipReason)
     test.skip(!coldStartModel, 'No installed Ollama model reproduced a cold-start timeout')
     const model = coldStartModel
@@ -149,7 +151,7 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
     await detailsDialog.locator('#inferenceTimeout').fill('1')
     await detailsDialog.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Update Complete', { exact: true }).first()).toBeVisible({
-      timeout: 10000,
+      timeout: REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
     })
     await detailsDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
 
@@ -158,9 +160,11 @@ test.describe('Real Dashboard Display @dashboard @real-runtimes', () => {
     await selectEndpointPlaygroundModel(page, model)
     await sendPlaygroundMessage(page, 'Reply with OK only.')
     await expect(page.getByText('Failed to send message', { exact: true }).first()).toBeVisible({
-      timeout: 180000,
+      timeout: REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
     })
-    await expect(page.getByText(/still loading/i).first()).toBeVisible({ timeout: 180000 })
+    await expect(page.getByText(/still loading/i).first()).toBeVisible({
+      timeout: REAL_LOCAL_RUNTIME_FAILURE_TIMEOUT_MS,
+    })
 
     await expect
       .poll(

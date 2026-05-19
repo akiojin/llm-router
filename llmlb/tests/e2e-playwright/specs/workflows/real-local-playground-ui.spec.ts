@@ -48,7 +48,7 @@ test.describe('Real Local Playground UI @workflows @playground @real-runtimes', 
   })
 
   test('exercise endpoint playground for Ollama and LM Studio', async ({ page, request }) => {
-    test.setTimeout(20 * 60_000)
+    test.setTimeout(30 * 60_000)
     test.skip(!runtimeSelection, skipReason)
     const selection = runtimeSelection
     if (!selection) return

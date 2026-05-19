@@ -7,6 +7,7 @@ import {
   openEndpointDetails,
   prepareEndpointViaUi,
   probeLocalRuntimes,
+  REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
   RuntimeSelection,
   searchEndpointRow,
   waitForEndpointTypeAndStatus,
@@ -57,7 +58,7 @@ test.describe('Real Local Endpoint Management @workflows @dashboard @real-runtim
     await detailsDialog.locator('#notes').fill(notes)
     await detailsDialog.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Update Complete', { exact: true }).first()).toBeVisible({
-      timeout: 10000,
+      timeout: REAL_LOCAL_RUNTIME_SAVE_TIMEOUT_MS,
     })
     await detailsDialog.getByRole('button', { name: 'Close', exact: true }).first().click()
     await expect(detailsDialog).toBeHidden({ timeout: 10000 })
