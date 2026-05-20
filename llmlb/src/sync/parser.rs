@@ -106,7 +106,9 @@ pub fn parse_models_response(json: &serde_json::Value) -> (Vec<ParsedModel>, Res
                 let id = model
                     .get("name")
                     .and_then(|n| n.as_str())
-                    .or_else(|| model.get("model").and_then(|m| m.as_str()));
+                    .or_else(|| model.get("model").and_then(|m| m.as_str()))
+                    .or_else(|| model.get("key").and_then(|m| m.as_str()))
+                    .or_else(|| model.get("id").and_then(|m| m.as_str()));
                 let id = id.filter(|s| !s.is_empty())?;
                 Some(parsed_model_from_value(id, model))
             })
@@ -284,6 +286,33 @@ mod tests {
         assert_eq!(format, ResponseFormat::Ollama);
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "codellama:7b");
+    }
+
+    #[test]
+    fn test_parse_lm_studio_models_key_and_vision_capability() {
+        let json = json!({
+            "models": [
+                {
+                    "type": "llm",
+                    "key": "google/gemma-4-26b-a4b",
+                    "capabilities": {
+                        "vision": true,
+                        "trained_for_tool_use": true
+                    }
+                }
+            ]
+        });
+
+        let (models, format) = parse_models_response(&json);
+
+        assert_eq!(format, ResponseFormat::Ollama);
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "google/gemma-4-26b-a4b");
+        assert_eq!(
+            models[0].capabilities.as_deref(),
+            Some(&["image_input".to_string()][..])
+        );
+        assert!(models[0].supported_apis.contains(&SupportedAPI::ImageInput));
     }
 
     #[test]

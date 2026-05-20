@@ -51,10 +51,12 @@ export default defineConfig({
   webServer: process.env.SKIP_SERVER
     ? undefined
     : {
+        // The broad E2E suite verifies protected-route behavior, so run its
+        // server with auth required even though product default is optional.
         command:
           process.platform === 'win32'
-            ? `set LLMLB_DATABASE_URL=sqlite:${e2eDataDir.replace(/\//g, '\\\\')}\\\\llmlb.db&& set LLMLB_LOG_DIR=${e2eDataDir.replace(/\//g, '\\\\')}\\\\logs&& cargo run -p llmlb -- serve --no-tray --port ${basePort}`
-            : `LLMLB_DATABASE_URL=sqlite:${e2eDataDir}/llmlb.db LLMLB_LOG_DIR=${e2eDataDir}/logs cargo run -p llmlb -- serve --no-tray --port ${basePort}`,
+            ? `set LLMLB_API_KEY_REQUIRED=true&& set LLMLB_DATABASE_URL=sqlite:${e2eDataDir.replace(/\//g, '\\\\')}\\\\llmlb.db&& set LLMLB_LOG_DIR=${e2eDataDir.replace(/\//g, '\\\\')}\\\\logs&& cargo run -p llmlb -- serve --no-tray --port ${basePort}`
+            : `LLMLB_API_KEY_REQUIRED=true LLMLB_DATABASE_URL=sqlite:${e2eDataDir}/llmlb.db LLMLB_LOG_DIR=${e2eDataDir}/logs cargo run -p llmlb -- serve --no-tray --port ${basePort}`,
         url: `${baseURL}/dashboard`,
         reuseExistingServer: !process.env.CI,
         timeout: 300000,

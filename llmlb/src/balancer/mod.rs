@@ -2955,6 +2955,18 @@ impl LoadManager {
         self.select_endpoint_by_tps_from_endpoints(endpoints, Some(model_id), api_kind)
             .await
     }
+
+    /// 指定済み候補から、指定モデルに対応する初期化完了エンドポイントをTPS優先で選択する。
+    pub async fn select_endpoint_by_tps_ready_from_candidates(
+        &self,
+        endpoints: Vec<crate::types::endpoint::Endpoint>,
+        model_id: &str,
+        api_kind: Option<TpsApiKind>,
+    ) -> RouterResult<crate::types::endpoint::Endpoint> {
+        self.select_endpoint_by_tps_from_endpoints(endpoints, Some(model_id), api_kind)
+            .await
+    }
+
     fn select_endpoint_round_robin_from_endpoints(
         &self,
         endpoints: Vec<crate::types::endpoint::Endpoint>,

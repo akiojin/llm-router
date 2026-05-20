@@ -1712,6 +1712,18 @@ pub async fn get_setting(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let settings = crate::db::settings::SettingsStorage::new(state.db_pool.clone());
     let value = settings.get_setting(&key).await.map_err(AppError)?;
+    if key == crate::config::API_KEY_REQUIRED_SETTING_KEY {
+        let effective = crate::config::effective_api_key_required(&state.db_pool).await;
+        let stored_value = value.unwrap_or_else(|| "false".to_string());
+        return Ok(Json(serde_json::json!({
+            "key": key,
+            "value": stored_value,
+            "effective_value": effective.required.to_string(),
+            "source": effective.source.as_str(),
+            "env_override": matches!(effective.source, crate::config::ApiKeyRequiredSource::Env),
+        })));
+    }
+
     let value = if key == "ip_alert_threshold" {
         effective_ip_alert_threshold(value.as_deref()).to_string()
     } else {
@@ -1739,12 +1751,31 @@ pub async fn update_setting(
         parse_ip_alert_threshold(&body.value)
             .map_err(AppError)?
             .to_string()
+    } else if key == crate::config::API_KEY_REQUIRED_SETTING_KEY {
+        crate::config::parse_bool_setting(&body.value)
+            .ok_or_else(|| {
+                AppError(LbError::Common(CommonError::Validation(
+                    "api_key_required must be true or false".to_string(),
+                )))
+            })?
+            .to_string()
     } else {
         body.value
     };
 
     let settings = crate::db::settings::SettingsStorage::new(state.db_pool.clone());
     settings.set_setting(&key, &value).await.map_err(AppError)?;
+    if key == crate::config::API_KEY_REQUIRED_SETTING_KEY {
+        let effective = crate::config::effective_api_key_required(&state.db_pool).await;
+        return Ok(Json(serde_json::json!({
+            "key": key,
+            "value": value,
+            "effective_value": effective.required.to_string(),
+            "source": effective.source.as_str(),
+            "env_override": matches!(effective.source, crate::config::ApiKeyRequiredSource::Env),
+        })));
+    }
+
     Ok(Json(serde_json::json!({ "key": key, "value": value })))
 }
 

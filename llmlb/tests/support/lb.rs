@@ -83,6 +83,12 @@ pub async fn create_test_db_pool() -> SqlitePool {
         .await
         .expect("Failed to run migrations");
 
+    let settings = llmlb::db::settings::SettingsStorage::new(pool.clone());
+    settings
+        .set_setting("api_key_required", "true")
+        .await
+        .expect("Failed to set test api_key_required default");
+
     pool
 }
 

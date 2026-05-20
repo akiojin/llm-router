@@ -10,7 +10,11 @@ use crate::common::{
     protocol::{RequestResponseRecord, TpsApiKind},
 };
 use crate::token::StreamingTokenAccumulator;
-use crate::{config::QueueConfig, types::endpoint::Endpoint, AppState};
+use crate::{
+    config::QueueConfig,
+    types::endpoint::{Endpoint, SupportedAPI},
+    AppState,
+};
 use axum::{
     body::Body,
     http::{HeaderName, HeaderValue, StatusCode},
@@ -61,6 +65,42 @@ pub(crate) async fn select_available_endpoint_with_queue_for_model(
         endpoint_name = %endpoint.name,
         ?api_kind,
         "Selected ready endpoint by TPS priority"
+    );
+
+    Ok(QueueSelection::Ready {
+        endpoint: Box::new(endpoint),
+        queued_wait_ms: None,
+    })
+}
+
+/// モデルと必須APIに対応するエンドポイントをTPS優先・キュー付きで選択
+pub(crate) async fn select_available_endpoint_with_queue_for_model_and_api(
+    state: &AppState,
+    _queue_config: QueueConfig,
+    model_id: &str,
+    required_api: SupportedAPI,
+    api_kind: Option<TpsApiKind>,
+) -> Result<QueueSelection, LbError> {
+    let endpoints = state
+        .endpoint_registry
+        .find_by_model_and_supported_api(model_id, required_api)
+        .await;
+    if endpoints.is_empty() {
+        return Err(LbError::NoCapableEndpoints(model_id.to_string()));
+    }
+
+    let endpoint = state
+        .load_manager
+        .select_endpoint_by_tps_ready_from_candidates(endpoints, model_id, api_kind)
+        .await?;
+
+    tracing::debug!(
+        model = %model_id,
+        endpoint_id = %endpoint.id,
+        endpoint_name = %endpoint.name,
+        required_api = %required_api,
+        ?api_kind,
+        "Selected ready endpoint by TPS priority and required API"
     );
 
     Ok(QueueSelection::Ready {
