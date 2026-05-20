@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [5.10.0](https://github.com/akiojin/llmlb/compare/v5.9.0...v5.10.0) (2026-05-20)
+
+### Added
+
+- Auth: APIキー認証を既定 optional にし、Dashboard 設定または `LLMLB_API_KEY_REQUIRED=true` で必須化できるようにした (#656)
+- API: OpenAI互換 chat payload の image input を検出し、`image_input` 対応エンドポイントへルーティングするようにした (#658)
+- Playground: 推論開始から初回応答までの待機中に generation progress feedback を表示するようにした (#658, closes #657)
+
+### Fixed
+
+- Sync: LM Studio のモデル同期で専用APIが利用できない場合に OpenAI互換 `/v1/models` へフォールバックし、vision capability を保持するよう修正 (#658)
+- API: `input_image` chat parts を image input として検出するよう修正 (#658)
+- E2E: 実ローカルランタイムの JIT ロード時間に合わせて Playwright timeout と通常ゲートの対象範囲を安定化 (#659)
+
+### Docs
+
+- Auth: optional API authentication と `LLMLB_API_KEY_REQUIRED` の運用を README / authentication docs に追記 (#656)
+
+### Chore
+
+- Hooks: Codex hook 設定を `gwtd hook event` 経由に統合
+
 ## [5.9.0](https://github.com/akiojin/llmlb/compare/v5.8.0...v5.9.0) (2026-05-15)
 
 ### Added
