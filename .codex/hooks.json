@@ -4,16 +4,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state PostToolUse }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
+            "command": "powershell -NoProfile -Command \"& { $gwtBin = if ($env:GWT_BIN_PATH) { $env:GWT_BIN_PATH } else { 'C:\\Users\\AkioJinsenji秦泉寺章夫\\AppData\\Local\\Programs\\GWT\\gwtd.exe' }; & $gwtBin hook event PostToolUse }\"",
             "type": "command"
           }
         ],
@@ -24,25 +15,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state PreToolUse }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook workflow-policy }\"",
+            "command": "powershell -NoProfile -Command \"& { $gwtBin = if ($env:GWT_BIN_PATH) { $env:GWT_BIN_PATH } else { 'C:\\Users\\AkioJinsenji秦泉寺章夫\\AppData\\Local\\Programs\\GWT\\gwtd.exe' }; & $gwtBin hook event PreToolUse }\"",
             "type": "command"
           }
         ],
@@ -53,34 +26,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state SessionStart }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook coordination-event SessionStart }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook board-reminder SessionStart }\"",
+            "command": "powershell -NoProfile -Command \"& { $gwtBin = if ($env:GWT_BIN_PATH) { $env:GWT_BIN_PATH } else { 'C:\\Users\\AkioJinsenji秦泉寺章夫\\AppData\\Local\\Programs\\GWT\\gwtd.exe' }; & $gwtBin hook event SessionStart }\"",
             "type": "command"
           }
         ],
@@ -91,34 +37,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state Stop }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook coordination-event Stop }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook board-reminder Stop }\"",
+            "command": "powershell -NoProfile -Command \"& { $gwtBin = if ($env:GWT_BIN_PATH) { $env:GWT_BIN_PATH } else { 'C:\\Users\\AkioJinsenji秦泉寺章夫\\AppData\\Local\\Programs\\GWT\\gwtd.exe' }; & $gwtBin hook event Stop }\"",
             "type": "command"
           }
         ],
@@ -129,25 +48,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state UserPromptSubmit }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook board-reminder UserPromptSubmit }\"",
+            "command": "powershell -NoProfile -Command \"& { $gwtBin = if ($env:GWT_BIN_PATH) { $env:GWT_BIN_PATH } else { 'C:\\Users\\AkioJinsenji秦泉寺章夫\\AppData\\Local\\Programs\\GWT\\gwtd.exe' }; & $gwtBin hook event UserPromptSubmit }\"",
             "type": "command"
           }
         ],
