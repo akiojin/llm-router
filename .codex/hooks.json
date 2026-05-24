@@ -4,16 +4,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state PostToolUse }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
+            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event PostToolUse",
             "type": "command"
           }
         ],
@@ -24,25 +15,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state PreToolUse }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook workflow-policy }\"",
+            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event PreToolUse",
             "type": "command"
           }
         ],
@@ -53,34 +26,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state SessionStart }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook coordination-event SessionStart }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook board-reminder SessionStart }\"",
+            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event SessionStart",
             "type": "command"
           }
         ],
@@ -91,34 +37,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state Stop }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook coordination-event Stop }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook board-reminder Stop }\"",
+            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event Stop",
             "type": "command"
           }
         ],
@@ -129,25 +48,7 @@
       {
         "hooks": [
           {
-            "command": "powershell -NoProfile -Command \"& { gwt hook runtime-state UserPromptSubmit }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook forward }\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "powershell -NoProfile -Command \"& { gwt hook board-reminder UserPromptSubmit }\"",
+            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event UserPromptSubmit",
             "type": "command"
           }
         ],
