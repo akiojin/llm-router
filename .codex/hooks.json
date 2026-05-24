@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event PostToolUse",
+            "command": "gwtd hook event PostToolUse",
             "type": "command"
           }
         ],
@@ -15,7 +15,7 @@
       {
         "hooks": [
           {
-            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event PreToolUse",
+            "command": "gwtd hook event PreToolUse",
             "type": "command"
           }
         ],
@@ -26,7 +26,7 @@
       {
         "hooks": [
           {
-            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event SessionStart",
+            "command": "gwtd hook event SessionStart",
             "type": "command"
           }
         ],
@@ -37,7 +37,7 @@
       {
         "hooks": [
           {
-            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event Stop",
+            "command": "gwtd hook event Stop",
             "type": "command"
           }
         ],
@@ -48,7 +48,7 @@
       {
         "hooks": [
           {
-            "command": "gwt_bin=\"${GWT_BIN_PATH:-/Applications/GWT.app/Contents/MacOS/gwtd}\"; \"$gwt_bin\" hook event UserPromptSubmit",
+            "command": "gwtd hook event UserPromptSubmit",
             "type": "command"
           }
         ],
