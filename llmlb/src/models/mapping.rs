@@ -421,24 +421,228 @@ impl CanonicalResolution {
     }
 }
 
+/// 論理モデルの identity（family, size/arch, tuning）。
+///
+/// US-029: 同じ論理モデルを指す表記を「サイズ・チューニング」で区別し、
+/// owner・量子化・大文字小文字は含めない（variant 扱い）。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ModelIdentity {
+    /// 例: `gemma-4`, `qwen3-coder`, `llama-3.3`
+    pub family: String,
+    /// 例: `e4b`, `26b-a4b`, `27b`（未検出なら `None`）
+    pub size: Option<String>,
+    /// instruction-tuned（`-it` / `-instruct`）なら true
+    pub instruct: bool,
+}
+
+impl ModelIdentity {
+    /// グルーピング用の正規化キー（family|size|tuning）。
+    pub fn group_key(&self) -> String {
+        format!(
+            "{}|{}|{}",
+            self.family,
+            self.size.as_deref().unwrap_or("-"),
+            if self.instruct { "it" } else { "base" }
+        )
+    }
+}
+
+/// 配布形式・量子化方式を表す末尾サフィックス（identity から除去する）。
+const FORMAT_SUFFIXES: &[&str] = &[
+    "-gguf", "-awq", "-gptq", "-mlx", "-bnb", "-fp8", "-int4", "-int8", "-hf",
+];
+
+/// instruction-tuned を示す末尾マーカー（長いものから判定する）。
+const INSTRUCT_MARKERS: &[&str] = &["-instruction-tuned", "-instruct", "-it"];
+
+/// family 接頭辞 → 一次配布元（公式 HF org）。
+///
+/// US-029 FR-027: 同一 identity に複数オーナーがある場合の canonical 選定基準。
+const FIRST_PARTY_ORGS: &[(&str, &str)] = &[
+    ("gemma", "google"),
+    ("gpt-oss", "openai"),
+    ("qwen", "Qwen"),
+    ("llama", "meta-llama"),
+    ("nemotron", "nvidia"),
+    ("glm", "zai-org"),
+    ("nomic", "nomic-ai"),
+    ("phi", "microsoft"),
+    ("mistral", "mistralai"),
+    ("mixtral", "mistralai"),
+    ("deepseek", "deepseek-ai"),
+];
+
+/// family から一次配布元 org を返す（接頭辞一致）。判別不能なら `None`。
+pub fn first_party_org_for_family(family: &str) -> Option<&'static str> {
+    let f = family.to_ascii_lowercase();
+    FIRST_PARTY_ORGS
+        .iter()
+        .find(|(prefix, _)| f.starts_with(prefix))
+        .map(|(_, org)| *org)
+}
+
+/// `27b` / `e4b` / `120b` などのサイズトークンか判定する（`a4b` 等の active 部も該当）。
+fn is_size_token(t: &str) -> bool {
+    // `e2b` `e4b` の effective 接頭辞、`a4b` `a3b` の MoE active 接頭辞を許容
+    let t = t
+        .strip_prefix('e')
+        .or_else(|| t.strip_prefix('a'))
+        .unwrap_or(t);
+    let Some(core) = t.strip_suffix('b') else {
+        return false;
+    };
+    if core.is_empty() {
+        return false;
+    }
+    let mut seen_dot = false;
+    for c in core.chars() {
+        if c == '.' {
+            if seen_dot {
+                return false;
+            }
+            seen_dot = true;
+        } else if !c.is_ascii_digit() {
+            return false;
+        }
+    }
+    true
+}
+
+/// repo 名等から論理モデル identity をヒューリスティック抽出する（best-effort）。
+///
+/// owner と量子化サフィックスを除去し、format サフィックス（`-GGUF` 等）と
+/// instruct マーカーを分離して family / size / instruct を推定する。
+/// US-029 FR-028: 未知モデルのグルーピング・canonical 推定に用いる。
+pub fn parse_identity(model_id: &str) -> ModelIdentity {
+    let (base, _q) = split_quantization_suffix(model_id);
+    let repo = base.rsplit('/').next().unwrap_or(base);
+    let mut s = repo.to_ascii_lowercase();
+
+    // 末尾の format サフィックスを除去（複数付与に備えてループ）
+    loop {
+        let mut changed = false;
+        for suf in FORMAT_SUFFIXES {
+            if let Some(stripped) = s.strip_suffix(suf) {
+                s = stripped.to_string();
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    // instruct マーカー（長い順）
+    let mut instruct = false;
+    for marker in INSTRUCT_MARKERS {
+        if let Some(stripped) = s.strip_suffix(marker) {
+            instruct = true;
+            s = stripped.to_string();
+            break;
+        }
+    }
+
+    let tokens: Vec<&str> = s.split('-').filter(|t| !t.is_empty()).collect();
+    // 先頭に現れる最初のサイズトークン以降を size、その手前を family とする
+    let size_idx = tokens.iter().position(|t| is_size_token(t));
+    let (family, size) = match size_idx {
+        Some(i) => (tokens[..i].join("-"), Some(tokens[i..].join("-"))),
+        None => (tokens.join("-"), None),
+    };
+
+    ModelIdentity {
+        family,
+        size,
+        instruct,
+    }
+}
+
+/// model_id の owner（`/` の前）を返す。owner が無ければ `None`。
+fn owner_of(model_id: &str) -> Option<&str> {
+    let (base, _q) = split_quantization_suffix(model_id);
+    base.rsplit_once('/').map(|(owner, _)| owner)
+}
+
 /// Build a [`CanonicalResolution`] from an iterator of `(model_id, canonical_name)` pairs.
+///
+/// 2 パス構成:
+/// 1. 明示 canonical（BUILTIN / sync 由来）をそのまま登録する。
+/// 2. 明示 canonical を持たないモデルを identity（family/size/tuning）でグループ化し、
+///    同一 identity 内に一次配布元 owner のメンバーがいればそれを canonical に採用する
+///    （US-029 FR-027/FR-028）。一次配布元メンバーが不在ならマージしない（self-canonical）。
 pub fn build_canonical_maps<'a>(
     models: impl Iterator<Item = (&'a str, Option<&'a str>)>,
 ) -> CanonicalResolution {
+    let pairs: Vec<(String, Option<String>)> = models
+        .map(|(id, c)| (id.to_string(), c.map(|s| s.to_string())))
+        .collect();
+
     let mut res = CanonicalResolution::default();
-    for (model_id, canonical) in models {
-        let Some(canonical) = canonical else {
+
+    // Pass 1: 明示 canonical（既存挙動）
+    for (model_id, canonical) in &pairs {
+        if let Some(canonical) = canonical {
+            if canonical != model_id {
+                res.canonical_to_aliases
+                    .entry(canonical.clone())
+                    .or_default()
+                    .insert(model_id.clone());
+            }
+            res.model_to_canonical
+                .insert(model_id.clone(), canonical.clone());
+        }
+    }
+
+    // Pass 2: 明示 canonical を持たないモデルを identity でグループ化
+    let mut groups: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (model_id, canonical) in &pairs {
+        if canonical.is_some() {
+            continue;
+        }
+        let ident = parse_identity(model_id);
+        // size 不明（embeddings 等）は誤マージ回避のためグループ化しない
+        if ident.size.is_none() {
+            continue;
+        }
+        groups
+            .entry(ident.group_key())
+            .or_default()
+            .push(model_id.clone());
+    }
+
+    for (key, members) in groups {
+        let family = key.split('|').next().unwrap_or("");
+        let fp_org = first_party_org_for_family(family);
+
+        // 同一 identity 内で一次配布元 owner のメンバーを探す（決定的に最小を採用）
+        let mut first_party_members: Vec<&String> = members
+            .iter()
+            .filter(|m| {
+                owner_of(m)
+                    .zip(fp_org)
+                    .map(|(o, fp)| o.eq_ignore_ascii_case(fp))
+                    .unwrap_or(false)
+            })
+            .collect();
+        first_party_members.sort();
+
+        let Some(canonical) = first_party_members.first().map(|s| (*s).clone()) else {
+            // 一次配布元不在 → マージしない（self-canonical のまま）
             continue;
         };
-        if canonical != model_id {
-            res.canonical_to_aliases
-                .entry(canonical.to_string())
-                .or_default()
-                .insert(model_id.to_string());
+
+        for m in &members {
+            res.model_to_canonical.insert(m.clone(), canonical.clone());
+            if *m != canonical {
+                res.canonical_to_aliases
+                    .entry(canonical.clone())
+                    .or_default()
+                    .insert(m.clone());
+            }
         }
-        res.model_to_canonical
-            .insert(model_id.to_string(), canonical.to_string());
     }
+
     res
 }
 
@@ -1088,5 +1292,127 @@ mod tests {
     fn test_aliases_for_returns_empty_for_unknown() {
         let res = build_canonical_maps(std::iter::empty());
         assert!(res.aliases_for("anything").is_empty());
+    }
+
+    // --- US-029: identity 解析・一次配布元・ヒューリスティック grouping ---
+
+    #[test]
+    fn test_parse_identity_strips_owner_quant_format() {
+        let id = parse_identity("ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M");
+        assert_eq!(id.family, "gemma-4");
+        assert_eq!(id.size.as_deref(), Some("e4b"));
+        assert!(id.instruct);
+    }
+
+    #[test]
+    fn test_parse_identity_base_vs_it_differs() {
+        let base = parse_identity("google/gemma-4-26b-a4b");
+        let it = parse_identity("google/gemma-4-26B-A4B-it");
+        assert_eq!(base.family, "gemma-4");
+        assert_eq!(base.size.as_deref(), Some("26b-a4b"));
+        assert!(!base.instruct);
+        assert!(it.instruct);
+        // base と it は別 identity
+        assert_ne!(base.group_key(), it.group_key());
+    }
+
+    #[test]
+    fn test_parse_identity_size_differs() {
+        let e2b = parse_identity("ggml-org/gemma-4-E2B-it-GGUF");
+        let e4b = parse_identity("ggml-org/gemma-4-E4B-it-GGUF");
+        assert_eq!(e2b.size.as_deref(), Some("e2b"));
+        assert_eq!(e4b.size.as_deref(), Some("e4b"));
+        assert_ne!(e2b.group_key(), e4b.group_key());
+    }
+
+    #[test]
+    fn test_parse_identity_moe_size() {
+        let id = parse_identity("nvidia/nemotron-3-super-120b-a12b");
+        assert_eq!(id.family, "nemotron-3-super");
+        assert_eq!(id.size.as_deref(), Some("120b-a12b"));
+        assert!(!id.instruct);
+    }
+
+    #[test]
+    fn test_parse_identity_no_size_for_embeddings() {
+        let id = parse_identity("nomic-ai/nomic-embed-text-v1.5");
+        assert_eq!(id.size, None);
+    }
+
+    #[test]
+    fn test_first_party_org_for_family() {
+        assert_eq!(first_party_org_for_family("gemma-4"), Some("google"));
+        assert_eq!(first_party_org_for_family("qwen3-coder"), Some("Qwen"));
+        assert_eq!(first_party_org_for_family("llama-3.3"), Some("meta-llama"));
+        assert_eq!(first_party_org_for_family("gpt-oss"), Some("openai"));
+        assert_eq!(first_party_org_for_family("totally-unknown"), None);
+    }
+
+    #[test]
+    fn test_heuristic_merges_redistributor_into_first_party() {
+        // 同一 identity（gemma-4 / e4b / it）で google(一次配布元) と ggml-org(再配布)
+        let models = vec![
+            ("google/gemma-4-e4b-it", None),
+            ("ggml-org/gemma-4-E4B-it-GGUF", None),
+        ];
+        let res = build_canonical_maps(models.into_iter());
+        assert_eq!(
+            res.canonical_for("ggml-org/gemma-4-E4B-it-GGUF"),
+            "google/gemma-4-e4b-it"
+        );
+        assert_eq!(
+            res.canonical_for("google/gemma-4-e4b-it"),
+            "google/gemma-4-e4b-it"
+        );
+        assert!(res
+            .aliases_for("google/gemma-4-e4b-it")
+            .contains(&"ggml-org/gemma-4-E4B-it-GGUF".to_string()));
+    }
+
+    #[test]
+    fn test_heuristic_keeps_sizes_separate() {
+        // サイズ違いはマージしない
+        let models = vec![
+            ("google/gemma-4-e2b-it", None),
+            ("google/gemma-4-e4b-it", None),
+        ];
+        let res = build_canonical_maps(models.into_iter());
+        assert_eq!(
+            res.canonical_for("google/gemma-4-e2b-it"),
+            "google/gemma-4-e2b-it"
+        );
+        assert_eq!(
+            res.canonical_for("google/gemma-4-e4b-it"),
+            "google/gemma-4-e4b-it"
+        );
+    }
+
+    #[test]
+    fn test_heuristic_no_merge_without_first_party() {
+        // 一次配布元 owner が不在ならマージしない（self-canonical）
+        let models = vec![
+            ("ggml-org/gemma-4-E4B-it-GGUF", None),
+            ("bartowski/gemma-4-E4B-it-GGUF", None),
+        ];
+        let res = build_canonical_maps(models.into_iter());
+        assert_eq!(
+            res.canonical_for("ggml-org/gemma-4-E4B-it-GGUF"),
+            "ggml-org/gemma-4-E4B-it-GGUF"
+        );
+        assert_eq!(
+            res.canonical_for("bartowski/gemma-4-E4B-it-GGUF"),
+            "bartowski/gemma-4-E4B-it-GGUF"
+        );
+    }
+
+    #[test]
+    fn test_heuristic_does_not_break_explicit_canonical() {
+        // 明示 canonical を持つモデルは Pass1 のまま
+        let models = vec![
+            ("gpt-oss:20b", Some("openai/gpt-oss-20b")),
+            ("openai/gpt-oss-20b", Some("openai/gpt-oss-20b")),
+        ];
+        let res = build_canonical_maps(models.into_iter());
+        assert_eq!(res.canonical_for("gpt-oss:20b"), "openai/gpt-oss-20b");
     }
 }

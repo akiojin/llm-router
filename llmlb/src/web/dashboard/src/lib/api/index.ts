@@ -62,6 +62,7 @@ export type {
   DiscoverGgufResponse,
   OpenAIModelsResponse,
   RegisteredModelView,
+  ModelsView,
 } from './models'
 
 export { chatApi } from './chat'

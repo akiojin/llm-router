@@ -46,7 +46,14 @@ export interface OpenAIModel {
   chat_template?: string
   max_tokens?: number | null
   endpoint_ids?: string[]
+  // US-029: Canonical 統一情報
+  canonical_name?: string
+  aliases?: string[]
+  quantization?: string | null
 }
+
+// US-029: モデル一覧の表示モード
+export type ModelsView = 'canonical' | 'detail'
 
 // /api/models/discover-gguf response types
 export interface GgufFileInfo {
@@ -93,6 +100,10 @@ export interface RegisteredModelView {
   supported_apis?: string[]
   chat_template?: string
   endpoint_ids: string[]
+  // US-029: Canonical 統一情報
+  canonical_name?: string
+  aliases?: string[]
+  quantization?: string | null
 }
 
 // OpenAIModel を RegisteredModelView に変換
@@ -120,6 +131,9 @@ function toRegisteredModelView(model: OpenAIModel): RegisteredModelView {
     tags: model.tags ?? [],
     chat_template: model.chat_template,
     endpoint_ids: model.endpoint_ids ?? [],
+    canonical_name: model.canonical_name,
+    aliases: model.aliases,
+    quantization: model.quantization,
   }
 }
 
@@ -128,10 +142,15 @@ function toRegisteredModelView(model: OpenAIModel): RegisteredModelView {
 // ダウンロード状態は /v1/models の lifecycle_status で確認
 
 export const modelsApi = {
-  /** OpenAI互換の登録済みモデル一覧を取得 */
-  getRegistered: async (): Promise<RegisteredModelView[]> => {
+  /**
+   * OpenAI互換の登録済みモデル一覧を取得
+   *
+   * US-029: `view='canonical'`（既定）は論理モデル単位に集約、`view='detail'` は全 variant を列挙。
+   */
+  getRegistered: async (view: ModelsView = 'canonical'): Promise<RegisteredModelView[]> => {
     // /api/dashboard/models - JWT認証で取得
-    const json = await fetchWithAuth<OpenAIModelsResponse>('/api/dashboard/models')
+    const query = view === 'detail' ? '?view=detail' : '?view=canonical'
+    const json = await fetchWithAuth<OpenAIModelsResponse>(`/api/dashboard/models${query}`)
     // Convert from OpenAI format to RegisteredModelView format
     return json.data.map(toRegisteredModelView)
   },
