@@ -15,10 +15,10 @@ function parseAlphaToken(token: string): number {
   return Number(t);
 }
 
-function parseCssColorAlpha(value: string): number {
+function parseCssColorAlpha(value: string): { alpha: number; explicitAlpha: boolean } {
   const v = value.trim();
 
-  if (v === 'transparent') return 0;
+  if (v === 'transparent') return { alpha: 0, explicitAlpha: true };
 
   // Modern browsers generally normalize to rgb()/rgba() but support both comma and space syntax.
   // - rgb(12, 34, 56)
@@ -28,13 +28,15 @@ function parseCssColorAlpha(value: string): number {
   // Newer Chromium may return CSS Color 4 values (e.g. oklab(... / 0.2)).
   // We only need alpha to detect "no CSS generated" regressions, so parse alpha broadly.
   const rgbaComma = v.match(/^rgba\(\s*\d+,\s*\d+,\s*\d+,\s*([\d.]+%?)\s*\)$/);
-  if (rgbaComma) return parseAlphaToken(rgbaComma[1]);
+  if (rgbaComma) return { alpha: parseAlphaToken(rgbaComma[1]), explicitAlpha: true };
 
   const alphaSlash = v.match(/\/\s*([\d.]+%?)\s*\)$/);
-  if (alphaSlash) return parseAlphaToken(alphaSlash[1]);
+  if (alphaSlash) return { alpha: parseAlphaToken(alphaSlash[1]), explicitAlpha: true };
 
-  // Any other color function without an explicit alpha is treated as fully opaque.
-  if (v.endsWith(')')) return 1;
+  // CSS Color 4 color-mix outputs may be returned as opaque oklab()/oklch() colors
+  // even when the source utility is a `/20` variant. Class assertions above cover
+  // the exact utility; alpha is only useful when the browser exposes it explicitly.
+  if (v.endsWith(')')) return { alpha: 1, explicitAlpha: false };
 
   throw new Error(`Unsupported CSS color format: ${value}`);
 }
@@ -79,7 +81,7 @@ async function expectStatusBadgeClasses(badge: Locator, status: 'pending' | 'onl
 async function expectStatusBadgeStyles(badge: Locator, status: 'pending' | 'online' | 'offline' | 'error') {
   // This catches "class is present but CSS isn't generated" regressions (the original bug report).
   const bg = await badge.evaluate((el) => getComputedStyle(el).backgroundColor);
-  const alpha = parseCssColorAlpha(bg);
+  const { alpha, explicitAlpha } = parseCssColorAlpha(bg);
 
   // Badge backgrounds should never be fully transparent.
   expect(alpha, `backgroundColor was ${bg}`).toBeGreaterThan(0);
@@ -87,7 +89,7 @@ async function expectStatusBadgeStyles(badge: Locator, status: 'pending' | 'onli
   if (status === 'error') {
     // Error uses solid destructive background.
     expect(alpha, `backgroundColor was ${bg}`).toBeGreaterThanOrEqual(0.95);
-  } else {
+  } else if (explicitAlpha) {
     // online/pending/offline use `/20` variants (tinted background).
     expect(alpha, `backgroundColor was ${bg}`).toBeLessThan(0.95);
   }

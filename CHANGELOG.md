@@ -2,6 +2,58 @@
 
 ## [Unreleased]
 
+## [5.10.1](https://github.com/akiojin/llmlb/compare/v5.10.0...v5.10.1) (2026-06-03)
+
+### Chore
+
+- Cargo 依存パッケージ更新（dependabot cargo group, 6件）: tower-http 0.6.10→0.6.11 / sysinfo 0.39.1→0.39.2 / tar 0.4.45→0.4.46 (#662)、serde_json 1.0.149→1.0.150 / reqwest 0.13.3→0.13.4 / rpassword 7.5.2→7.5.3 (#665)
+
+## [5.10.0](https://github.com/akiojin/llmlb/compare/v5.9.0...v5.10.0) (2026-05-20)
+
+### Added
+
+- Auth: APIキー認証を既定 optional にし、Dashboard 設定または `LLMLB_API_KEY_REQUIRED=true` で必須化できるようにした (#656)
+- API: OpenAI互換 chat payload の image input を検出し、`image_input` 対応エンドポイントへルーティングするようにした (#658)
+- Playground: 推論開始から初回応答までの待機中に generation progress feedback を表示するようにした (#658, closes #657)
+
+### Fixed
+
+- Sync: LM Studio のモデル同期で専用APIが利用できない場合に OpenAI互換 `/v1/models` へフォールバックし、vision capability を保持するよう修正 (#658)
+- API: `input_image` chat parts を image input として検出するよう修正 (#658)
+- E2E: 実ローカルランタイムの JIT ロード時間に合わせて Playwright timeout と通常ゲートの対象範囲を安定化 (#659)
+
+### Docs
+
+- Auth: optional API authentication と `LLMLB_API_KEY_REQUIRED` の運用を README / authentication docs に追記 (#656)
+
+### Chore
+
+- Hooks: Codex hook 設定を `gwtd hook event` 経由に統合
+
+## [5.9.0](https://github.com/akiojin/llmlb/compare/v5.8.0...v5.9.0) (2026-05-15)
+
+### Added
+
+- Models: 量子化サフィックスを `quantization` フィールドへ分離し、canonical name 集約後も元モデルの量子化情報を扱えるよう改善 (#575)
+- Sync: 単一エンドポイントによる大量モデル申告を warn ログで検知し、モデルカタログ運用異常を発見しやすく改善 (#575)
+- Dashboard: 管理トップを operations / capacity / action item 中心の KPI へ刷新し、ダッシュボードセッション経由で LB Playground を利用できるようにした (#649)
+
+### Fixed
+
+- API: `/v1/models` で embedding capability、`created`、`supported_apis` の順序、`ready` 判定、`owned_by` を OpenAI 互換レスポンスとして安定化 (#575)
+- Models: canonical テーブルの補正、`max_tokens` フォールバック、endpoint 申告 API のマージ処理を修正 (#575)
+- Dashboard: image input capability をモデル同期から保持し、Models テーブルで `Image` API バッジとして表示するよう修正 (#651)
+- Dashboard: operations capacity counts と E2E タブラベル期待値を修正 (#649)
+
+### Docs
+
+- Catalog: モデルカタログ運用ポリシーを追加し、G-3 暫定実装と follow-up Issue #643 を反映 (#575)
+
+### Chore
+
+- Deps: Dependabot による Cargo 依存更新を取り込み（`tokio` 1.52.3、`reqwest` 0.13.3、`jsonwebtoken` 10.4.0、`sysinfo` 0.39.1、`tray-icon` 0.24.0 など）
+- Dashboard: operations overview / Playground / Models 表示更新に伴い静的アセットを再生成
+
 ## [5.8.0](https://github.com/akiojin/llmlb/compare/v5.7.2...v5.8.0) (2026-04-23)
 
 ### Added

@@ -117,33 +117,30 @@ pub async fn sync_models_with_type(
         Err(_) => HashSet::new(),
     };
 
-    // GET /v1/models でモデル一覧を取得
-    let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
+    // GET /v1/models でモデル一覧を取得。
+    // LM Studio は OpenAI 互換の /v1/models だけでは vision capability を返さないため、
+    // LM Studio 固有の /api/v1/models を優先して supported_apis を同期する。
+    // ただし互換実装や古い環境では /api/v1/models が無いことがあるため、その場合は
+    // OpenAI 互換の /v1/models にフォールバックする。
+    let url = if endpoint_type == Some(EndpointType::LmStudio) {
+        format!("{}/api/v1/models", base_url.trim_end_matches('/'))
+    } else {
+        format!("{}/v1/models", base_url.trim_end_matches('/'))
+    };
 
-    let mut request = client.get(&url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
-
-    let response = request
-        .timeout(Duration::from_secs(timeout_secs))
-        .send()
-        .await
-        .map_err(|e| SyncError::ConnectionError(e.to_string()))?;
-
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(SyncError::HttpError(status, body));
-    }
-
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| SyncError::ParseError(e.to_string()))?;
+    let json = match fetch_models_json(client, &url, api_key, timeout_secs).await {
+        Ok(json) => json,
+        Err(SyncError::HttpError(404, body)) if endpoint_type == Some(EndpointType::LmStudio) => {
+            debug!(
+                endpoint_id = %endpoint_id,
+                error = %body,
+                "LM Studio /api/v1/models unavailable; falling back to /v1/models"
+            );
+            let fallback_url = format!("{}/v1/models", base_url.trim_end_matches('/'));
+            fetch_models_json(client, &fallback_url, api_key, timeout_secs).await?
+        }
+        Err(err) => return Err(err),
+    };
 
     // モデル一覧をパース
     let (parsed_models, format) = parse_models_response(&json);
@@ -237,29 +234,18 @@ pub async fn sync_models_with_type(
                     .await
                 {
                     Ok(meta) => {
-                        if let Some(context_length) = meta.context_length {
-                            // max_tokensをDBに更新
-                            if let Err(e) = db::update_model_max_tokens(
-                                pool,
-                                endpoint_id,
-                                &model_id,
-                                context_length,
-                            )
-                            .await
-                            {
-                                debug!(
-                                    endpoint_id = %endpoint_id,
-                                    model_id = %model_id,
-                                    error = %e,
-                                    "Failed to update max_tokens"
-                                );
-                            } else {
-                                // synced_modelsも更新
-                                for model in &mut synced_models {
-                                    if model.model_id == model_id {
-                                        model.max_tokens = Some(context_length);
-                                        break;
-                                    }
+                        if let Some(model) = synced_models
+                            .iter_mut()
+                            .find(|model| model.model_id == model_id)
+                        {
+                            if apply_metadata_to_synced_model(model, &meta) {
+                                if let Err(e) = db::update_endpoint_model(pool, model).await {
+                                    debug!(
+                                        endpoint_id = %endpoint_id,
+                                        model_id = %model_id,
+                                        error = %e,
+                                        "Failed to update model metadata"
+                                    );
                                 }
                             }
                         }
@@ -284,6 +270,38 @@ pub async fn sync_models_with_type(
         updated,
         format,
     })
+}
+
+async fn fetch_models_json(
+    client: &Client,
+    url: &str,
+    api_key: Option<&str>,
+    timeout_secs: u64,
+) -> Result<serde_json::Value, SyncError> {
+    let mut request = client.get(url);
+    if let Some(key) = api_key {
+        request = request.header("Authorization", format!("Bearer {}", key));
+    }
+
+    let response = request
+        .timeout(Duration::from_secs(timeout_secs))
+        .send()
+        .await
+        .map_err(|e| SyncError::ConnectionError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(SyncError::HttpError(status, body));
+    }
+
+    response
+        .json()
+        .await
+        .map_err(|e| SyncError::ParseError(e.to_string()))
 }
 
 fn build_endpoint_model_capability_view(
@@ -319,6 +337,35 @@ fn build_endpoint_model_capability_view(
     supported_apis.sort_by_key(|api| api.as_str());
 
     (Some(capabilities), supported_apis)
+}
+
+fn apply_metadata_to_synced_model(
+    model: &mut EndpointModel,
+    metadata: &metadata::ModelMetadata,
+) -> bool {
+    let mut changed = false;
+
+    if let Some(context_length) = metadata.context_length {
+        if model.max_tokens != Some(context_length) {
+            model.max_tokens = Some(context_length);
+            changed = true;
+        }
+    }
+
+    if metadata.supports_vision == Some(true) {
+        let capabilities = model.capabilities.get_or_insert_with(Vec::new);
+        let before_capabilities = capabilities.len();
+        push_unique_capability(capabilities, "image_input");
+        capabilities.sort();
+        changed |= capabilities.len() != before_capabilities;
+
+        let before_supported_apis = model.supported_apis.len();
+        push_unique_api(&mut model.supported_apis, SupportedAPI::ImageInput);
+        model.supported_apis.sort_by_key(|api| api.as_str());
+        changed |= model.supported_apis.len() != before_supported_apis;
+    }
+
+    changed
 }
 
 /// 2つのモデルセット間の差分を計算
@@ -402,6 +449,65 @@ mod tests {
         assert!(capabilities.contains(&"image_input".to_string()));
         assert!(supported_apis.contains(&SupportedAPI::ChatCompletions));
         assert!(supported_apis.contains(&SupportedAPI::ImageInput));
+    }
+
+    #[test]
+    fn test_apply_metadata_to_synced_model_adds_lm_studio_vision_api() {
+        let mut model = EndpointModel {
+            endpoint_id: Uuid::nil(),
+            model_id: "google/gemma-4-26b-a4b".to_string(),
+            capabilities: Some(vec!["chat".to_string()]),
+            max_tokens: None,
+            last_checked: None,
+            supported_apis: vec![SupportedAPI::ChatCompletions],
+            canonical_name: None,
+        };
+        let metadata = metadata::ModelMetadata {
+            model: "google/gemma-4-26b-a4b".to_string(),
+            context_length: Some(262144),
+            supports_vision: Some(true),
+            ..Default::default()
+        };
+
+        let changed = apply_metadata_to_synced_model(&mut model, &metadata);
+
+        assert!(changed);
+        assert_eq!(model.max_tokens, Some(262144));
+        assert!(model
+            .capabilities
+            .as_ref()
+            .expect("capabilities")
+            .contains(&"image_input".to_string()));
+        assert!(model.supported_apis.contains(&SupportedAPI::ImageInput));
+    }
+
+    #[test]
+    fn test_apply_metadata_to_synced_model_ignores_non_vision_metadata() {
+        let mut model = EndpointModel {
+            endpoint_id: Uuid::nil(),
+            model_id: "openai/gpt-oss-20b".to_string(),
+            capabilities: Some(vec!["chat".to_string()]),
+            max_tokens: Some(131072),
+            last_checked: None,
+            supported_apis: vec![SupportedAPI::ChatCompletions],
+            canonical_name: None,
+        };
+        let metadata = metadata::ModelMetadata {
+            model: "openai/gpt-oss-20b".to_string(),
+            context_length: Some(131072),
+            supports_vision: Some(false),
+            ..Default::default()
+        };
+
+        let changed = apply_metadata_to_synced_model(&mut model, &metadata);
+
+        assert!(!changed);
+        assert!(!model.supported_apis.contains(&SupportedAPI::ImageInput));
+        assert!(!model
+            .capabilities
+            .as_ref()
+            .expect("capabilities")
+            .contains(&"image_input".to_string()));
     }
 
     #[test]

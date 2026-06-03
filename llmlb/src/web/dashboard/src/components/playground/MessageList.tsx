@@ -1,7 +1,7 @@
 import { type RefObject } from 'react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Bot, User, Volume2, MessageSquare } from 'lucide-react'
+import { Bot, Loader2, User, Volume2, MessageSquare } from 'lucide-react'
 import type { Message } from './types'
 import { extractMediaFromContent } from './types'
 
@@ -10,7 +10,21 @@ interface MessageListProps {
   messagesEndRef: RefObject<HTMLDivElement | null>
   emptyTitle: string
   emptyDescription: string
+  isGenerating?: boolean
   maxWidth?: string
+}
+
+function GeneratingIndicator() {
+  return (
+    <div
+      data-testid="playground-generating-indicator"
+      aria-live="polite"
+      className="flex items-center gap-2 text-sm text-muted-foreground"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span>Generating response...</span>
+    </div>
+  )
 }
 
 export function MessageList({
@@ -18,12 +32,18 @@ export function MessageList({
   messagesEndRef,
   emptyTitle,
   emptyDescription,
+  isGenerating = false,
   maxWidth = 'max-w-4xl',
 }: MessageListProps) {
+  const lastMessage = messages[messages.length - 1]
+  const showPendingMessage =
+    isGenerating &&
+    (messages.length === 0 || lastMessage.role === 'user')
+
   return (
     <ScrollArea className="flex-1 p-4">
       <div className={cn(maxWidth, 'mx-auto space-y-4')}>
-        {messages.length === 0 ? (
+        {messages.length === 0 && !isGenerating ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <h2 className="text-lg font-medium">{emptyTitle}</h2>
@@ -43,7 +63,13 @@ export function MessageList({
                   message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
                 )}
               >
-                {message.content && <p className="text-sm whitespace-pre-wrap">{message.content}</p>}
+                {message.content ? (
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                ) : (
+                  message.role === 'assistant' &&
+                  isGenerating &&
+                  index === messages.length - 1 && <GeneratingIndicator />
+                )}
 
                 {message.attachments && message.attachments.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-2">
@@ -100,6 +126,16 @@ export function MessageList({
               )}
             </div>
           ))
+        )}
+        {showPendingMessage && (
+          <div className="flex gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Bot className="h-4 w-4 text-primary" />
+            </div>
+            <div className="rounded-lg px-4 py-3 max-w-[80%] space-y-2 bg-muted">
+              <GeneratingIndicator />
+            </div>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>

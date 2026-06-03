@@ -185,6 +185,7 @@ export function PlaygroundBase({
           messagesEndRef={messagesEndRef}
           emptyTitle={emptyTitle}
           emptyDescription={emptyDescription}
+          isGenerating={isStreaming}
           maxWidth={messageMaxWidth}
         />
 

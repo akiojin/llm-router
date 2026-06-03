@@ -62,6 +62,7 @@ export type {
   DiscoverGgufResponse,
   OpenAIModelsResponse,
   RegisteredModelView,
+  ModelsView,
 } from './models'
 
 export { chatApi } from './chat'
@@ -83,6 +84,9 @@ export type {
   RollbackResponse,
   VersionResponse,
 } from './system'
+
+export { settingsApi } from './settings'
+export type { ApiKeyRequiredSetting, SettingSource } from './settings'
 
 export { apiKeysApi } from './api-keys'
 export type {

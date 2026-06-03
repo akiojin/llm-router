@@ -4,12 +4,12 @@
   "private": true,
   "description": "Playwright E2E tests for LLM Router Dashboard and Playground",
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug",
-    "test:ui": "playwright test --ui",
-    "test:dashboard": "playwright test --grep @dashboard",
-    "test:playground": "playwright test --grep @playground",
+    "test": "playwright test --grep-invert @real-runtimes",
+    "test:headed": "playwright test --headed --grep-invert @real-runtimes",
+    "test:debug": "playwright test --debug --grep-invert @real-runtimes",
+    "test:ui": "playwright test --ui --grep-invert @real-runtimes",
+    "test:dashboard": "playwright test --grep @dashboard --grep-invert @real-runtimes",
+    "test:playground": "playwright test --grep @playground --grep-invert @real-runtimes",
     "test:real-local": "playwright test specs/dashboard/real-dashboard-display.spec.ts specs/workflows/real-local-runtimes.spec.ts specs/workflows/real-local-playground-ui.spec.ts specs/workflows/real-local-endpoint-management.spec.ts specs/workflows/real-local-streaming-failure.spec.ts specs/workflows/real-local-supported-models.spec.ts specs/workflows/real-local-ollama-cold-start.spec.ts --workers 1",
     "test:real-local:headed": "playwright test specs/dashboard/real-dashboard-display.spec.ts specs/workflows/real-local-runtimes.spec.ts specs/workflows/real-local-playground-ui.spec.ts specs/workflows/real-local-endpoint-management.spec.ts specs/workflows/real-local-streaming-failure.spec.ts specs/workflows/real-local-supported-models.spec.ts specs/workflows/real-local-ollama-cold-start.spec.ts --workers 1 --headed",
     "report": "playwright show-report reports/html"

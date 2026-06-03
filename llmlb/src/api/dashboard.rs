@@ -1281,10 +1281,34 @@ pub async fn get_all_model_stats(
     Ok(Json(stats))
 }
 
+/// ダッシュボードモデル一覧の表示モード（US-029）。
+///
+/// - `canonical`（既定）: 論理モデル単位に集約した Canonical 表示
+/// - `detail`: 全 variant（owner/量子化違い）を個別に列挙する詳細表示
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ModelsViewQuery {
+    /// `canonical` | `detail`（未指定時は `canonical`）
+    #[serde(default)]
+    pub view: Option<String>,
+}
+
+impl ModelsViewQuery {
+    fn is_detail(&self) -> bool {
+        self.view.as_deref() == Some("detail")
+    }
+}
+
 /// GET /api/dashboard/models - ダッシュボード向けモデル一覧
-pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppError> {
+///
+/// `?view=canonical`（既定）で論理モデル単位に集約、`?view=detail` で全 variant を列挙する。
+pub async fn get_models(
+    State(state): State<AppState>,
+    Query(query): Query<ModelsViewQuery>,
+) -> Result<Response, AppError> {
     use crate::api::models::{list_registered_models, LifecycleStatus};
     use crate::types::endpoint::SupportedAPI;
+
+    let detail_view = query.is_detail();
 
     let mut registered_map: HashMap<String, crate::registry::models::ModelInfo> = HashMap::new();
     for model in list_registered_models(&state.db_pool).await? {
@@ -1324,11 +1348,13 @@ pub async fn get_models(State(state): State<AppState>) -> Result<Response, AppEr
                 .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
 
         for model in endpoint_models {
-            // 表示用キーの決定: canonical_nameがあればそれを使用
-            let display_key = model
-                .canonical_name
-                .clone()
-                .unwrap_or_else(|| model.model_id.clone());
+            // 表示用キーの決定（US-029）:
+            // canonical 表示は一次配布元 canonical へ集約、detail 表示は model_id 単位で個別列挙。
+            let display_key = if detail_view {
+                model.model_id.clone()
+            } else {
+                canonical_resolution.canonical_for(&model.model_id)
+            };
 
             endpoint_model_ids
                 .entry(display_key.clone())
@@ -1712,6 +1738,18 @@ pub async fn get_setting(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let settings = crate::db::settings::SettingsStorage::new(state.db_pool.clone());
     let value = settings.get_setting(&key).await.map_err(AppError)?;
+    if key == crate::config::API_KEY_REQUIRED_SETTING_KEY {
+        let effective = crate::config::effective_api_key_required(&state.db_pool).await;
+        let stored_value = value.unwrap_or_else(|| "false".to_string());
+        return Ok(Json(serde_json::json!({
+            "key": key,
+            "value": stored_value,
+            "effective_value": effective.required.to_string(),
+            "source": effective.source.as_str(),
+            "env_override": matches!(effective.source, crate::config::ApiKeyRequiredSource::Env),
+        })));
+    }
+
     let value = if key == "ip_alert_threshold" {
         effective_ip_alert_threshold(value.as_deref()).to_string()
     } else {
@@ -1739,12 +1777,31 @@ pub async fn update_setting(
         parse_ip_alert_threshold(&body.value)
             .map_err(AppError)?
             .to_string()
+    } else if key == crate::config::API_KEY_REQUIRED_SETTING_KEY {
+        crate::config::parse_bool_setting(&body.value)
+            .ok_or_else(|| {
+                AppError(LbError::Common(CommonError::Validation(
+                    "api_key_required must be true or false".to_string(),
+                )))
+            })?
+            .to_string()
     } else {
         body.value
     };
 
     let settings = crate::db::settings::SettingsStorage::new(state.db_pool.clone());
     settings.set_setting(&key, &value).await.map_err(AppError)?;
+    if key == crate::config::API_KEY_REQUIRED_SETTING_KEY {
+        let effective = crate::config::effective_api_key_required(&state.db_pool).await;
+        return Ok(Json(serde_json::json!({
+            "key": key,
+            "value": value,
+            "effective_value": effective.required.to_string(),
+            "source": effective.source.as_str(),
+            "env_override": matches!(effective.source, crate::config::ApiKeyRequiredSource::Env),
+        })));
+    }
+
     Ok(Json(serde_json::json!({ "key": key, "value": value })))
 }
 

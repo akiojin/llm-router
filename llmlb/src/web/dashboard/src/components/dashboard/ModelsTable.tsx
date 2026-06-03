@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   type RegisteredModelView,
   type DashboardEndpoint,
+  type ModelsView,
   type LifecycleStatus,
   type ModelCapabilities,
   type ModelStatEntry,
@@ -77,6 +78,10 @@ interface ModelsTableProps {
   isLoading: boolean
   onRefresh?: () => void
   viewerMode?: boolean
+  /** US-029: 表示モード（canonical 集約 / detail 全 variant） */
+  view?: ModelsView
+  /** US-029: 表示モード切替コールバック */
+  onViewChange?: (view: ModelsView) => void
 }
 
 type SortField =
@@ -435,7 +440,34 @@ export function ModelsTable({
   isLoading,
   onRefresh,
   viewerMode = false,
+  view,
+  onViewChange,
 }: ModelsTableProps) {
+  // US-029: Canonical 表示 ⇔ 詳細表示のトグル（view/onViewChange 両指定時のみ表示）
+  const viewToggle =
+    view && onViewChange ? (
+      <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label="Model view mode">
+        <Button
+          variant={view === 'canonical' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="rounded-none"
+          aria-pressed={view === 'canonical'}
+          onClick={() => onViewChange('canonical')}
+        >
+          Canonical
+        </Button>
+        <Button
+          variant={view === 'detail' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="rounded-none"
+          aria-pressed={view === 'detail'}
+          onClick={() => onViewChange('detail')}
+        >
+          Detail
+        </Button>
+      </div>
+    ) : null
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<LifecycleStatus | 'all'>('all')
   const [capabilityFilters, setCapabilityFilters] = useState<Record<string, boolean>>({})
@@ -737,12 +769,15 @@ export function ModelsTable({
                 {aggregatedWithStatsFallback.length}
               </Badge>
             </CardTitle>
-            {onRefresh && (
-              <Button variant="outline" size="sm" onClick={onRefresh}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Refresh
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {viewToggle}
+              {onRefresh && (
+                <Button variant="outline" size="sm" onClick={onRefresh}>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Refresh
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -823,6 +858,7 @@ export function ModelsTable({
             </Badge>
           </CardTitle>
           <div className="flex items-center gap-2">
+            {viewToggle}
             <Button variant="outline" size="sm" onClick={() => setAddWizardOpen(true)}>
               <Plus className="h-4 w-4 mr-1" />
               Add Model

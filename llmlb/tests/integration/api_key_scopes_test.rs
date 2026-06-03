@@ -12,6 +12,7 @@ use axum::{
 use llmlb::common::auth::{ApiKeyPermission, UserRole};
 use llmlb::{api, balancer::LoadManager, registry::endpoints::EndpointRegistry, AppState};
 use serde_json::json;
+use serial_test::serial;
 use std::sync::Arc;
 use tower::ServiceExt;
 use wiremock::{
@@ -22,7 +23,23 @@ use wiremock::{
 use crate::support;
 
 async fn build_app() -> (Router, sqlx::SqlitePool) {
+    build_app_with_auth_setting(Some(true)).await
+}
+
+async fn build_app_with_current_env() -> (Router, sqlx::SqlitePool) {
+    build_app_with_auth_setting(Some(false)).await
+}
+
+async fn build_app_with_auth_setting(api_key_required: Option<bool>) -> (Router, sqlx::SqlitePool) {
     let db_pool = support::lb::create_test_db_pool().await;
+    if let Some(required) = api_key_required {
+        let settings = llmlb::db::settings::SettingsStorage::new(db_pool.clone());
+        settings
+            .set_setting("api_key_required", &required.to_string())
+            .await
+            .expect("set api_key_required");
+    }
+
     let endpoint_registry = EndpointRegistry::new(db_pool.clone())
         .await
         .expect("Failed to create endpoint registry");
@@ -91,6 +108,198 @@ async fn create_api_key(db_pool: &sqlx::SqlitePool, permissions: Vec<ApiKeyPermi
 }
 
 #[tokio::test]
+#[serial]
+async fn api_key_auth_is_not_required_by_default_for_v1_models() {
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    let (app, _db_pool) = build_app_with_current_env().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial]
+async fn optional_api_key_mode_ignores_invalid_client_key() {
+    std::env::set_var("LLMLB_API_KEY_REQUIRED", "false");
+    let (app, _db_pool) = build_app_with_current_env().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .header("authorization", "Bearer invalid-key")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial]
+async fn db_setting_can_require_api_keys_when_env_is_unset() {
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    let (app, db_pool) = build_app_with_current_env().await;
+    let settings = llmlb::db::settings::SettingsStorage::new(db_pool);
+    settings
+        .set_setting("api_key_required", "true")
+        .await
+        .expect("set api_key_required");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+#[serial]
+async fn env_false_overrides_db_required_setting() {
+    std::env::set_var("LLMLB_API_KEY_REQUIRED", "false");
+    let (app, db_pool) = build_app_with_current_env().await;
+    let settings = llmlb::db::settings::SettingsStorage::new(db_pool);
+    settings
+        .set_setting("api_key_required", "true")
+        .await
+        .expect("set api_key_required");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial]
+async fn env_true_overrides_db_optional_setting() {
+    std::env::set_var("LLMLB_API_KEY_REQUIRED", "true");
+    let (app, db_pool) = build_app_with_current_env().await;
+    let settings = llmlb::db::settings::SettingsStorage::new(db_pool);
+    settings
+        .set_setting("api_key_required", "false")
+        .await
+        .expect("set api_key_required");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+#[serial]
+async fn optional_mode_preserves_jwt_identity_for_me_api_keys() {
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    let (app, db_pool) = build_app_with_auth_setting(Some(false)).await;
+    let admin_id = create_admin_user(&db_pool).await;
+    let jwt = llmlb::auth::jwt::create_jwt(
+        &admin_id.to_string(),
+        UserRole::Admin,
+        &support::lb::test_jwt_secret(),
+        false,
+    )
+    .expect("create jwt");
+    let key_name = format!("optional-mode-key-{}", uuid::Uuid::new_v4());
+    let permissions = vec!["openai.inference"];
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/me/api-keys")
+                .header("authorization", format!("Bearer {}", jwt))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "name": key_name,
+                        "permissions": permissions
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let api_keys = llmlb::db::api_keys::list_by_creator(&db_pool, admin_id)
+        .await
+        .expect("list api keys by creator");
+    assert_eq!(api_keys.len(), 1);
+    assert_eq!(api_keys[0].name, key_name);
+    assert_eq!(api_keys[0].created_by, admin_id);
+}
+
+#[tokio::test]
+#[serial]
+async fn optional_mode_rejects_invalid_jwt_instead_of_bypassing() {
+    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
+    let (app, _db_pool) = build_app_with_auth_setting(Some(false)).await;
+    let jwt = llmlb::auth::jwt::create_jwt(
+        &uuid::Uuid::new_v4().to_string(),
+        UserRole::Admin,
+        "wrong-secret",
+        false,
+    )
+    .expect("create jwt with wrong secret");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/me/api-keys")
+                .header("authorization", format!("Bearer {}", jwt))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+#[serial]
 async fn endpoints_create_requires_endpoints_manage_permission() {
     let (app, db_pool) = build_app().await;
 
@@ -198,6 +407,7 @@ async fn endpoints_create_requires_endpoints_manage_permission() {
 }
 
 #[tokio::test]
+#[serial]
 async fn v1_inference_requires_openai_inference_permission() {
     let (app, db_pool) = build_app().await;
 
@@ -251,6 +461,7 @@ async fn v1_inference_requires_openai_inference_permission() {
 }
 
 #[tokio::test]
+#[serial]
 async fn dashboard_overview_requires_jwt() {
     let (app, db_pool) = build_app().await;
     let admin_id = create_admin_user(&db_pool).await;
@@ -278,6 +489,7 @@ async fn dashboard_overview_requires_jwt() {
 }
 
 #[tokio::test]
+#[serial]
 async fn api_models_requires_registry_read_permission() {
     let (app, db_pool) = build_app().await;
 
@@ -329,6 +541,7 @@ async fn api_models_requires_registry_read_permission() {
 }
 
 #[tokio::test]
+#[serial]
 async fn v1_models_requires_openai_models_read_permission() {
     let (app, db_pool) = build_app().await;
 
@@ -366,6 +579,7 @@ async fn v1_models_requires_openai_models_read_permission() {
 }
 
 #[tokio::test]
+#[serial]
 async fn me_api_keys_routes_require_jwt_and_owner_scope() {
     let (app, db_pool) = build_app().await;
 
@@ -510,6 +724,7 @@ async fn me_api_keys_routes_require_jwt_and_owner_scope() {
 }
 
 #[tokio::test]
+#[serial]
 async fn me_api_keys_create_enforces_role_based_permissions_payload() {
     let (app, db_pool) = build_app().await;
 

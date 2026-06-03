@@ -4,7 +4,7 @@
 
 use crate::db::endpoints as db;
 use crate::types::endpoint::{
-    Endpoint, EndpointCapability, EndpointModel, EndpointStatus, EndpointType,
+    Endpoint, EndpointCapability, EndpointModel, EndpointStatus, EndpointType, SupportedAPI,
 };
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
@@ -228,6 +228,42 @@ impl EndpointRegistry {
                         }
                     }
                 }
+            }
+        }
+
+        resolved
+    }
+
+    /// モデルIDと対応APIからオンラインエンドポイントを検索
+    pub async fn find_by_model_and_supported_api(
+        &self,
+        model_id: &str,
+        required_api: SupportedAPI,
+    ) -> Vec<Endpoint> {
+        let endpoints = self.find_by_model(model_id).await;
+        let requested_keys = model_lookup_keys(model_id);
+        let mut resolved = Vec::new();
+
+        for endpoint in endpoints {
+            let Ok(models) = db::list_endpoint_models(&self.pool, endpoint.id).await else {
+                warn!(
+                    endpoint_id = %endpoint.id,
+                    model_id = %model_id,
+                    required_api = %required_api,
+                    "Failed to load endpoint models while filtering by supported API"
+                );
+                continue;
+            };
+
+            let supports_required_api = models.iter().any(|model| {
+                model.supported_apis.contains(&required_api)
+                    && endpoint_model_lookup_keys(model)
+                        .iter()
+                        .any(|key| requested_keys.iter().any(|requested| requested == key))
+            });
+
+            if supports_required_api {
+                resolved.push(endpoint);
             }
         }
 
