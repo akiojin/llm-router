@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING** Auth: 認証必須化・匿名アクセス廃止（US-013 / SPEC #580）。既定の「APIキー不要モード(bypass)」と匿名admin擬似ユーザー（nil UUID）を撤廃し、llmlb は常に認証を要求する。未認証リクエストは 401 を返す。ダッシュボードの「API認証モード切替」UI・設定API（`/api/dashboard/settings/api_key_required`）・環境変数 `LLMLB_API_KEY_REQUIRED` を削除。初回起動時に管理者アカウントを作成（`ADMIN_PASSWORD` または対話式、debug は `admin`/`test`）。
+
+### Fixed
+
+- Auth: 既定構成（bypass）で未認証の API キー作成（`POST /api/me/api-keys`）が匿名admin(nil UUID)の `created_by` で FK 違反となり HTTP 500 を返していた不具合を修正。認証必須化により未認証は 401 を返す（US-013 / SPEC #580）。
+
 ## [5.11.0](https://github.com/akiojin/llmlb/compare/v5.10.1...v5.11.0) (2026-06-03)
 
 ### Added

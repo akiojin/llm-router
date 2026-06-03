@@ -1,20 +1,17 @@
 # Authentication
 
-llmlb can run with API authentication disabled or required. Authentication is optional by default.
-Admins can enable it from Dashboard Settings > Authentication, or force it with
-`LLMLB_API_KEY_REQUIRED=true`. When the environment variable is set, it overrides the dashboard
-setting.
+llmlb always requires authentication. There is no anonymous / no-auth mode: protected APIs reject
+unauthenticated requests with `401 Unauthorized`. On first boot llmlb provisions an admin account
+(from `ADMIN_PASSWORD` or an interactive prompt; debug builds also accept `admin` / `test`).
 
-When authentication is required, llmlb uses two authentication mechanisms:
+llmlb uses two authentication mechanisms:
 
 1. **JWT** for the dashboard and management APIs (`/api/*`).
    - `/api/dashboard/*` is **JWT-only** (API keys are rejected).
 2. **API keys** for the OpenAI-compatible API (`/v1/*`) and selected `/api/*` endpoints for
    ops automation.
 
-When authentication is optional, protected APIs are treated as anonymous access and any supplied
-`Authorization` or `X-API-Key` value is ignored. The canonical API list lives in `README.md` /
-`README.ja.md`.
+The canonical API list lives in `README.md` / `README.ja.md`.
 
 ## JWT (dashboard + management)
 

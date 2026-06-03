@@ -79,7 +79,7 @@ pub fn create_app(state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            crate::auth::middleware::optional_jwt_auth_middleware,
+            crate::auth::middleware::require_jwt_auth_middleware,
         ));
 
     // 管理系API（運用/自動化向け）
@@ -129,7 +129,7 @@ pub fn create_app(state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            crate::auth::middleware::optional_jwt_auth_middleware,
+            crate::auth::middleware::require_jwt_auth_middleware,
         ));
 
     let invitations_routes = Router::new()
@@ -211,7 +211,7 @@ pub fn create_app(state: AppState) -> Router {
         .route("/admin/invitations", post(auth::create_invitation))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            crate::auth::middleware::optional_jwt_auth_middleware,
+            crate::auth::middleware::require_jwt_auth_middleware,
         ));
 
     let admin_routes = Router::new()
@@ -320,7 +320,7 @@ pub fn create_app(state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            crate::auth::middleware::optional_jwt_auth_middleware,
+            crate::auth::middleware::require_jwt_auth_middleware,
         ))
         .layer(middleware::from_fn_with_state(
             state.inference_gate.clone(),
@@ -346,7 +346,7 @@ pub fn create_app(state: AppState) -> Router {
             ))
             .layer(middleware::from_fn_with_state(
                 state.clone(),
-                crate::auth::middleware::optional_jwt_auth_middleware,
+                crate::auth::middleware::require_jwt_auth_middleware,
             ));
         let dashboard_audit_routes = dashboard_audit_routes
             .layer(middleware::from_fn(
@@ -357,7 +357,7 @@ pub fn create_app(state: AppState) -> Router {
             ))
             .layer(middleware::from_fn_with_state(
                 state.clone(),
-                crate::auth::middleware::optional_jwt_auth_middleware,
+                crate::auth::middleware::require_jwt_auth_middleware,
             ));
         dashboard_general_routes
             .merge(dashboard_audit_routes)
@@ -390,7 +390,7 @@ pub fn create_app(state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            crate::auth::middleware::optional_jwt_auth_middleware,
+            crate::auth::middleware::require_jwt_auth_middleware,
         ));
 
     // エンドポイント管理API（SPEC-e8e9326e）
@@ -494,7 +494,7 @@ pub fn create_app(state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            crate::auth::middleware::optional_jwt_auth_middleware,
+            crate::auth::middleware::require_jwt_auth_middleware,
         ));
     // Treat dashboard playground proxy as inference for drain purposes.
     let playground_proxy_routes = playground_proxy_routes.layer(middleware::from_fn_with_state(
@@ -715,13 +715,6 @@ mod tests {
         TestAppStateBuilder::new().await.build().await
     }
 
-    async fn enable_api_key_auth(pool: &sqlx::SqlitePool) {
-        crate::db::settings::SettingsStorage::new(pool.clone())
-            .set_setting(crate::config::API_KEY_REQUIRED_SETTING_KEY, "true")
-            .await
-            .expect("set api_key_required");
-    }
-
     #[tokio::test]
     async fn test_dashboard_static_served() {
         let state = test_state().await;
@@ -818,7 +811,6 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_audit_logs_requires_admin_role() {
         let state = test_state().await;
-        enable_api_key_auth(&state.db_pool).await;
         let viewer_token =
             crate::auth::jwt::create_jwt("viewer-user", UserRole::Viewer, &state.jwt_secret, false)
                 .expect("create viewer jwt");

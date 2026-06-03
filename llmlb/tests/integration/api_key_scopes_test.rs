@@ -10,10 +10,8 @@ use axum::{
     Router,
 };
 use llmlb::common::auth::{ApiKeyPermission, UserRole};
-use llmlb::{api, balancer::LoadManager, registry::endpoints::EndpointRegistry, AppState};
 use serde_json::json;
 use serial_test::serial;
-use std::sync::Arc;
 use tower::ServiceExt;
 use wiremock::{
     matchers::{method, path},
@@ -23,65 +21,10 @@ use wiremock::{
 use crate::support;
 
 async fn build_app() -> (Router, sqlx::SqlitePool) {
-    build_app_with_auth_setting(Some(true)).await
-}
-
-async fn build_app_with_current_env() -> (Router, sqlx::SqlitePool) {
-    build_app_with_auth_setting(Some(false)).await
-}
-
-async fn build_app_with_auth_setting(api_key_required: Option<bool>) -> (Router, sqlx::SqlitePool) {
+    // US-013: 認証は常に必須。テスト用 app は共通ヘルパーで構築する。
     let db_pool = support::lb::create_test_db_pool().await;
-    if let Some(required) = api_key_required {
-        let settings = llmlb::db::settings::SettingsStorage::new(db_pool.clone());
-        settings
-            .set_setting("api_key_required", &required.to_string())
-            .await
-            .expect("set api_key_required");
-    }
-
-    let endpoint_registry = EndpointRegistry::new(db_pool.clone())
-        .await
-        .expect("Failed to create endpoint registry");
-    let load_manager = LoadManager::new(Arc::new(endpoint_registry.clone()));
-    let request_history = std::sync::Arc::new(
-        llmlb::db::request_history::RequestHistoryStorage::new(db_pool.clone()),
-    );
-    let jwt_secret = support::lb::test_jwt_secret();
-
-    let http_client = reqwest::Client::new();
-    let inference_gate = llmlb::inference_gate::InferenceGate::default();
-    let shutdown = llmlb::shutdown::ShutdownController::default();
-    let update_manager = llmlb::update::UpdateManager::new(
-        http_client.clone(),
-        inference_gate.clone(),
-        shutdown.clone(),
-    )
-    .expect("Failed to create update manager");
-
-    let state = AppState {
-        load_manager,
-        request_history,
-        db_pool: db_pool.clone(),
-        jwt_secret,
-        http_client,
-        queue_config: llmlb::config::QueueConfig::from_env(),
-        event_bus: llmlb::events::create_shared_event_bus(),
-        endpoint_registry,
-        inference_gate,
-        shutdown,
-        update_manager,
-        audit_log_writer: llmlb::audit::writer::AuditLogWriter::new(
-            llmlb::db::audit_log::AuditLogStorage::new(db_pool.clone()),
-            llmlb::audit::writer::AuditLogWriterConfig::default(),
-        ),
-        audit_log_storage: std::sync::Arc::new(llmlb::db::audit_log::AuditLogStorage::new(
-            db_pool.clone(),
-        )),
-        audit_archive_pool: None,
-    };
-
-    (api::create_app(state), db_pool)
+    let app = support::lb::build_test_router(db_pool.clone()).await;
+    (app, db_pool)
 }
 
 async fn create_admin_user(db_pool: &sqlx::SqlitePool) -> uuid::Uuid {
@@ -109,9 +52,9 @@ async fn create_api_key(db_pool: &sqlx::SqlitePool, permissions: Vec<ApiKeyPermi
 
 #[tokio::test]
 #[serial]
-async fn api_key_auth_is_not_required_by_default_for_v1_models() {
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    let (app, _db_pool) = build_app_with_current_env().await;
+async fn v1_models_requires_auth_by_default() {
+    // US-013: 認証は常に必須。未認証の /v1/models は 401。
+    let (app, _db_pool) = build_app().await;
 
     let response = app
         .oneshot(
@@ -124,14 +67,14 @@ async fn api_key_auth_is_not_required_by_default_for_v1_models() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 #[serial]
-async fn optional_api_key_mode_ignores_invalid_client_key() {
-    std::env::set_var("LLMLB_API_KEY_REQUIRED", "false");
-    let (app, _db_pool) = build_app_with_current_env().await;
+async fn invalid_client_key_is_rejected() {
+    // US-013: 無効な API キーは 401（旧 optional モードのような無視はしない）。
+    let (app, _db_pool) = build_app().await;
 
     let response = app
         .oneshot(
@@ -145,92 +88,13 @@ async fn optional_api_key_mode_ignores_invalid_client_key() {
         .await
         .unwrap();
 
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-#[serial]
-async fn db_setting_can_require_api_keys_when_env_is_unset() {
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    let (app, db_pool) = build_app_with_current_env().await;
-    let settings = llmlb::db::settings::SettingsStorage::new(db_pool);
-    settings
-        .set_setting("api_key_required", "true")
-        .await
-        .expect("set api_key_required");
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/v1/models")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 #[serial]
-async fn env_false_overrides_db_required_setting() {
-    std::env::set_var("LLMLB_API_KEY_REQUIRED", "false");
-    let (app, db_pool) = build_app_with_current_env().await;
-    let settings = llmlb::db::settings::SettingsStorage::new(db_pool);
-    settings
-        .set_setting("api_key_required", "true")
-        .await
-        .expect("set api_key_required");
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/v1/models")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-#[serial]
-async fn env_true_overrides_db_optional_setting() {
-    std::env::set_var("LLMLB_API_KEY_REQUIRED", "true");
-    let (app, db_pool) = build_app_with_current_env().await;
-    let settings = llmlb::db::settings::SettingsStorage::new(db_pool);
-    settings
-        .set_setting("api_key_required", "false")
-        .await
-        .expect("set api_key_required");
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/v1/models")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-#[serial]
-async fn optional_mode_preserves_jwt_identity_for_me_api_keys() {
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    let (app, db_pool) = build_app_with_auth_setting(Some(false)).await;
+async fn jwt_identity_preserved_for_me_api_keys() {
+    let (app, db_pool) = build_app().await;
     let admin_id = create_admin_user(&db_pool).await;
     let jwt = llmlb::auth::jwt::create_jwt(
         &admin_id.to_string(),
@@ -239,7 +103,7 @@ async fn optional_mode_preserves_jwt_identity_for_me_api_keys() {
         false,
     )
     .expect("create jwt");
-    let key_name = format!("optional-mode-key-{}", uuid::Uuid::new_v4());
+    let key_name = format!("me-key-{}", uuid::Uuid::new_v4());
     let permissions = vec!["openai.inference"];
 
     let response = app
@@ -272,9 +136,8 @@ async fn optional_mode_preserves_jwt_identity_for_me_api_keys() {
 
 #[tokio::test]
 #[serial]
-async fn optional_mode_rejects_invalid_jwt_instead_of_bypassing() {
-    std::env::remove_var("LLMLB_API_KEY_REQUIRED");
-    let (app, _db_pool) = build_app_with_auth_setting(Some(false)).await;
+async fn invalid_jwt_rejected_for_me_api_keys() {
+    let (app, _db_pool) = build_app().await;
     let jwt = llmlb::auth::jwt::create_jwt(
         &uuid::Uuid::new_v4().to_string(),
         UserRole::Admin,

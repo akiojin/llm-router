@@ -744,7 +744,6 @@ vLLM, xLLM, llama.cpp (`llama-server`), and other OpenAI-compatible endpoints.
 | `LLMLB_JWT_SECRET` | (auto-generated) | JWT signing secret | `JWT_SECRET` |
 | `LLMLB_ADMIN_USERNAME` | `admin` | Initial admin username | `ADMIN_USERNAME` |
 | `LLMLB_ADMIN_PASSWORD` | (required, first run) | Initial admin password | `ADMIN_PASSWORD` |
-| `LLMLB_API_KEY_REQUIRED` | `false` | Require API keys/JWT for protected APIs; overrides dashboard setting | - |
 | `LLMLB_LOG_LEVEL` | `info` | Log level (`EnvFilter`) | `LLM_LOG_LEVEL`, `RUST_LOG` |
 | `LLMLB_LOG_DIR` | `~/.llmlb/logs` | Log directory | `LLM_LOG_DIR` (deprecated) |
 | `LLMLB_LOG_RETENTION_DAYS` | `7` | Log retention days | `LLM_LOG_RETENTION_DAYS` |
@@ -987,10 +986,10 @@ dashboard origin.
 | `logs.read` | Endpoint log proxy (`GET /api/endpoints/:id/logs`) |
 | `metrics.read` | Metrics export (`GET /api/metrics/cloud`) |
 
-API authentication is optional by default. Admins can enable it from Dashboard Settings >
-Authentication, or force it at startup with `LLMLB_API_KEY_REQUIRED=true`.
-Debug builds accept `sk_debug`, `sk_debug_runtime`, `sk_debug_api`, `sk_debug_admin` when
-authentication is required (see `docs/authentication.md`).
+API authentication is always required; there is no anonymous/no-auth mode and unauthenticated
+requests receive `401`. On first boot an admin account is provisioned (`ADMIN_PASSWORD` or an
+interactive prompt). Debug builds accept `sk_debug`, `sk_debug_runtime`, `sk_debug_api`,
+`sk_debug_admin` (see `docs/authentication.md`).
 
 Note: when authentication is required, `/api/dashboard/*` is JWT-only (API keys are rejected).
 `POST /api/me/api-keys` permission rules by role:
