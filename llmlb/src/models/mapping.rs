@@ -593,53 +593,62 @@ pub fn build_canonical_maps<'a>(
         }
     }
 
-    // Pass 2: 明示 canonical を持たないモデルを identity でグループ化
-    let mut groups: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
+    // Pass 2a: 各 identity グループの一次配布元 canonical アンカーを収集する。
+    //
+    // アンカー候補は「明示 canonical を持つモデルはその canonical（BUILTIN 由来の
+    // 一次配布元 ID を含む）」「明示 canonical を持たないモデルは model_id 自身」とし、
+    // いずれも owner が family の一次配布元 org のものだけを採用する。これにより、
+    // BUILTIN で既知（Pass 1 で explicit canonical 化）の一次配布元モデルも、
+    // 同一 identity の再配布 variant の集約先になれる（Codex review: self-canonical
+    // first-party の取りこぼし防止）。
+    let mut anchors: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for (model_id, canonical) in &pairs {
+        let candidate: &str = canonical.as_deref().unwrap_or(model_id.as_str());
+        let ident = parse_identity(candidate);
+        // size 不明（embeddings 等）は誤マージ回避のためアンカーにしない
+        if ident.size.is_none() {
+            continue;
+        }
+        let Some(fp) = first_party_org_for_family(&ident.family) else {
+            continue;
+        };
+        if !owner_of(candidate)
+            .map(|o| o.eq_ignore_ascii_case(fp))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        // 決定的に最小の candidate を採用
+        anchors
+            .entry(ident.group_key())
+            .and_modify(|existing| {
+                if candidate < existing.as_str() {
+                    *existing = candidate.to_string();
+                }
+            })
+            .or_insert_with(|| candidate.to_string());
+    }
+
+    // Pass 2b: 明示 canonical を持たないモデルを、同一 identity の一次配布元アンカーへ集約する。
+    // 一次配布元アンカーが不在のグループはマージしない（self-canonical のまま）。
     for (model_id, canonical) in &pairs {
         if canonical.is_some() {
             continue;
         }
         let ident = parse_identity(model_id);
-        // size 不明（embeddings 等）は誤マージ回避のためグループ化しない
         if ident.size.is_none() {
             continue;
         }
-        groups
-            .entry(ident.group_key())
-            .or_default()
-            .push(model_id.clone());
-    }
-
-    for (key, members) in groups {
-        let family = key.split('|').next().unwrap_or("");
-        let fp_org = first_party_org_for_family(family);
-
-        // 同一 identity 内で一次配布元 owner のメンバーを探す（決定的に最小を採用）
-        let mut first_party_members: Vec<&String> = members
-            .iter()
-            .filter(|m| {
-                owner_of(m)
-                    .zip(fp_org)
-                    .map(|(o, fp)| o.eq_ignore_ascii_case(fp))
-                    .unwrap_or(false)
-            })
-            .collect();
-        first_party_members.sort();
-
-        let Some(canonical) = first_party_members.first().map(|s| (*s).clone()) else {
-            // 一次配布元不在 → マージしない（self-canonical のまま）
+        let Some(anchor) = anchors.get(&ident.group_key()) else {
             continue;
         };
-
-        for m in &members {
-            res.model_to_canonical.insert(m.clone(), canonical.clone());
-            if *m != canonical {
-                res.canonical_to_aliases
-                    .entry(canonical.clone())
-                    .or_default()
-                    .insert(m.clone());
-            }
+        res.model_to_canonical
+            .insert(model_id.clone(), anchor.clone());
+        if model_id != anchor {
+            res.canonical_to_aliases
+                .entry(anchor.clone())
+                .or_default()
+                .insert(model_id.clone());
         }
     }
 
@@ -1414,5 +1423,39 @@ mod tests {
         ];
         let res = build_canonical_maps(models.into_iter());
         assert_eq!(res.canonical_for("gpt-oss:20b"), "openai/gpt-oss-20b");
+    }
+
+    #[test]
+    fn test_heuristic_merges_redistributor_into_explicit_first_party() {
+        // Codex review 回帰: BUILTIN 由来で explicit canonical を持つ一次配布元モデル
+        // （google/gemma-4-26b-a4b）に、explicit canonical を持たない再配布 GGUF が
+        // 同一 identity として集約されること（Pass 1 の first-party もアンカーになる）。
+        let models = vec![
+            ("gemma4", Some("google/gemma-4-26b-a4b")), // Ollama alias (Pass1)
+            ("google/gemma-4-26b-a4b", Some("google/gemma-4-26b-a4b")), // self explicit (Pass1)
+            ("ggml-org/gemma-4-26B-A4B-GGUF", None),    // redistributor (Pass2)
+        ];
+        let res = build_canonical_maps(models.into_iter());
+        assert_eq!(
+            res.canonical_for("ggml-org/gemma-4-26B-A4B-GGUF"),
+            "google/gemma-4-26b-a4b"
+        );
+        let aliases = res.aliases_for("google/gemma-4-26b-a4b");
+        assert!(aliases.contains(&"ggml-org/gemma-4-26B-A4B-GGUF".to_string()));
+        assert!(aliases.contains(&"gemma4".to_string()));
+    }
+
+    #[test]
+    fn test_heuristic_no_anchor_when_first_party_is_redistributor_only() {
+        // 一次配布元が explicit でも self でも存在しない場合はマージしない。
+        let models = vec![
+            ("gemma4", Some("google/gemma-4-26b-a4b")), // 別 identity (base/26b-a4b)
+            ("bartowski/qwen3-99b-it-GGUF", None),      // 一次配布元(Qwen)未観測の re-dist
+        ];
+        let res = build_canonical_maps(models.into_iter());
+        assert_eq!(
+            res.canonical_for("bartowski/qwen3-99b-it-GGUF"),
+            "bartowski/qwen3-99b-it-GGUF"
+        );
     }
 }
