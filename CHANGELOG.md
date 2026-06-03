@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [5.10.1](https://github.com/akiojin/llmlb/compare/v5.10.0...v5.10.1) (2026-06-03)
+
+### Chore
+
+- Cargo 依存パッケージ更新（dependabot cargo group, 6件）: tower-http 0.6.10→0.6.11 / sysinfo 0.39.1→0.39.2 / tar 0.4.45→0.4.46 (#662)、serde_json 1.0.149→1.0.150 / reqwest 0.13.3→0.13.4 / rpassword 7.5.2→7.5.3 (#665)
+
 ## [5.10.0](https://github.com/akiojin/llmlb/compare/v5.9.0...v5.10.0) (2026-05-20)
 
 ### Added
