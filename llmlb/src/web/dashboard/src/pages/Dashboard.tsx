@@ -14,6 +14,7 @@ import {
   type RequestHistoryItem,
   type RequestResponsesPage,
   type RegisteredModelView,
+  type ModelsView,
   type VersionResponse,
 } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
@@ -208,13 +209,16 @@ export default function Dashboard() {
     enabled: !isViewer,
   })
 
+  // US-029: モデル一覧の表示モード（canonical 集約 / detail 全 variant）
+  const [modelsView, setModelsView] = useState<ModelsView>('canonical')
+
   const {
     data: viewerModels,
     isLoading: isLoadingViewerModels,
     refetch: refetchViewerModels,
   } = useQuery<RegisteredModelView[]>({
-    queryKey: ['viewer-models'],
-    queryFn: () => modelsApi.getRegistered(),
+    queryKey: ['viewer-models', modelsView],
+    queryFn: () => modelsApi.getRegistered(modelsView),
     refetchInterval: pollingInterval,
   })
 
@@ -948,6 +952,8 @@ export default function Dashboard() {
               onRefresh={() => {
                 void refetchViewerModels()
               }}
+              view={modelsView}
+              onViewChange={setModelsView}
               viewerMode
             />
           </section>
@@ -993,6 +999,8 @@ export default function Dashboard() {
                 endpoints={endpointsData || []}
                 isLoading={isLoadingViewerModels}
                 onRefresh={() => { void refetchViewerModels() }}
+                view={modelsView}
+                onViewChange={setModelsView}
               />
             </TabsContent>
 
