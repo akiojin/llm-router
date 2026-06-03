@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [5.11.0](https://github.com/akiojin/llmlb/compare/v5.10.1...v5.11.0) (2026-06-03)
+
+### Added
+
+- Models: モデル識別子の Canonical 統一（US-029 / SPEC #575）。同一論理モデル（family/size/tuning）の owner・量子化・大文字小文字違いを一次配布元（公式org）の Canonical へ集約。サイズ・base/it 違いは別モデルとして区別。`/v1/models` は全 alias パターンを requestable に維持しつつ canonical 解決で集約し、ダッシュボードは `?view=canonical|detail` 表示トグルに対応 (#667)
+
+### Fixed
+
+- Models: BUILTIN 由来で explicit canonical を持つ一次配布元モデルも identity アンカーに含め、explicit canonical を持たない再配布 variant が同一 identity の一次配布元へ集約されるよう修正（US-029）(#667)
+
+### Changed
+
+- GUI: macOS トレイのクリック判定をパターンマッチに集約（内部リファクタリング） (#667)
+
+### Chore
+
+- Codex: hooks を統合 gwtd event dispatcher / PATH ベース呼び出しに簡素化 (#664)
+
 ## [5.10.1](https://github.com/akiojin/llmlb/compare/v5.10.0...v5.10.1) (2026-06-03)
 
 ### Chore
