@@ -245,13 +245,11 @@ impl TrayController {
             }
             #[cfg(target_os = "macos")]
             TrayIconEvent::Click {
-                button,
-                button_state,
+                button: tray_icon::MouseButton::Left,
+                button_state: MouseButtonState::Up,
                 ..
             } => {
-                if button == tray_icon::MouseButton::Left && button_state == MouseButtonState::Up {
-                    self.handle_potential_double_click();
-                }
+                self.handle_potential_double_click();
             }
             _ => {}
         }

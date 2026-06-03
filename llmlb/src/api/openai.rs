@@ -386,11 +386,9 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
         for ep in online_endpoints {
             if let Ok(models) = registry.list_models(ep.id).await {
                 for model in models {
-                    // 表示用キーの決定: canonical_nameがあればそれを使用
-                    let display_key = model
-                        .canonical_name
-                        .clone()
-                        .unwrap_or_else(|| model.model_id.clone());
+                    // 表示用キーの決定（US-029 FR-027/FR-028）:
+                    // 明示 canonical → ヒューリスティック一次配布元 canonical → self の順で解決する。
+                    let display_key = canonical_resolution.canonical_for(&model.model_id);
 
                     endpoint_model_ids
                         .entry(display_key.clone())
