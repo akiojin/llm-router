@@ -11,17 +11,9 @@ use sqlx::SqlitePool;
 
 use super::http::{spawn_lb, TestServer};
 
-/// テスト用のload balancerを作成する（.oneshot()スタイルのテスト用）
+/// 指定したDBプールからテスト用のRouterを構築する（複数ヘルパー共用）
 #[allow(dead_code)]
-pub async fn create_test_lb() -> (Router, SqlitePool) {
-    // テスト用に一時ディレクトリを設定
-    let temp_dir = std::env::temp_dir().join(format!("or-test-{}", std::process::id()));
-    std::fs::create_dir_all(&temp_dir).unwrap();
-    std::env::set_var("LLMLB_DATA_DIR", &temp_dir);
-
-    std::env::set_var("LLM_CONVERT_FAKE", "1");
-
-    let db_pool = create_test_db_pool().await;
+pub async fn build_test_router(db_pool: SqlitePool) -> Router {
     let request_history = std::sync::Arc::new(
         llmlb::db::request_history::RequestHistoryStorage::new(db_pool.clone()),
     );
@@ -67,7 +59,37 @@ pub async fn create_test_lb() -> (Router, SqlitePool) {
         audit_archive_pool: None,
     };
 
-    let app = api::create_app(state);
+    api::create_app(state)
+}
+
+/// テスト用のload balancerを作成する（.oneshot()スタイルのテスト用）
+#[allow(dead_code)]
+pub async fn create_test_lb() -> (Router, SqlitePool) {
+    // テスト用に一時ディレクトリを設定
+    let temp_dir = std::env::temp_dir().join(format!("or-test-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    std::env::set_var("LLMLB_DATA_DIR", &temp_dir);
+
+    std::env::set_var("LLM_CONVERT_FAKE", "1");
+
+    let db_pool = create_test_db_pool().await;
+    let app = build_test_router(db_pool.clone()).await;
+    (app, db_pool)
+}
+
+/// US-013: 既定構成（認証必須化後）のテスト用 load balancer。
+///
+/// 旧 `api_key_required` 設定を一切付与しない素の構成で app を作る。
+/// 認証必須化後は未認証リクエストが必ず 401 になることを検証するために使用する。
+#[allow(dead_code)]
+pub async fn create_test_lb_default_auth() -> (Router, SqlitePool) {
+    let temp_dir = std::env::temp_dir().join(format!("or-test-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    std::env::set_var("LLMLB_DATA_DIR", &temp_dir);
+    std::env::set_var("LLM_CONVERT_FAKE", "1");
+
+    let db_pool = create_test_db_pool_default_auth().await;
+    let app = build_test_router(db_pool.clone()).await;
     (app, db_pool)
 }
 
@@ -83,13 +105,13 @@ pub async fn create_test_db_pool() -> SqlitePool {
         .await
         .expect("Failed to run migrations");
 
-    let settings = llmlb::db::settings::SettingsStorage::new(pool.clone());
-    settings
-        .set_setting("api_key_required", "true")
-        .await
-        .expect("Failed to set test api_key_required default");
-
     pool
+}
+
+/// US-013: 認証必須化後の既定構成のDBプール（`create_test_db_pool` と同一）。
+#[allow(dead_code)]
+pub async fn create_test_db_pool_default_auth() -> SqlitePool {
+    create_test_db_pool().await
 }
 
 /// テスト用のJWT秘密鍵を生成する

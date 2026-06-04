@@ -71,6 +71,60 @@ fn bearer_request(jwt: &str) -> axum::http::request::Builder {
 }
 
 // ---------------------------------------------------------------------------
+// US-013: 認証必須化・匿名アクセス廃止（500バグ修正）
+// ---------------------------------------------------------------------------
+
+/// 既定構成で未認証のAPIキー作成は 401 になること。
+///
+/// 旧 bypass モードでは匿名admin(nil UUID)が注入され、`created_by`=nil の INSERT が
+/// FK 違反で 500 になっていた（本不具合の原因）。認証必須化後は 401 を返す。
+#[tokio::test]
+#[serial]
+async fn test_unauthenticated_create_api_key_returns_401() {
+    let (app, _db_pool) = crate::support::lb::create_test_lb_default_auth().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/me/api-keys")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "name": "unauth-key",
+                        "permissions": ["openai.inference"]
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// 既定構成で未認証のAPIキー一覧取得も 401 になること（匿名adminを注入しない）。
+#[tokio::test]
+#[serial]
+async fn test_unauthenticated_list_api_keys_returns_401() {
+    let (app, _db_pool) = crate::support::lb::create_test_lb_default_auth().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/me/api-keys")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/me/api-keys
 // ---------------------------------------------------------------------------
 

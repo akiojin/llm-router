@@ -18,6 +18,9 @@
     "**/tmp/**",
     "xllm/third_party/**",
     "**/third_party/**",
-    "PLANS.md"
+    "PLANS.md",
+    // gwt プラグイン runtime のスキル（gitignore 済み・CI 未チェックアウト）は lint 対象外
+    ".claude/skills/gwt-verify/**",
+    ".codex/skills/gwt-verify/**"
   ]
 }

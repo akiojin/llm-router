@@ -5,43 +5,6 @@
 
 use std::time::Duration;
 
-/// APIキー必須設定の環境変数名。
-pub const API_KEY_REQUIRED_ENV: &str = "LLMLB_API_KEY_REQUIRED";
-
-/// APIキー必須設定のsettingsテーブルキー。
-pub const API_KEY_REQUIRED_SETTING_KEY: &str = "api_key_required";
-
-/// APIキー必須設定の値ソース。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ApiKeyRequiredSource {
-    /// 環境変数から取得した値。
-    Env,
-    /// settingsテーブルから取得した値。
-    Database,
-    /// デフォルト値。
-    Default,
-}
-
-impl ApiKeyRequiredSource {
-    /// APIレスポンス用の安定した文字列表現を返す。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Env => "env",
-            Self::Database => "database",
-            Self::Default => "default",
-        }
-    }
-}
-
-/// APIキー必須設定の実効値。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ApiKeyRequiredSetting {
-    /// APIキーを必須にするか。
-    pub required: bool,
-    /// 実効値のソース。
-    pub source: ApiKeyRequiredSource,
-}
-
 /// Get an environment variable with fallback to a deprecated name
 ///
 /// If the new variable name is set, returns its value.
@@ -110,79 +73,6 @@ pub fn get_env_with_fallback_parse<T: std::str::FromStr>(
     get_env_with_fallback(new_name, old_name)
         .and_then(|s| s.parse().ok())
         .unwrap_or(default)
-}
-
-/// bool設定文字列を解釈する。
-pub fn parse_bool_setting(value: &str) -> Option<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "true" | "1" | "yes" | "on" => Some(true),
-        "false" | "0" | "no" | "off" => Some(false),
-        _ => None,
-    }
-}
-
-/// APIキー必須設定の環境変数上書きを取得する。
-pub fn api_key_required_env_override() -> Option<bool> {
-    match std::env::var(API_KEY_REQUIRED_ENV) {
-        Ok(value) => parse_bool_setting(&value).or_else(|| {
-            tracing::warn!(
-                "{} has invalid boolean value '{}'; treating API keys as optional",
-                API_KEY_REQUIRED_ENV,
-                value
-            );
-            Some(false)
-        }),
-        Err(_) => None,
-    }
-}
-
-/// settingsテーブルを含めたAPIキー必須設定の実効値を取得する。
-///
-/// デフォルトはAPIキー不要。環境変数が設定されていればDB設定より優先する。
-pub async fn effective_api_key_required(pool: &sqlx::SqlitePool) -> ApiKeyRequiredSetting {
-    if let Some(required) = api_key_required_env_override() {
-        return ApiKeyRequiredSetting {
-            required,
-            source: ApiKeyRequiredSource::Env,
-        };
-    }
-
-    let settings = crate::db::settings::SettingsStorage::new(pool.clone());
-    match settings.get_setting(API_KEY_REQUIRED_SETTING_KEY).await {
-        Ok(Some(value)) => {
-            if let Some(required) = parse_bool_setting(&value) {
-                ApiKeyRequiredSetting {
-                    required,
-                    source: ApiKeyRequiredSource::Database,
-                }
-            } else {
-                tracing::warn!(
-                    "settings.{} has invalid boolean value '{}'; treating API keys as optional",
-                    API_KEY_REQUIRED_SETTING_KEY,
-                    value
-                );
-                ApiKeyRequiredSetting {
-                    required: false,
-                    source: ApiKeyRequiredSource::Default,
-                }
-            }
-        }
-        Ok(None) => ApiKeyRequiredSetting {
-            required: false,
-            source: ApiKeyRequiredSource::Default,
-        },
-        Err(error) => {
-            tracing::warn!(
-                "Failed to read settings.{}: {}; treating API keys as optional",
-                API_KEY_REQUIRED_SETTING_KEY,
-                error
-            );
-            ApiKeyRequiredSetting {
-                required: false,
-                source: ApiKeyRequiredSource::Default,
-            }
-        }
-    }
 }
 
 /// Queueing configuration (request wait queue)
@@ -300,24 +190,6 @@ mod tests {
         assert_eq!(result, Some("new_value".to_string()));
 
         std::env::remove_var("TEST_NEW_VAR");
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_effective_api_key_required_defaults_to_false_without_env_or_db() {
-        std::env::remove_var(API_KEY_REQUIRED_ENV);
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        sqlx::query("DELETE FROM settings WHERE key = ?")
-            .bind(API_KEY_REQUIRED_SETTING_KEY)
-            .execute(&pool)
-            .await
-            .unwrap();
-
-        let setting = effective_api_key_required(&pool).await;
-
-        assert!(!setting.required);
-        assert_eq!(setting.source, ApiKeyRequiredSource::Default);
     }
 
     #[test]

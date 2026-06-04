@@ -85,9 +85,6 @@ export type {
   VersionResponse,
 } from './system'
 
-export { settingsApi } from './settings'
-export type { ApiKeyRequiredSetting, SettingSource } from './settings'
-
 export { apiKeysApi } from './api-keys'
 export type {
   ApiKeyPermission,
