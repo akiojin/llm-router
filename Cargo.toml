@@ -26,7 +26,7 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "str
 # Router専用
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+tower-http = { version = "0.7", features = ["fs", "cors", "trace"] }
 
 # Node専用
 sysinfo = "0.39"
