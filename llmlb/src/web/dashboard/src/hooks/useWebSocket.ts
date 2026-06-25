@@ -211,12 +211,6 @@ export function useDashboardWebSocket(options: UseDashboardWebSocketOptions = {}
   const { enabled = true } = options
   const { isConnected, lastEvent, reconnect } = useWebSocket({
     enabled,
-    onConnect: () => {
-      console.log('Dashboard WebSocket connected')
-    },
-    onDisconnect: () => {
-      console.log('Dashboard WebSocket disconnected')
-    },
   })
 
   return {

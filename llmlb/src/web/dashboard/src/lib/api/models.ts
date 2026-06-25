@@ -69,12 +69,6 @@ export interface GgufDiscoveryResult {
   files: GgufFileInfo[]
 }
 
-export interface DiscoverGgufResponse {
-  base_model: string
-  gguf_alternatives: GgufDiscoveryResult[]
-  cached: boolean
-}
-
 // /v1/models レスポンス
 export interface OpenAIModelsResponse {
   object: 'list'

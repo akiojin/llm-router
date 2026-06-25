@@ -78,15 +78,6 @@ export interface DashboardActionItem {
   count: number
 }
 
-export type SyncState = 'idle' | 'running' | 'success' | 'failed'
-
-export interface SyncProgress {
-  model_id: string
-  file: string
-  downloaded_bytes: number
-  total_bytes: number
-}
-
 export interface RequestHistoryItem {
   request_id: string
   timestamp: string
