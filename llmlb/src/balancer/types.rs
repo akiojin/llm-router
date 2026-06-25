@@ -282,13 +282,6 @@ pub struct EndpointLoadSnapshot {
     pub total_tokens: u64,
 }
 
-/// ノードのロードスナップショット（後方互換エイリアス）
-///
-/// NodeRegistry廃止移行のための後方互換エイリアス。
-/// 新規コードは`EndpointLoadSnapshot`を使用すること。
-#[deprecated(note = "Use EndpointLoadSnapshot instead")]
-pub type NodeLoadSnapshot = EndpointLoadSnapshot;
-
 /// システム全体の統計サマリー
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct SystemSummary {

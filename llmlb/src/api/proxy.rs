@@ -23,16 +23,6 @@ use axum::{
 use futures::{Stream, StreamExt, TryStreamExt};
 use std::{io, pin::Pin, sync::Arc, time::Instant};
 
-/// TPS優先でエンドポイントを選択
-///
-/// llmlbはゲートウェイとしてエンドポイントをブラックボックスとして扱い、
-/// TPS（Tokens Per Second）のEMA値が最も高いエンドポイントを優先選択する。
-/// TPS未計測のエンドポイントはTPS=0.0として最低優先で扱う。
-/// 同一TPS時はラウンドロビンでタイブレークする。
-pub(crate) async fn select_available_endpoint(state: &AppState) -> Result<Endpoint, LbError> {
-    state.load_manager.select_endpoint_by_tps_direct(None).await
-}
-
 /// キュー付きエンドポイント選択の結果
 #[allow(dead_code)]
 pub(crate) enum QueueSelection {

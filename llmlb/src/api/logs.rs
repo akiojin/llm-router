@@ -64,13 +64,8 @@ pub async fn get_lb_logs(Query(query): Query<LogQuery>) -> Result<Json<LogRespon
 
 /// GET /api/endpoints/:id/logs
 ///
-/// # 廃止予定
-///
-/// このAPIは廃止予定です。ノードベースのログ取得はエンドポイントベースに移行されます。
 /// エンドポイントが `/api/logs` を提供している場合、llmlbはそこにリクエストを転送します。
-#[deprecated(note = "Use endpoint-based log fetching instead. Node-based routing is deprecated.")]
-#[allow(deprecated)] // NodeRegistry migration in progress
-pub async fn get_node_logs(
+pub async fn get_endpoint_logs(
     Path(endpoint_id): Path<Uuid>,
     Query(query): Query<LogQuery>,
     State(state): State<AppState>,
@@ -204,7 +199,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(deprecated)] // get_node_logs is deprecated
     async fn node_logs_endpoint_fetches_remote_entries() {
         use crate::types::endpoint::{Endpoint, EndpointStatus, EndpointType};
 
@@ -238,7 +232,7 @@ mod tests {
             .await
             .expect("Failed to add endpoint");
 
-        let response = get_node_logs(
+        let response = get_endpoint_logs(
             Path(endpoint_id),
             Query(LogQuery { limit: 50 }),
             AxumState(state),

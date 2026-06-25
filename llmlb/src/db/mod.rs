@@ -74,13 +74,6 @@ pub(crate) mod test_utils {
             }
         }
 
-        /// キュー設定をカスタマイズする
-        #[allow(dead_code)]
-        pub fn with_queue_config(mut self, config: crate::config::QueueConfig) -> Self {
-            self.queue_config = config;
-            self
-        }
-
         /// AppStateを構築する
         pub async fn build(self) -> crate::AppState {
             let request_history = std::sync::Arc::new(

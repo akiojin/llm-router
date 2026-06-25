@@ -305,7 +305,6 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Json<Vec<Model
 /// NOTE: supported_models.json は廃止されました (2026-01-25)
 /// 現在は登録済みモデルのみを返します。
 /// モデルアーキテクチャ認識はエンドポイント側で行われます。
-#[allow(deprecated)] // NodeRegistry migration in progress
 pub async fn list_models_with_status(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ModelWithStatus>>, AppError> {
@@ -1017,7 +1016,6 @@ async fn compute_gpu_warnings(
 /// - `filename` を指定するとそのアーティファクトを主として登録
 /// - 未指定の場合、リポジトリ内のアーティファクトが一意であれば自動選択
 /// - safetensors では `config.json` / `tokenizer.json` が必須
-#[allow(deprecated)] // NodeRegistry migration in progress
 pub async fn register_model(
     State(state): State<AppState>,
     Json(req): Json<RegisterModelRequest>,

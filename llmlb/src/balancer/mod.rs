@@ -13,8 +13,6 @@ pub mod types;
 
 // Re-export all public types for backward compatibility
 pub use lease::RequestLease;
-#[allow(deprecated)]
-pub use types::NodeLoadSnapshot;
 pub use types::{
     AdmissionDecision, EndpointLoadSnapshot, EndpointTpsSummary, MetricsUpdate, ModelTpsInfo,
     ModelTpsState, RequestHistoryPoint, RequestOutcome, SystemSummary, WaitResult,
@@ -1728,9 +1726,6 @@ pub struct LoadManager {
     state: Arc<RwLock<HashMap<Uuid, EndpointLoadState>>>,
     round_robin: Arc<AtomicUsize>,
     history: Arc<RwLock<VecDeque<RequestHistoryPoint>>>,
-    /// 待機中リクエスト数（簡易カウンタ）
-    #[allow(dead_code)]
-    pending: Arc<AtomicUsize>,
     /// ready通知
     ready_notify: Arc<Notify>,
     /// 待機中リクエスト数（上限判定用）
@@ -1752,7 +1747,6 @@ impl LoadManager {
             state: Arc::new(RwLock::new(HashMap::new())),
             round_robin: Arc::new(AtomicUsize::new(0)),
             history: Arc::new(RwLock::new(VecDeque::new())),
-            pending: Arc::new(AtomicUsize::new(0)),
             ready_notify: Arc::new(Notify::new()),
             waiters: Arc::new(AtomicUsize::new(0)),
             queue_notify: Arc::new(Notify::new()),

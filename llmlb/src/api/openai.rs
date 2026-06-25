@@ -105,8 +105,7 @@ use crate::{
         },
         proxy::{
             forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
-            save_request_record, select_available_endpoint,
-            select_available_endpoint_with_queue_for_model,
+            save_request_record, select_available_endpoint_with_queue_for_model,
             select_available_endpoint_with_queue_for_model_and_api, QueueSelection,
         },
     },
@@ -218,7 +217,6 @@ fn parse_client_ip_from_forwarded_value(value: &str) -> Option<IpAddr> {
 }
 
 /// POST /v1/chat/completions - OpenAI互換チャットAPI
-#[allow(deprecated)] // NodeRegistry migration in progress
 pub async fn chat_completions(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
@@ -553,7 +551,6 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
 /// GET /v1/models/:id - モデル詳細取得（Azure capabilities 形式）
 ///
 /// SPEC-0f1de549: Endpoints APIで登録されたモデルも検索対象に含める
-#[allow(deprecated)] // NodeRegistry migration in progress
 pub async fn get_model(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
@@ -826,7 +823,6 @@ async fn proxy_openai_cloud_post(
     Ok(outcome.response)
 }
 
-#[allow(deprecated)] // NodeRegistry migration in progress
 #[allow(clippy::too_many_arguments)]
 async fn proxy_openai_post(
     state: &AppState,
@@ -1455,70 +1451,6 @@ async fn proxy_openai_post(
             Err(LbError::Http(format!("Failed to parse OpenAI response: {}", e)).into())
         }
     }
-}
-
-#[allow(dead_code)]
-async fn proxy_openai_get(state: &AppState, target_path: &str) -> Result<Response, AppError> {
-    let endpoint = select_available_endpoint(state).await?;
-    let endpoint_id = endpoint.id;
-
-    let request_lease = state
-        .load_manager
-        .begin_request(endpoint_id)
-        .await
-        .map_err(AppError::from)?;
-
-    let client = state.http_client.clone();
-    let runtime_url = format!("{}{}", endpoint.base_url.trim_end_matches('/'), target_path);
-    let start = Instant::now();
-
-    let response = client.get(&runtime_url).send().await.map_err(|e| {
-        AppError::from(LbError::Http(format!(
-            "Failed to proxy OpenAI models request: {}",
-            e
-        )))
-    })?;
-
-    let duration = start.elapsed();
-    let outcome = if response.status().is_success() {
-        RequestOutcome::Success
-    } else {
-        RequestOutcome::Error
-    };
-    request_lease
-        .complete(outcome, duration)
-        .await
-        .map_err(AppError::from)?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let status_code = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-        let body_bytes = response.bytes().await.unwrap_or_default();
-        let message = if body_bytes.is_empty() {
-            status.to_string()
-        } else {
-            String::from_utf8_lossy(&body_bytes).trim().to_string()
-        };
-
-        let payload = json!({
-            "error": {
-                "message": message,
-                "type": "node_upstream_error",
-                "code": status_code.as_u16(),
-            }
-        });
-
-        return Ok((status_code, Json(payload)).into_response());
-    }
-
-    let body = response.json::<Value>().await.map_err(|e| {
-        AppError::from(LbError::Http(format!(
-            "Failed to parse OpenAI models response: {}",
-            e
-        )))
-    })?;
-
-    Ok((StatusCode::OK, Json(body)).into_response())
 }
 
 fn validation_error(message: impl Into<String>) -> AppError {

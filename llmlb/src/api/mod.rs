@@ -66,7 +66,6 @@ const _DASHBOARD_ASSETS_BUILD_STAMP: &str = include_str!(concat!(
 ));
 
 /// APIllmlbを作成
-#[allow(deprecated)] // NodeRegistry migration in progress - legacy APIs still registered
 pub fn create_app(state: AppState) -> Router {
     // `/api/*`: llmlb独自API（管理/運用向け）
     // JWTが必要な認証ルート（ログイン以外）
@@ -156,7 +155,7 @@ pub fn create_app(state: AppState) -> Router {
 
     // エンドポイントログ取得（lb→endpoint proxy）
     let node_logs_routes = Router::new()
-        .route("/endpoints/{id}/logs", get(logs::get_node_logs))
+        .route("/endpoints/{id}/logs", get(logs::get_endpoint_logs))
         .layer(middleware::from_fn(
             crate::auth::middleware::require_password_changed_middleware,
         ))
@@ -607,10 +606,6 @@ pub fn create_app(state: AppState) -> Router {
     // NOTE: /api/models (GET) は Admin/Node スコープ共用。
     // 外部クライアントは /v1/models を使用してください（Azure OpenAI 形式の capabilities 付き）。
 
-    // SPEC-e8e9326e: テスト用内部エンドポイント（デバッグビルドのみ）
-    // NOTE: ノード登録ベースのテストは廃止。エンドポイント登録を使用
-    let test_routes = Router::new();
-
     let api_routes = Router::new()
         // 認証不要エンドポイント
         .route("/version", get(system::get_version))
@@ -627,9 +622,7 @@ pub fn create_app(state: AppState) -> Router {
         .merge(endpoint_routes)
         .merge(playground_proxy_routes)
         .merge(model_registry_routes)
-        .merge(models_list_routes)
-        // デバッグ用テストエンドポイント
-        .merge(test_routes);
+        .merge(models_list_routes);
 
     let dashboard_routes = Router::new()
         .route("/dashboard", get(serve_dashboard_index))
