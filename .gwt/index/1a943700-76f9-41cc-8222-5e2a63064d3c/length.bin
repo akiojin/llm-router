@@ -1,1 +1,0 @@
-invalid type: string "gwt-spec: リクエスト履歴一覧のページネーション\n<!-- GWT_SPEC_ID:#478 -->\n\n## Artifact Index\n\n- `doc:spec.md`\n- `doc:plan.md`\n- `doc:tasks.md`\n- `doc:research.md`\n- `doc:data-model.md`\n- `doc:quickstart.md`\n- `checklist:tdd.md`\n- `checklist:acceptance.md`\n- `contract:*`\n- `checklist:*`\n\n## Status\n\n- Phase: Specify\ngwt-spec-analyze passed)\n

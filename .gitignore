@@ -4,6 +4,10 @@
 # Serena MCP tool cache directory
 .serena/
 
+# gwt tooling caches (regenerable ChromaDB vector index / runtime work state)
+.gwt/index/
+.gwt/work/
+
 # Python virtual environment
 .venv/
 venv/
