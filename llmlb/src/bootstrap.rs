@@ -3,7 +3,7 @@
 //! データベース接続、レジストリ初期化、ヘルスチェッカー起動など
 //! サーバー起動に必要なコンポーネントの初期化を担当する。
 
-use crate::config::{get_env_with_fallback_or, get_env_with_fallback_parse};
+use crate::config::get_env_with_fallback_parse;
 use crate::lock::ServerLock;
 use crate::{auth, balancer, health, sync, AppState};
 use sqlx::sqlite::SqliteConnectOptions;
@@ -110,10 +110,6 @@ async fn initialize_inner(
         .with_load_manager(load_manager.clone())
         .with_interval(health_check_interval_secs);
     endpoint_health_checker.start();
-
-    let load_balancer_mode =
-        get_env_with_fallback_or("LLMLB_LOAD_BALANCER_MODE", "LOAD_BALANCER_MODE", "auto");
-    info!("Load balancer mode: {}", load_balancer_mode);
 
     // リクエスト履歴ストレージを初期化（SQLite使用）
     let request_history = std::sync::Arc::new(

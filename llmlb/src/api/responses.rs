@@ -94,35 +94,6 @@ fn add_queue_headers(response: &mut Response, wait_ms: u128) {
     }
 }
 
-fn queue_error_response(
-    status: StatusCode,
-    message: &str,
-    error_type: &str,
-    retry_after: Option<u64>,
-) -> Response {
-    let mut response = (
-        status,
-        Json(json!({
-            "error": {
-                "message": message,
-                "type": error_type,
-                "code": status.as_u16(),
-            }
-        })),
-    )
-        .into_response();
-
-    if let Some(value) = retry_after {
-        if let Ok(header_value) = HeaderValue::from_str(&value.to_string()) {
-            response
-                .headers_mut()
-                .insert(HeaderName::from_static("retry-after"), header_value);
-        }
-    }
-
-    response
-}
-
 /// リクエストからモデル名を抽出
 fn extract_model(payload: &Value) -> Result<String, AppError> {
     payload["model"].as_str().map(String::from).ok_or_else(|| {
@@ -183,23 +154,6 @@ pub async fn post_responses(
             endpoint,
             queued_wait_ms,
         }) => (*endpoint, queued_wait_ms),
-        Ok(QueueSelection::CapacityExceeded) => {
-            let retry_after = queue_config.timeout.as_secs().max(1);
-            return Ok(queue_error_response(
-                StatusCode::TOO_MANY_REQUESTS,
-                "Request queue is full",
-                "rate_limit_exceeded",
-                Some(retry_after),
-            ));
-        }
-        Ok(QueueSelection::Timeout { .. }) => {
-            return Ok(queue_error_response(
-                StatusCode::GATEWAY_TIMEOUT,
-                "Queue wait timeout",
-                "timeout",
-                None,
-            ));
-        }
         Err(e) => {
             if matches!(e, LbError::NoCapableEndpoints(_)) {
                 let message = format!("No available endpoints support model: {}", model);
@@ -812,50 +766,6 @@ mod tests {
                 .get(HeaderName::from_static("x-queue-wait-ms"))
                 .map(|v| v.to_str().unwrap()),
             Some("999999")
-        );
-    }
-
-    // --- queue_error_response tests ---
-
-    #[test]
-    fn queue_error_response_returns_429_with_retry_after() {
-        let resp = super::queue_error_response(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Rate limited",
-            "rate_limit_exceeded",
-            Some(30),
-        );
-        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
-        assert_eq!(
-            resp.headers()
-                .get("retry-after")
-                .map(|v| v.to_str().unwrap()),
-            Some("30")
-        );
-    }
-
-    #[test]
-    fn queue_error_response_returns_504_without_retry_after() {
-        let resp =
-            super::queue_error_response(StatusCode::GATEWAY_TIMEOUT, "Timeout", "timeout", None);
-        assert_eq!(resp.status(), StatusCode::GATEWAY_TIMEOUT);
-        assert!(resp.headers().get("retry-after").is_none());
-    }
-
-    #[test]
-    fn queue_error_response_with_zero_retry_after() {
-        let resp = super::queue_error_response(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Queue full",
-            "rate_limit_exceeded",
-            Some(0),
-        );
-        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
-        assert_eq!(
-            resp.headers()
-                .get("retry-after")
-                .map(|v| v.to_str().unwrap()),
-            Some("0")
         );
     }
 }

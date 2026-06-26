@@ -3,7 +3,7 @@
 //! ペイロードのサニタイズ、メッセージ変換、エラーレスポンス生成など。
 
 use axum::{
-    http::{HeaderName, HeaderValue, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -294,36 +294,6 @@ pub fn openai_error_response_with_type(
 /// Default OpenAI-compatible error response using `invalid_request_error`.
 pub fn openai_error_response(message: impl Into<String>, status: StatusCode) -> Response {
     openai_error_response_with_type(message, "invalid_request_error", status)
-}
-
-/// キューイング関連のエラーレスポンスを生成
-pub fn queue_error_response(
-    status: StatusCode,
-    message: &str,
-    error_type: &str,
-    retry_after: Option<u64>,
-) -> Response {
-    let mut response = (
-        status,
-        Json(json!({
-            "error": {
-                "message": message,
-                "type": error_type,
-                "code": status.as_u16(),
-            }
-        })),
-    )
-        .into_response();
-
-    if let Some(value) = retry_after {
-        if let Ok(header_value) = HeaderValue::from_str(&value.to_string()) {
-            response
-                .headers_mut()
-                .insert(HeaderName::from_static("retry-after"), header_value);
-        }
-    }
-
-    response
 }
 
 /// モデル利用不可レスポンスを生成
@@ -809,71 +779,6 @@ mod tests {
     }
 
     // ========================================================================
-    // queue_error_response
-    // ========================================================================
-
-    #[tokio::test]
-    async fn queue_error_response_with_retry_after() {
-        // Given: a queue error with retry_after
-        let resp = queue_error_response(
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate limited",
-            "rate_limit_error",
-            Some(30),
-        );
-        // When: we inspect the response
-        let (parts, body) = resp.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.unwrap();
-        let body: Value = serde_json::from_slice(&bytes).unwrap();
-        // Then: status, body, and Retry-After header are correct
-        assert_eq!(parts.status, StatusCode::TOO_MANY_REQUESTS);
-        assert_eq!(body["error"]["message"], "rate limited");
-        assert_eq!(body["error"]["type"], "rate_limit_error");
-        assert_eq!(
-            parts.headers.get("retry-after").unwrap().to_str().unwrap(),
-            "30"
-        );
-    }
-
-    #[tokio::test]
-    async fn queue_error_response_without_retry_after() {
-        // Given: a queue error without retry_after
-        let resp = queue_error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "overloaded",
-            "overloaded_error",
-            None,
-        );
-        // When: we inspect the response
-        let (parts, body) = resp.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.unwrap();
-        let body: Value = serde_json::from_slice(&bytes).unwrap();
-        // Then: no Retry-After header
-        assert_eq!(parts.status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(body["error"]["message"], "overloaded");
-        assert!(parts.headers.get("retry-after").is_none());
-    }
-
-    #[tokio::test]
-    async fn queue_error_response_custom_error_type() {
-        // Given: a queue error with custom error type
-        let resp = queue_error_response(
-            StatusCode::BAD_GATEWAY,
-            "backend down",
-            "custom_error",
-            Some(60),
-        );
-        // When: we inspect the response
-        let (parts, body) = resp.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.unwrap();
-        let body: Value = serde_json::from_slice(&bytes).unwrap();
-        // Then: custom type is preserved
-        assert_eq!(parts.status, StatusCode::BAD_GATEWAY);
-        assert_eq!(body["error"]["type"], "custom_error");
-        assert_eq!(body["error"]["code"], 502);
-    }
-
-    // ========================================================================
     // model_unavailable_response
     // ========================================================================
 
@@ -1277,54 +1182,6 @@ mod tests {
         // Then: works with owned String
         assert_eq!(parts.status, StatusCode::UNAUTHORIZED);
         assert_eq!(body["error"]["message"], "owned string error");
-    }
-
-    // ========================================================================
-    // 追加テスト: queue_error_response edge cases
-    // ========================================================================
-
-    #[tokio::test]
-    async fn queue_error_response_retry_after_zero() {
-        // Given: retry_after=0
-        let resp =
-            queue_error_response(StatusCode::TOO_MANY_REQUESTS, "wait", "rate_limit", Some(0));
-        // When: we inspect the response
-        let (parts, _body) = resp.into_parts();
-        // Then: Retry-After header is "0"
-        assert_eq!(
-            parts.headers.get("retry-after").unwrap().to_str().unwrap(),
-            "0"
-        );
-    }
-
-    #[tokio::test]
-    async fn queue_error_response_large_retry_after() {
-        // Given: a large retry_after value
-        let resp = queue_error_response(
-            StatusCode::TOO_MANY_REQUESTS,
-            "wait",
-            "rate_limit",
-            Some(86400),
-        );
-        // When: we inspect the response
-        let (parts, _body) = resp.into_parts();
-        // Then: large value preserved
-        assert_eq!(
-            parts.headers.get("retry-after").unwrap().to_str().unwrap(),
-            "86400"
-        );
-    }
-
-    #[tokio::test]
-    async fn queue_error_response_empty_message() {
-        // Given: empty message
-        let resp = queue_error_response(StatusCode::SERVICE_UNAVAILABLE, "", "error", None);
-        // When: we inspect the response
-        let (_parts, body) = resp.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.unwrap();
-        let body: Value = serde_json::from_slice(&bytes).unwrap();
-        // Then: empty message preserved
-        assert_eq!(body["error"]["message"], "");
     }
 
     // ========================================================================

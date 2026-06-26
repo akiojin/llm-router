@@ -68,44 +68,6 @@ fn default_health_check_interval() -> u32 {
     30
 }
 
-/// /api/system APIレスポンス（SPEC-f8e3a1b7）
-///
-/// xLLM固有のシステム情報API。OpenAI互換エンドポイントでは利用不可。
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-struct SystemInfoResponse {
-    /// デバイス情報
-    #[serde(default)]
-    device: Option<SystemDeviceInfo>,
-}
-
-/// /api/system APIのデバイス情報
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-struct SystemDeviceInfo {
-    /// デバイスタイプ（"cpu" / "gpu"）
-    #[serde(default)]
-    device_type: String,
-    /// GPUデバイス一覧
-    #[serde(default)]
-    gpu_devices: Vec<SystemGpuDevice>,
-}
-
-/// /api/system APIのGPUデバイス情報
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-struct SystemGpuDevice {
-    /// デバイス名
-    #[serde(default)]
-    name: String,
-    /// 総メモリ（バイト）
-    #[serde(default)]
-    total_memory_bytes: u64,
-    /// 使用中メモリ（バイト）
-    #[serde(default)]
-    used_memory_bytes: u64,
-}
-
 /// エンドポイント固有の情報取得方法でデバイス情報を取得（SPEC-f8e3a1b7, SPEC-e8e9326e）
 ///
 /// エンドポイント登録時に呼び出し、デバイス情報を取得する。
@@ -2168,60 +2130,6 @@ mod tests {
         let info = EndpointTestInfo { model_count: 5 };
         let json = serde_json::to_value(&info).unwrap();
         assert_eq!(json["model_count"], 5);
-    }
-
-    #[test]
-    fn test_system_info_response_empty() {
-        let json = json!({});
-        let resp: SystemInfoResponse = serde_json::from_value(json).unwrap();
-        assert!(resp.device.is_none());
-    }
-
-    #[test]
-    fn test_system_info_response_with_device() {
-        let json = json!({
-            "device": {
-                "device_type": "gpu",
-                "gpu_devices": [{
-                    "name": "RTX 4090",
-                    "total_memory_bytes": 24000000000_u64,
-                    "used_memory_bytes": 8000000000_u64
-                }]
-            }
-        });
-        let resp: SystemInfoResponse = serde_json::from_value(json).unwrap();
-        let device = resp.device.unwrap();
-        assert_eq!(device.device_type, "gpu");
-        assert_eq!(device.gpu_devices.len(), 1);
-        assert_eq!(device.gpu_devices[0].name, "RTX 4090");
-    }
-
-    #[test]
-    fn test_system_info_response_cpu_device() {
-        let json = json!({
-            "device": { "device_type": "cpu", "gpu_devices": [] }
-        });
-        let resp: SystemInfoResponse = serde_json::from_value(json).unwrap();
-        let device = resp.device.unwrap();
-        assert_eq!(device.device_type, "cpu");
-        assert!(device.gpu_devices.is_empty());
-    }
-
-    #[test]
-    fn test_system_device_info_defaults() {
-        let json = json!({});
-        let info: SystemDeviceInfo = serde_json::from_value(json).unwrap();
-        assert_eq!(info.device_type, "");
-        assert!(info.gpu_devices.is_empty());
-    }
-
-    #[test]
-    fn test_system_gpu_device_defaults() {
-        let json = json!({});
-        let gpu: SystemGpuDevice = serde_json::from_value(json).unwrap();
-        assert_eq!(gpu.name, "");
-        assert_eq!(gpu.total_memory_bytes, 0);
-        assert_eq!(gpu.used_memory_bytes, 0);
     }
 
     #[test]

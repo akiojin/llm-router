@@ -100,7 +100,7 @@ use crate::{
         models::{list_registered_models, load_registered_model, LifecycleStatus},
         openai_util::{
             classify_upstream_request_error, model_unavailable_response, openai_error_response,
-            openai_error_response_with_type, probe_ollama_model_loaded, queue_error_response,
+            openai_error_response_with_type, probe_ollama_model_loaded,
             sanitize_openai_payload_for_history, upstream_error_message_from_bytes,
         },
         proxy::{
@@ -918,49 +918,6 @@ async fn proxy_openai_post(
         }) => {
             queued_wait_ms = wait_ms;
             *endpoint
-        }
-        Ok(QueueSelection::CapacityExceeded) => {
-            let message = "Request queue is full".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    0,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            let retry_after = queue_config.timeout.as_secs().max(1);
-            return Ok(queue_error_response(
-                StatusCode::TOO_MANY_REQUESTS,
-                &message,
-                "rate_limit_exceeded",
-                Some(retry_after),
-            ));
-        }
-        Ok(QueueSelection::Timeout { waited_ms }) => {
-            let message = "Queue wait timeout".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    waited_ms as u64,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            return Ok(queue_error_response(
-                StatusCode::GATEWAY_TIMEOUT,
-                &message,
-                "timeout",
-                None,
-            ));
         }
         Err(e) => {
             let error_message = if matches!(e, LbError::NoCapableEndpoints(_)) {

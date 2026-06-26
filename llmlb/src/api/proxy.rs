@@ -24,17 +24,12 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use std::{io, pin::Pin, sync::Arc, time::Instant};
 
 /// キュー付きエンドポイント選択の結果
-#[allow(dead_code)]
 pub(crate) enum QueueSelection {
     /// エンドポイントが見つかった
     Ready {
         endpoint: Box<Endpoint>,
         queued_wait_ms: Option<u128>,
     },
-    /// キャパシティ超過
-    CapacityExceeded,
-    /// タイムアウト
-    Timeout { waited_ms: u128 },
 }
 
 /// モデル対応のエンドポイントをTPS優先・キュー付きで選択
@@ -488,16 +483,12 @@ mod tests {
             endpoint: Box::new(ep),
             queued_wait_ms: Some(42),
         };
-        if let QueueSelection::Ready {
+        let QueueSelection::Ready {
             endpoint,
             queued_wait_ms,
-        } = qs
-        {
-            assert_eq!(endpoint.name, "ep1");
-            assert_eq!(queued_wait_ms, Some(42));
-        } else {
-            panic!("Expected QueueSelection::Ready");
-        }
+        } = qs;
+        assert_eq!(endpoint.name, "ep1");
+        assert_eq!(queued_wait_ms, Some(42));
     }
 
     #[test]
@@ -511,37 +502,8 @@ mod tests {
             endpoint: Box::new(ep),
             queued_wait_ms: None,
         };
-        if let QueueSelection::Ready { queued_wait_ms, .. } = qs {
-            assert!(queued_wait_ms.is_none());
-        } else {
-            panic!("Expected QueueSelection::Ready");
-        }
-    }
-
-    #[test]
-    fn queue_selection_capacity_exceeded_variant() {
-        let qs = QueueSelection::CapacityExceeded;
-        assert!(matches!(qs, QueueSelection::CapacityExceeded));
-    }
-
-    #[test]
-    fn queue_selection_timeout_variant() {
-        let qs = QueueSelection::Timeout { waited_ms: 5000 };
-        if let QueueSelection::Timeout { waited_ms } = qs {
-            assert_eq!(waited_ms, 5000);
-        } else {
-            panic!("Expected QueueSelection::Timeout");
-        }
-    }
-
-    #[test]
-    fn queue_selection_timeout_zero() {
-        let qs = QueueSelection::Timeout { waited_ms: 0 };
-        if let QueueSelection::Timeout { waited_ms } = qs {
-            assert_eq!(waited_ms, 0);
-        } else {
-            panic!("Expected QueueSelection::Timeout");
-        }
+        let QueueSelection::Ready { queued_wait_ms, .. } = qs;
+        assert!(queued_wait_ms.is_none());
     }
 
     // --- process_sse_lines ---
