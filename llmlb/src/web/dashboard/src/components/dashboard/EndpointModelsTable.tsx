@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { type ModelStatEntry, type ModelTpsEntry, endpointsApi } from '@/lib/api'
+import { type ModelTpsEntry, endpointsApi } from '@/lib/api'
 import {
   Table,
   TableBody,
