@@ -178,9 +178,7 @@ mod tests {
         assert!(verify_password(pw, &h).unwrap());
     }
 
-    // --- validate_password テストモジュール（TDD RED フェーズ）---
-    // validate_password 関数は未実装（T-0003で実装）
-    // 本セクションはテスト仕様のみを定義
+    // --- validate_password テストモジュール ---
 
     #[test]
     fn validate_password_fails_too_short() {

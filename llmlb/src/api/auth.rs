@@ -11,7 +11,6 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use chrono::Utc;
 
 use super::error::AppError;
 use serde::{Deserialize, Serialize};
@@ -67,44 +66,6 @@ pub struct MeResponse {
 pub struct ChangePasswordRequest {
     /// 新しいパスワード
     pub new_password: String,
-}
-
-/// 招待キー生成リクエスト（T-0009）
-#[derive(Debug, Deserialize)]
-pub struct CreateInvitationRequest {
-    /// 招待対象ユーザー名（メールアドレス形式）
-    pub username: String,
-    /// ロール（"admin" または "viewer"）
-    pub role: String,
-}
-
-/// 招待キー生成レスポンス（T-0009）
-#[derive(Debug, Serialize)]
-pub struct CreateInvitationResponse {
-    /// 招待キー（8文字英数字）
-    pub invitation_key: String,
-    /// QRコード（SVG形式）
-    pub qr_code: String,
-    /// 有効期限
-    pub expires_at: String,
-}
-
-/// 招待受け入れリクエスト（T-0011）
-#[derive(Debug, Deserialize)]
-pub struct AcceptInvitationRequest {
-    /// 招待キー
-    pub invitation_key: String,
-    /// 生体認証完了フラグ
-    pub biometric_verified: bool,
-}
-
-/// 招待受け入れレスポンス（T-0011）
-#[derive(Debug, Serialize)]
-pub struct AcceptInvitationResponse {
-    /// ユーザー名
-    pub username: String,
-    /// セットアップトークン（1時間有効）
-    pub setup_token: String,
 }
 
 /// POST /api/auth/login - ログイン
@@ -377,6 +338,12 @@ pub async fn register(
     State(app_state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), Response> {
+    // パスワード要件を検証（8文字以上・大文字・数字）
+    crate::auth::password::validate_password(&request.password).map_err(|e| {
+        tracing::info!("Password validation failed during registration");
+        AppError(e).into_response()
+    })?;
+
     // 招待コードを検索
     let invitation =
         crate::db::invitations::find_by_code(&app_state.db_pool, &request.invitation_code)
@@ -547,165 +514,6 @@ pub async fn change_password(
     tracing::info!("Password changed for user: {}", user_id);
 
     Ok(StatusCode::OK)
-}
-
-/// POST /api/admin/invitations - 招待キー生成（T-0009）
-///
-/// admin ロールのユーザーが招待キーを生成
-///
-/// # Arguments
-/// * `Extension(claims)` - JWT クレーム（admin ロール確認用）
-/// * `State(app_state)` - アプリケーション状態
-/// * `Json(request)` - リクエスト（username, role）
-///
-/// # Returns
-/// * `200 OK` - 招待キー、QRコード、有効期限
-/// * `401 Unauthorized` - 認証失敗
-/// * `403 Forbidden` - admin ロール権限がない
-pub async fn create_invitation(
-    Extension(claims): Extension<Claims>,
-    State(app_state): State<AppState>,
-    Json(request): Json<CreateInvitationRequest>,
-) -> Result<impl IntoResponse, Response> {
-    // admin ロール確認
-    if claims.role != UserRole::Admin {
-        return Err(AppError(LbError::Authorization(
-            "Only admin can create invitations".to_string(),
-        ))
-        .into_response());
-    }
-
-    // ロール値検証
-    if request.role != "admin" && request.role != "viewer" {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Role must be 'admin' or 'viewer'".to_string(),
-        )))
-        .into_response());
-    }
-
-    // 招待キー生成（DB に保存）
-    let invitation =
-        crate::db::users::create_invitation(&app_state.db_pool, &request.username, &request.role)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to create invitation: {}", e);
-                AppError(e).into_response()
-            })?;
-
-    // QRコード生成
-    let qr_code = generate_qr_code(&invitation.key).map_err(|e| {
-        tracing::error!("Failed to generate QR code: {}", e);
-        AppError(LbError::Common(CommonError::Config(format!(
-            "Failed to generate QR code: {}",
-            e
-        ))))
-        .into_response()
-    })?;
-
-    let response = CreateInvitationResponse {
-        invitation_key: invitation.key,
-        qr_code,
-        expires_at: invitation.expires_at.to_rfc3339(),
-    };
-
-    tracing::info!(
-        "Invitation created for user: {} by admin: {}",
-        request.username,
-        claims.sub
-    );
-
-    Ok((StatusCode::OK, Json(response)))
-}
-
-/// POST /api/auth/accept-invitation - 招待受け入れ（T-0011）
-///
-/// ユーザーが招待キーで招待を受け入れ、setup_token を取得
-///
-/// # Arguments
-/// * `State(app_state)` - アプリケーション状態
-/// * `Json(request)` - リクエスト（invitation_key, biometric_verified）
-///
-/// # Returns
-/// * `200 OK` - username, setup_token
-/// * `400 Bad Request` - 無効な招待キー、期限切れ、2回目使用
-pub async fn accept_invitation(
-    State(app_state): State<AppState>,
-    Json(request): Json<AcceptInvitationRequest>,
-) -> Result<impl IntoResponse, Response> {
-    // 招待キー検索
-    let invitation =
-        crate::db::users::get_invitation_by_key(&app_state.db_pool, &request.invitation_key)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch invitation: {}", e);
-                AppError(e).into_response()
-            })?
-            .ok_or_else(|| {
-                AppError(LbError::Common(CommonError::Validation(
-                    "Invalid invitation key".to_string(),
-                )))
-                .into_response()
-            })?;
-
-    // 既に使用されているか確認
-    if invitation.is_used {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Invitation key already used".to_string(),
-        )))
-        .into_response());
-    }
-
-    // 有効期限確認
-    if Utc::now() > invitation.expires_at {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Invitation key expired".to_string(),
-        )))
-        .into_response());
-    }
-
-    // setup_token 生成（1時間有効期限）
-    // 一時的に user_id は新規ユーザー生成用のプレースホルダーUUID を使用
-    let temp_user_id = uuid::Uuid::new_v4().to_string();
-    let setup_token = crate::auth::jwt::create_jwt_with_expiration(
-        &temp_user_id,
-        UserRole::Admin, // 一時的
-        &app_state.jwt_secret,
-        false,
-        3600, // 1時間
-    )
-    .map_err(|e| {
-        tracing::error!("Failed to generate setup token: {}", e);
-        AppError(e).into_response()
-    })?;
-
-    // 招待キーを使用済みにマーク
-    crate::db::users::mark_invitation_used(&app_state.db_pool, invitation.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to mark invitation as used: {}", e);
-            AppError(e).into_response()
-        })?;
-
-    let response = AcceptInvitationResponse {
-        username: invitation.username,
-        setup_token,
-    };
-
-    tracing::info!("Invitation accepted: key={}", request.invitation_key);
-
-    Ok((StatusCode::OK, Json(response)))
-}
-
-/// QRコード生成（招待キーを含む）
-fn generate_qr_code(key: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // qrcode クレートを使用してQRコードを生成
-    use qrcode::QrCode;
-
-    let _qr = QrCode::new(key)?;
-
-    // NOTE: 簡易版 - テキストベースのプレースホルダーSVGを返す
-    // 本実装ではqrcode-svgなどでSVG形式に変換するのが望ましい
-    Ok("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect fill=\"white\" width=\"200\" height=\"200\"/></svg>".to_string())
 }
 
 #[cfg(test)]

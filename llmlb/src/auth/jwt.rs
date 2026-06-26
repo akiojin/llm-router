@@ -44,45 +44,6 @@ pub fn create_jwt(
     .map_err(|e| LbError::Jwt(format!("Failed to create JWT: {}", e)))
 }
 
-/// JWTトークンを生成（カスタム有効期限）
-///
-/// # Arguments
-/// * `user_id` - ユーザーID
-/// * `role` - ユーザーロール
-/// * `secret` - JWTシークレットキー
-/// * `must_change_password` - パスワード変更要求フラグ
-/// * `expiration_seconds` - 有効期限（秒単位）
-///
-/// # Returns
-/// * `Ok(String)` - JWTトークン
-/// * `Err(LbError)` - 生成失敗
-pub fn create_jwt_with_expiration(
-    user_id: &str,
-    role: UserRole,
-    secret: &str,
-    must_change_password: bool,
-    expiration_seconds: i64,
-) -> Result<String, LbError> {
-    let expiration = Utc::now()
-        .checked_add_signed(chrono::Duration::seconds(expiration_seconds))
-        .ok_or_else(|| LbError::Jwt("Failed to calculate expiration time".to_string()))?
-        .timestamp() as usize;
-
-    let claims = Claims {
-        sub: user_id.to_string(),
-        role,
-        exp: expiration,
-        must_change_password,
-    };
-
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes()),
-    )
-    .map_err(|e| LbError::Jwt(format!("Failed to create JWT: {}", e)))
-}
-
 /// JWTトークンを検証
 ///
 /// # Arguments

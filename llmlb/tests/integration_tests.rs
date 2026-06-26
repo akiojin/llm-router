@@ -130,9 +130,5 @@ mod system_info_public_test;
 #[path = "integration/settings_test.rs"]
 mod settings_test;
 
-// SPEC #580 US-004: 招待キー生成・受け入れAPI（T-0008, T-0010）
-#[path = "integration/invitation_keys_api_test.rs"]
-mod invitation_keys_api_test;
-
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.

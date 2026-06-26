@@ -73,7 +73,7 @@ test.describe('Register Page', () => {
   });
 
   test('R-04: Invalid invitation code shows error', async ({ page }) => {
-    await registerPage.register('inv_invalidcode123456', 'testuser', 'password123');
+    await registerPage.register('inv_invalidcode123456', 'testuser', 'Password123');
 
     // Wait for error toast (Toaster component)
     const toast = page.locator('[data-sonner-toast], [role="status"], .toast');
@@ -88,7 +88,7 @@ test.describe('Register Page', () => {
     const username = `testuser_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     // Register with the code
-    await registerPage.register(invitationCode, username, 'password123');
+    await registerPage.register(invitationCode, username, 'Password123');
 
     // Wait for success message
     await registerPage.waitForSuccess();
@@ -102,7 +102,7 @@ test.describe('Register Page', () => {
 
     // Log in with new credentials
     const loginPage = new LoginPage(page);
-    await loginPage.login(username, 'password123');
+    await loginPage.login(username, 'Password123');
     await loginPage.waitForDashboard();
 
     // Should be logged in successfully
@@ -115,7 +115,7 @@ test.describe('Register Page', () => {
     const username1 = `testuser1_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     // First registration
-    await registerPage.register(invitationCode, username1, 'password123');
+    await registerPage.register(invitationCode, username1, 'Password123');
     await registerPage.waitForSuccess();
 
     // Navigate back to register page
@@ -123,7 +123,7 @@ test.describe('Register Page', () => {
 
     // Try to use the same code again
     const username2 = `testuser2_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    await registerPage.register(invitationCode, username2, 'password123');
+    await registerPage.register(invitationCode, username2, 'Password123');
 
     // Should show error
     await expect(registerPage.errorToast).toBeVisible({ timeout: 5000 });
@@ -132,7 +132,7 @@ test.describe('Register Page', () => {
   test('R-07: Password mismatch shows error', async ({ page }) => {
     await registerPage.invitationCodeInput.fill('inv_anycode12345678');
     await registerPage.usernameInput.fill('testuser');
-    await registerPage.passwordInput.fill('password123');
+    await registerPage.passwordInput.fill('Password123');
     await registerPage.confirmPasswordInput.fill('differentpassword');
     await registerPage.submitButton.click();
 

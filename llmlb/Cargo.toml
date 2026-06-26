@@ -69,9 +69,6 @@ regex = "1.10"
 # Token counting
 tiktoken-rs = "0.12.0"
 
-# QRコード生成（T-0009）
-qrcode = "0.14"
-
 # Self-update
 semver = "1.0"
 flate2 = "1.0"

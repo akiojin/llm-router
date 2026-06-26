@@ -153,7 +153,7 @@ async fn test_complete_invitation_flow() {
                     serde_json::to_vec(&json!({
                         "invitation_code": invitation_code,
                         "username": "newuser",
-                        "password": "password123"
+                        "password": "Password123"
                     }))
                     .unwrap(),
                 ))
@@ -183,7 +183,7 @@ async fn test_complete_invitation_flow() {
                 .body(Body::from(
                     serde_json::to_vec(&json!({
                         "username": "newuser",
-                        "password": "password123"
+                        "password": "Password123"
                     }))
                     .unwrap(),
                 ))
@@ -205,7 +205,7 @@ async fn test_complete_invitation_flow() {
                     serde_json::to_vec(&json!({
                         "invitation_code": invitation_code,
                         "username": "anotheruser",
-                        "password": "password456"
+                        "password": "Password456"
                     }))
                     .unwrap(),
                 ))
@@ -236,7 +236,7 @@ async fn test_invalid_invitation_code_rejected() {
                     serde_json::to_vec(&json!({
                         "invitation_code": "inv_invalidcode12345",
                         "username": "newuser",
-                        "password": "password123"
+                        "password": "Password123"
                     }))
                     .unwrap(),
                 ))
@@ -311,7 +311,7 @@ async fn test_invitation_revocation() {
                     serde_json::to_vec(&json!({
                         "invitation_code": invitation_code,
                         "username": "newuser",
-                        "password": "password123"
+                        "password": "Password123"
                     }))
                     .unwrap(),
                 ))
@@ -424,7 +424,7 @@ async fn test_duplicate_username_rejected() {
                     serde_json::to_vec(&json!({
                         "invitation_code": codes[0],
                         "username": "testuser",
-                        "password": "password123"
+                        "password": "Password123"
                     }))
                     .unwrap(),
                 ))
@@ -446,7 +446,7 @@ async fn test_duplicate_username_rejected() {
                     serde_json::to_vec(&json!({
                         "invitation_code": codes[1],
                         "username": "testuser",
-                        "password": "password456"
+                        "password": "Password456"
                     }))
                     .unwrap(),
                 ))
@@ -459,5 +459,58 @@ async fn test_duplicate_username_rejected() {
         duplicate_response.status(),
         StatusCode::CONFLICT,
         "Duplicate username should return 409 Conflict"
+    );
+}
+
+#[tokio::test]
+async fn test_weak_password_rejected() {
+    let (app, _db_pool) = build_app().await;
+
+    // 管理者としてログインし招待コードを発行
+    let (app, jwt_token) = login_as_admin(app).await;
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/invitations")
+                .header("authorization", format!("Bearer {}", jwt_token))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&json!({})).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let create_data: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
+    let invitation_code = create_data["code"].as_str().unwrap();
+
+    // 要件を満たさない弱いパスワード（短い・大文字なし・数字なし）で登録 → 400
+    let register_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "invitation_code": invitation_code,
+                        "username": "weakpwuser",
+                        "password": "weak"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        register_response.status(),
+        StatusCode::BAD_REQUEST,
+        "Weak password should be rejected with 400"
     );
 }
