@@ -28,7 +28,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::{Stream, StreamExt};
 use serde_json::{json, Map, Value};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
@@ -61,6 +61,9 @@ struct AnthropicStreamTracker {
     sent_content_block_start: bool,
     sent_content_block_stop: bool,
     sent_message_stop: bool,
+    /// ストリーミング中のtool_useブロック: OpenAIのtool_call index → Anthropicのcontent block index。
+    /// 断片化されたtool_call引数をindex単位で蓄積するために使用する。
+    tool_block_indices: BTreeMap<u64, usize>,
     response_id: String,
     public_model: String,
     stop_reason: Option<&'static str>,
@@ -341,48 +344,6 @@ async fn proxy_local_anthropic_messages(
         }) => {
             queued_wait_ms = wait_ms;
             *endpoint
-        }
-        Ok(QueueSelection::CapacityExceeded) => {
-            let message = "Request queue is full".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    0,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            let retry_after = queue_config.timeout.as_secs().max(1);
-            return Ok(anthropic_error_response_with_retry_after(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limit_error",
-                &message,
-                Some(retry_after),
-            ));
-        }
-        Ok(QueueSelection::Timeout { waited_ms }) => {
-            let message = "Queue wait timeout".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    waited_ms as u64,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            return Ok(anthropic_error_response(
-                StatusCode::GATEWAY_TIMEOUT,
-                "api_error",
-                message,
-            ));
         }
         Err(err) => {
             let message = if matches!(err, LbError::NoCapableEndpoints(_)) {
@@ -834,6 +795,7 @@ fn transform_openai_streaming_response_to_anthropic(
         sent_content_block_start: false,
         sent_content_block_stop: false,
         sent_message_stop: false,
+        tool_block_indices: BTreeMap::new(),
         response_id: format!("msg_{}", Uuid::new_v4().simple()),
         public_model: model_id,
         stop_reason: None,
@@ -972,31 +934,62 @@ impl AnthropicStreamTracker {
                         );
                     }
 
-                    // Emit tool_use content blocks
-                    for (idx, tool_call) in tool_calls.iter().enumerate() {
-                        if let Some(tool_use) =
-                            convert_openai_tool_call_to_anthropic_tool_use(tool_call)
-                        {
-                            let tool_index = 1 + idx; // Start from index 1 (0 is for text)
+                    // tool_callはデルタ間で断片化される（最初のデルタにid+name、
+                    // 後続デルタには引数の断片のみ）。index単位でブロックを開き、
+                    // 引数を input_json_delta として逐次配信し、ブロックは終了時に閉じる。
+                    for tool_call in tool_calls {
+                        let oai_index = tool_call.get("index").and_then(Value::as_u64).unwrap_or(0);
 
-                            // Start tool_use content block
+                        // このindexを初めて見たときにtool_useブロックを開く
+                        if !self.tool_block_indices.contains_key(&oai_index) {
+                            let block_index = 1 + self.tool_block_indices.len();
+                            let tool_id = tool_call
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                                .unwrap_or_else(|| format!("toolu_{}", Uuid::new_v4().simple()));
+                            let tool_name = tool_call
+                                .get("function")
+                                .and_then(|f| f.get("name"))
+                                .and_then(Value::as_str)
+                                .unwrap_or_default();
+
                             self.emit_event(
                                 "content_block_start",
                                 json!({
                                     "type": "content_block_start",
-                                    "index": tool_index,
-                                    "content_block": tool_use
+                                    "index": block_index,
+                                    "content_block": {
+                                        "type": "tool_use",
+                                        "id": tool_id,
+                                        "name": tool_name,
+                                        "input": {}
+                                    }
                                 }),
                             );
+                            self.tool_block_indices.insert(oai_index, block_index);
+                        }
 
-                            // Immediately stop tool_use content block (tools are complete in delta)
-                            self.emit_event(
-                                "content_block_stop",
-                                json!({
-                                    "type": "content_block_stop",
-                                    "index": tool_index
-                                }),
-                            );
+                        // 引数の断片を input_json_delta として配信
+                        if let Some(arguments) = tool_call
+                            .get("function")
+                            .and_then(|f| f.get("arguments"))
+                            .and_then(Value::as_str)
+                        {
+                            if !arguments.is_empty() {
+                                let block_index = self.tool_block_indices[&oai_index];
+                                self.emit_event(
+                                    "content_block_delta",
+                                    json!({
+                                        "type": "content_block_delta",
+                                        "index": block_index,
+                                        "delta": {
+                                            "type": "input_json_delta",
+                                            "partial_json": arguments
+                                        }
+                                    }),
+                                );
+                            }
                         }
                     }
                 }
@@ -1058,9 +1051,14 @@ impl AnthropicStreamTracker {
         }
 
         self.ensure_message_start();
-        self.ensure_content_block_start();
 
-        if !self.sent_content_block_stop {
+        // テキストもtool_useも無かった場合は空のテキストブロックを保証する
+        if !self.sent_content_block_start && self.tool_block_indices.is_empty() {
+            self.ensure_content_block_start();
+        }
+
+        // テキストブロックが開いていれば閉じる
+        if self.sent_content_block_start && !self.sent_content_block_stop {
             self.sent_content_block_stop = true;
             self.emit_event(
                 "content_block_stop",
@@ -1070,6 +1068,19 @@ impl AnthropicStreamTracker {
                 }),
             );
         }
+
+        // 開いている全てのtool_useブロックを閉じる
+        let tool_block_indices: Vec<usize> = self.tool_block_indices.values().copied().collect();
+        for block_index in tool_block_indices {
+            self.emit_event(
+                "content_block_stop",
+                json!({
+                    "type": "content_block_stop",
+                    "index": block_index
+                }),
+            );
+        }
+        self.tool_block_indices.clear();
 
         let usage = self.accumulator.finalize();
         self.emit_event(
@@ -1652,23 +1663,6 @@ fn anthropic_error_response(
         .into_response()
 }
 
-fn anthropic_error_response_with_retry_after(
-    status: StatusCode,
-    error_type: &str,
-    message: &str,
-    retry_after: Option<u64>,
-) -> Response {
-    let mut response = anthropic_error_response(status, error_type, message);
-    if let Some(retry_after) = retry_after {
-        if let Ok(value) = HeaderValue::from_str(&retry_after.to_string()) {
-            response
-                .headers_mut()
-                .insert(HeaderName::from_static("retry-after"), value);
-        }
-    }
-    response
-}
-
 fn anthropic_error_from_lb_error(err: &LbError) -> Response {
     let status = err.status_code();
     match err {
@@ -2154,11 +2148,99 @@ mod tests {
         assert_eq!(response["stop_reason"], "tool_use");
     }
 
-    #[test]
-    fn test_tool_use_streaming() {
-        // Test that streaming tool call events are properly transformed
-        // This test is a placeholder for streaming transformation logic
-        // TODO: Implement streaming transformation and associated tests
+    #[tokio::test]
+    #[serial]
+    async fn streaming_tool_use_accumulates_fragmented_arguments() {
+        // OpenAI/llama.cpp はtool_callをデルタ間で断片化して送る。
+        // 引数を捨てずに input_json_delta として蓄積・配信することを検証する。
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let mut tracker = AnthropicStreamTracker {
+            upstream: Box::pin(futures::stream::empty::<Result<Bytes, reqwest::Error>>()),
+            upstream_line_buffer: String::new(),
+            output_queue: VecDeque::new(),
+            accumulator: StreamingTokenAccumulator::new("test-model"),
+            endpoint_id: Uuid::new_v4(),
+            model_id: "test-model".to_string(),
+            endpoint_type: EndpointType::OpenaiCompatible,
+            request_started_at: Instant::now(),
+            endpoint_registry: state.endpoint_registry.clone(),
+            load_manager: state.load_manager.clone(),
+            event_bus: state.event_bus.clone(),
+            sent_message_start: false,
+            sent_content_block_start: false,
+            sent_content_block_stop: false,
+            sent_message_stop: false,
+            tool_block_indices: BTreeMap::new(),
+            response_id: "msg_test".to_string(),
+            public_model: "test-model".to_string(),
+            stop_reason: None,
+            stop_sequence: None,
+            stats_recorded: false,
+        };
+
+        tracker.process_upstream_line(
+            r#"data: {"id":"chatcmpl-1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"location\":"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"NYC\"}"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
+        );
+        tracker.finish_stream();
+
+        let emitted: Vec<String> = tracker
+            .output_queue
+            .iter()
+            .map(|b| String::from_utf8_lossy(b).to_string())
+            .collect();
+        let all = emitted.join("");
+
+        assert!(
+            all.contains(r#""type":"tool_use""#),
+            "missing tool_use block: {all}"
+        );
+        assert!(
+            all.contains(r#""name":"get_weather""#),
+            "missing tool name: {all}"
+        );
+        assert!(all.contains(r#""id":"call_abc""#), "missing tool id: {all}");
+
+        // 全 input_json_delta の partial_json を結合して引数JSONを復元する
+        let mut reconstructed = String::new();
+        for payload in &emitted {
+            let Some(data_line) = payload.lines().find(|l| l.starts_with("data: ")) else {
+                continue;
+            };
+            let data = data_line.trim_start_matches("data: ");
+            let Ok(value) = serde_json::from_str::<Value>(data) else {
+                continue;
+            };
+            if value
+                .get("delta")
+                .and_then(|d| d.get("type"))
+                .and_then(Value::as_str)
+                == Some("input_json_delta")
+            {
+                if let Some(frag) = value["delta"]["partial_json"].as_str() {
+                    reconstructed.push_str(frag);
+                }
+            }
+        }
+        assert_eq!(
+            reconstructed, r#"{"location":"NYC"}"#,
+            "tool arguments were not accumulated correctly: {reconstructed:?}"
+        );
+
+        assert!(
+            all.contains(r#""type":"content_block_stop""#),
+            "missing content_block_stop: {all}"
+        );
     }
 
     #[tokio::test]
