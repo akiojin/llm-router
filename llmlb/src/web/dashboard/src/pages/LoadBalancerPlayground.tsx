@@ -373,7 +373,16 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               : 'Unknown error'
 
         toast({ title: 'Failed to send message', description, variant: 'destructive' })
-        pg.setMessages(pg.messages)
+        // Drop only the optimistic empty assistant placeholder (streaming),
+        // keep the user's message, and restore the input so it can be resent.
+        pg.setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === 'assistant' && last.content === '') {
+            return prev.slice(0, -1)
+          }
+          return prev
+        })
+        pg.setInput(userMessage.content)
       }
     } finally {
       if (isMountedRef.current) {

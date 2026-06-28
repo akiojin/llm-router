@@ -260,7 +260,8 @@ export const endpointsApi = {
       temperature?: number
       max_tokens?: number
     },
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
   ) => {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -275,6 +276,7 @@ export const endpointsApi = {
       headers,
       body: JSON.stringify(request),
       credentials: 'include',
+      signal,
     })
 
     if (!response.ok) {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { endpointsApi, ApiError, type DashboardEndpoint } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -83,6 +83,14 @@ function getStatusLabel(status: DashboardEndpoint['status'] | undefined): string
 
 export default function EndpointPlayground({ endpointId, onBack }: EndpointPlaygroundProps) {
   const pg = usePlayground()
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      pg.abortControllerRef.current?.abort()
+    }
+  }, [])
 
   const { data: endpoint, isLoading: isLoadingEndpoint } = useQuery({
     queryKey: ['endpoint', endpointId],
@@ -152,12 +160,14 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
           },
           (chunk) => {
             assistantContent += chunk
+            if (!isMountedRef.current) return
             pg.setMessages((prev) => {
               const updated = [...prev]
               updated[updated.length - 1] = { role: 'assistant', content: assistantContent }
               return updated
             })
-          }
+          },
+          pg.abortControllerRef.current.signal
         )
       } else {
         const data = await endpointsApi.chatCompletions(
@@ -168,7 +178,9 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
             stream: false,
             temperature: pg.temperature,
             max_tokens: effectiveMaxTokens,
-          }
+          },
+          undefined,
+          pg.abortControllerRef.current.signal
         )
 
         pg.setMessages((prev) => [...prev, {
@@ -188,12 +200,25 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
                 : 'Unknown error',
           variant: 'destructive',
         })
-        pg.setMessages(pg.messages)
+        // Drop only the optimistic empty assistant placeholder (streaming),
+        // keep the user's message, and restore the input so it can be resent.
+        pg.setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === 'assistant' && last.content === '') {
+            return prev.slice(0, -1)
+          }
+          return prev
+        })
+        pg.setInput(userMessage.content)
       }
     } finally {
-      pg.setIsStreaming(false)
+      if (isMountedRef.current) {
+        pg.setIsStreaming(false)
+      }
       pg.abortControllerRef.current = null
-      pg.inputRef.current?.focus()
+      if (isMountedRef.current) {
+        pg.inputRef.current?.focus()
+      }
     }
   }
 
