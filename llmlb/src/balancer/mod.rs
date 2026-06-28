@@ -597,6 +597,47 @@ mod tests {
         assert_eq!(ep2.total_output_tokens, 50);
     }
 
+    #[tokio::test]
+    async fn test_forget_endpoint_clears_state_and_tps() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+
+        // 負荷状態（state）を生成
+        load_manager
+            .upsert_initial_state(endpoint_id, false, Some((1, 1)))
+            .await;
+        // TPS状態（tps_tracker）を生成
+        load_manager
+            .update_tps(
+                endpoint_id,
+                "model-a".to_string(),
+                TpsApiKind::ChatCompletions,
+                100,
+                1_000,
+            )
+            .await;
+
+        assert!(
+            load_manager.state.read().await.contains_key(&endpoint_id),
+            "前提: 負荷状態が登録されている"
+        );
+        assert!(
+            !load_manager.get_model_tps(endpoint_id).await.is_empty(),
+            "前提: TPS状態が登録されている"
+        );
+
+        load_manager.forget_endpoint(endpoint_id).await;
+
+        assert!(
+            !load_manager.state.read().await.contains_key(&endpoint_id),
+            "forget_endpoint は負荷状態を除去する"
+        );
+        assert!(
+            load_manager.get_model_tps(endpoint_id).await.is_empty(),
+            "forget_endpoint はTPS状態を除去する"
+        );
+    }
+
     /// T013 [US5]: seed_history_from_db が MinuteHistoryPoint を VecDeque に
     /// 正しく投入できることを検証
     #[tokio::test]
@@ -1710,6 +1751,22 @@ impl LoadManager {
             return;
         }
         let mut tracker = self.tps_tracker.write().await;
+        // オフライン/エラー遷移で clear_tps_for_endpoint された後に、in-flight リクエスト
+        // 完了の遅延 update_tps が TPS エントリを再生成するのを防ぐ。
+        // tps_tracker の書き込みロックを保持したまま現在のステータスを確認することで、
+        // clear_tps_for_endpoint（同じロックを取得）との競合を直列化し、
+        // ステータス確認と再生成の間の TOCTOU 競合を排除する。
+        // レジストリ未登録（None）の場合は従来どおり更新する（テスト互換・production では
+        // 削除直後の一時的な遅延更新のみが該当し、forget_endpoint が別途状態を掃除する）。
+        if let Some(endpoint) = self.endpoint_registry.get(endpoint_id).await {
+            if matches!(
+                endpoint.status,
+                crate::types::endpoint::EndpointStatus::Offline
+                    | crate::types::endpoint::EndpointStatus::Error
+            ) {
+                return;
+            }
+        }
         let state = tracker
             .entry((endpoint_id, model_id, api_kind))
             .or_default();
@@ -1722,6 +1779,23 @@ impl LoadManager {
     pub async fn clear_tps_for_endpoint(&self, endpoint_id: Uuid) {
         let mut tracker = self.tps_tracker.write().await;
         tracker.retain(|(eid, _, _), _| *eid != endpoint_id);
+    }
+
+    /// エンドポイント削除時に LoadManager が保持する状態を破棄する。
+    ///
+    /// `EndpointRegistry::remove` はレジストリ・DB・モデルマッピングのみを掃除するため、
+    /// LoadManager 側の `state`（負荷状態）と `tps_tracker`（TPS 状態）は残存しリークする。
+    /// これらは `begin_request` / `update_tps` の `entry().or_default()` で挿入されるが
+    /// 削除契機がないため、本メソッドを削除ハンドラから呼び出して完全に除去する。
+    pub async fn forget_endpoint(&self, endpoint_id: Uuid) {
+        {
+            let mut state = self.state.write().await;
+            state.remove(&endpoint_id);
+        }
+        {
+            let mut tracker = self.tps_tracker.write().await;
+            tracker.retain(|(eid, _, _), _| *eid != endpoint_id);
+        }
     }
 
     /// エンドポイントのモデル別TPS情報を取得（SPEC-4bb5b55f）

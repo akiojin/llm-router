@@ -886,7 +886,12 @@ pub async fn delete_endpoint(
 
     // EndpointRegistry::remove を使用してDBとキャッシュ両方から削除
     match state.endpoint_registry.remove(id).await {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(true) => {
+            // EndpointRegistry::remove は LoadManager の状態までは掃除しないため、
+            // 負荷状態・TPS状態がリークしないよう明示的に破棄する。
+            state.load_manager.forget_endpoint(id).await;
+            StatusCode::NO_CONTENT.into_response()
+        }
         Ok(false) => AppError(LbError::EndpointNotFound(id)).into_response(),
         Err(e) => {
             tracing::error!("Failed to delete endpoint: {}", e);
