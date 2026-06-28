@@ -211,7 +211,7 @@ async fn query_with_archive(
             .then_with(|| b.request_path.cmp(&a.request_path))
     });
 
-    let offset = ((page - 1) * per_page) as usize;
+    let offset = page.saturating_sub(1).saturating_mul(per_page) as usize;
     let limit = per_page as usize;
     let paged_items = all_items.into_iter().skip(offset).take(limit).collect();
     let total = main_total + archive_total;

@@ -986,6 +986,12 @@ pub async fn list_request_responses(
         }
         page = offset / per_page + 1;
     }
+
+    // ページ番号の上限をクランプし、page * per_page の乗算オーバーフローを防ぐ。
+    // 実用上ありえない巨大ページ指定は妥当な上限に丸める。
+    const MAX_PAGE: usize = 1_000_000;
+    page = page.min(MAX_PAGE);
+
     let result = state
         .request_history
         .filter_and_paginate(&filter, page, per_page)
