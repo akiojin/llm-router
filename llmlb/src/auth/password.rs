@@ -48,8 +48,8 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, LbError> {
 /// * `Ok(())` - パスワード要件を満たす
 /// * `Err(LbError)` - パスワード要件を満たさない（段階的エラーメッセージ付き）
 pub fn validate_password(password: &str) -> Result<(), LbError> {
-    // 長さチェック（8文字以上）
-    if password.len() < 8 {
+    // 長さチェック（8文字以上、バイト数ではなく文字数で判定）
+    if password.chars().count() < 8 {
         return Err(LbError::Common(
             crate::common::error::CommonError::Validation("8文字以上必要です".to_string()),
         ));

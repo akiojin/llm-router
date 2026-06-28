@@ -44,6 +44,11 @@ pub struct AuditLogQueryParams {
     pub format: Option<String>,
 }
 
+/// per_page の上限（監査ログテーブル全行のメモリ展開によるDoSを防ぐ）
+const MAX_AUDIT_PER_PAGE: i64 = 200;
+/// アーカイブ統合検索時に一度にメモリ展開する最大件数
+const MAX_AUDIT_FETCH_LIMIT: i64 = 10_000;
+
 impl From<AuditLogQueryParams> for AuditLogFilter {
     fn from(params: AuditLogQueryParams) -> Self {
         Self {
@@ -57,7 +62,8 @@ impl From<AuditLogQueryParams> for AuditLogFilter {
             client_ip: params.ip,
             search_text: params.search,
             page: params.page,
-            per_page: params.per_page,
+            // per_page は上限をクランプして全行のメモリ展開を防ぐ
+            per_page: params.per_page.map(|p| p.clamp(1, MAX_AUDIT_PER_PAGE)),
             include_archive: params.include_archive,
         }
     }
@@ -164,8 +170,9 @@ async fn query_with_archive(
     search_text: Option<&str>,
 ) -> Result<(Vec<AuditLogEntry>, i64), AppError> {
     let page = filter.page.unwrap_or(1).max(1);
-    let per_page = filter.per_page.unwrap_or(50).max(1);
-    let fetch_limit = page.saturating_mul(per_page);
+    let per_page = filter.per_page.unwrap_or(50).clamp(1, MAX_AUDIT_PER_PAGE);
+    // page×per_page が膨張してもメモリ展開を一定に抑える
+    let fetch_limit = page.saturating_mul(per_page).min(MAX_AUDIT_FETCH_LIMIT);
 
     let mut merged_filter = filter.clone();
     merged_filter.page = Some(1);
@@ -334,7 +341,6 @@ mod tests {
             db_pool: pool,
             jwt_secret: "test-secret".to_string(),
             http_client,
-            queue_config: crate::config::QueueConfig::from_env(),
             event_bus: crate::events::create_shared_event_bus(),
             endpoint_registry,
             inference_gate,

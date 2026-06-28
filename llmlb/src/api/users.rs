@@ -250,8 +250,10 @@ pub async fn update_user(
         }
     }
 
-    // パスワードをハッシュ化（指定された場合）
+    // パスワードをハッシュ化（指定された場合）。要件検証を経てからハッシュ化する。
     let password_hash = if let Some(ref password) = request.password {
+        crate::auth::password::validate_password(password)
+            .map_err(|e| AppError(e).into_response())?;
         Some(crate::auth::password::hash_password(password).map_err(|e| {
             tracing::error!("Failed to hash password: {}", e);
             AppError(LbError::PasswordHash(format!(

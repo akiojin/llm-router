@@ -323,7 +323,7 @@ async fn test_change_password_success() {
                 .uri("/api/auth/change-password")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "new_password": "newpassword123" })).unwrap(),
+                    serde_json::to_vec(&json!({ "new_password": "Newpassword123" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -371,7 +371,7 @@ async fn test_change_password_requires_auth() {
                 .uri("/api/auth/change-password")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "new_password": "newpassword123" })).unwrap(),
+                    serde_json::to_vec(&json!({ "new_password": "Newpassword123" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -397,7 +397,7 @@ async fn test_change_password_then_login_with_new() {
                 .uri("/api/auth/change-password")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "new_password": "newpassword456" })).unwrap(),
+                    serde_json::to_vec(&json!({ "new_password": "Newpassword456" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -406,7 +406,7 @@ async fn test_change_password_then_login_with_new() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // 新パスワードでログイン
-    let (status, _body) = login(&app, "admin", "newpassword456").await;
+    let (status, _body) = login(&app, "admin", "Newpassword456").await;
     assert_eq!(status, StatusCode::OK);
 }
 
@@ -436,7 +436,7 @@ async fn test_change_password_clears_must_change_flag() {
                 .uri("/api/auth/change-password")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "new_password": "newpass123" })).unwrap(),
+                    serde_json::to_vec(&json!({ "new_password": "Newpass123" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -445,7 +445,7 @@ async fn test_change_password_clears_must_change_flag() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // 再ログインでフラグ解除を確認
-    let (status, body) = login(&app, "forced", "newpass123").await;
+    let (status, body) = login(&app, "forced", "Newpass123").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["user"]["must_change_password"], false);
 }

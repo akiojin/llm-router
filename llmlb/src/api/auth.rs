@@ -1,6 +1,6 @@
 //! 認証API
 //!
-//! ログイン、ログアウト、認証情報確認、招待キー管理（T-0009, T-0011）
+//! ログイン、ログアウト、認証情報確認、ユーザー登録、パスワード変更
 
 use crate::common::auth::{Claims, UserRole};
 use crate::common::error::{CommonError, LbError};
@@ -462,13 +462,9 @@ pub async fn change_password(
         AppError(LbError::Authentication("Invalid user ID".to_string())).into_response()
     })?;
 
-    // パスワード長バリデーション（6文字以上）
-    if request.new_password.len() < 6 {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Password must be at least 6 characters".to_string(),
-        )))
-        .into_response());
-    }
+    // パスワード要件を検証（register と同一ポリシー: 8文字以上・大文字・数字）
+    crate::auth::password::validate_password(&request.new_password)
+        .map_err(|e| AppError(e).into_response())?;
 
     // 新パスワードをハッシュ化
     let password_hash =
