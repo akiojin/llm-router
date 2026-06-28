@@ -1757,10 +1757,17 @@ pub struct SettingUpdateBody {
 ///
 /// SPEC-62ac4b68: 閾値ベースの異常検知
 pub async fn update_setting(
+    axum::Extension(claims): axum::Extension<crate::common::auth::Claims>,
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
     Json(body): Json<SettingUpdateBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // 設定の書き込みは admin のみ（Viewer の権限昇格を防ぐ）
+    if claims.role != crate::common::auth::UserRole::Admin {
+        return Err(AppError(LbError::Authorization(
+            "Only admin can update settings".to_string(),
+        )));
+    }
     let value = if key == "ip_alert_threshold" {
         parse_ip_alert_threshold(&body.value)
             .map_err(AppError)?

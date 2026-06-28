@@ -46,6 +46,8 @@ pub struct AuditLogQueryParams {
 
 /// per_page の上限（監査ログテーブル全行のメモリ展開によるDoSを防ぐ）
 const MAX_AUDIT_PER_PAGE: i64 = 200;
+/// page の上限（offset = (page-1)*per_page の乗算オーバーフローを防ぐ）
+const MAX_AUDIT_PAGE: i64 = 1_000_000;
 /// アーカイブ統合検索時に一度にメモリ展開する最大件数
 const MAX_AUDIT_FETCH_LIMIT: i64 = 10_000;
 
@@ -61,7 +63,8 @@ impl From<AuditLogQueryParams> for AuditLogFilter {
             time_to: params.time_to,
             client_ip: params.ip,
             search_text: params.search,
-            page: params.page,
+            // page は上限をクランプして offset 乗算のオーバーフローを防ぐ
+            page: params.page.map(|p| p.clamp(1, MAX_AUDIT_PAGE)),
             // per_page は上限をクランプして全行のメモリ展開を防ぐ
             per_page: params.per_page.map(|p| p.clamp(1, MAX_AUDIT_PER_PAGE)),
             include_archive: params.include_archive,
@@ -130,12 +133,12 @@ pub async fn list_audit_logs(
         }
     }
 
-    let page = params.page.unwrap_or(1);
-    let per_page = params.per_page.unwrap_or(50);
-    let include_archive = params.include_archive.unwrap_or(false);
-    let search_text = params.search.clone();
-
     let filter: AuditLogFilter = params.into();
+    // レスポンスにはクランプ後の実効値を返す（生入力ではなく実際に使用した値）
+    let page = filter.page.unwrap_or(1);
+    let per_page = filter.per_page.unwrap_or(50);
+    let include_archive = filter.include_archive.unwrap_or(false);
+    let search_text = filter.search_text.clone();
     let storage = &state.audit_log_storage;
 
     let (items, total) = match (include_archive, state.audit_archive_pool.as_ref()) {
