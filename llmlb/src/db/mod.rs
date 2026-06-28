@@ -61,17 +61,13 @@ pub(crate) mod test_utils {
     /// テスト用AppStateを構築するビルダー
     pub struct TestAppStateBuilder {
         db_pool: SqlitePool,
-        queue_config: crate::config::QueueConfig,
     }
 
     impl TestAppStateBuilder {
         /// デフォルト設定でビルダーを生成する
         pub async fn new() -> Self {
             let db_pool = test_db_pool().await;
-            Self {
-                db_pool,
-                queue_config: crate::config::QueueConfig::from_env(),
-            }
+            Self { db_pool }
         }
 
         /// AppStateを構築する
@@ -107,7 +103,6 @@ pub(crate) mod test_utils {
                 db_pool: self.db_pool,
                 jwt_secret: "test-secret".into(),
                 http_client,
-                queue_config: self.queue_config,
                 event_bus: crate::events::create_shared_event_bus(),
                 endpoint_registry,
                 inference_gate,

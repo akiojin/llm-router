@@ -7,7 +7,6 @@ use crate::sync::capabilities::{
     supported_apis_from_capabilities,
 };
 use crate::types::endpoint::SupportedAPI;
-use serde::Deserialize;
 
 /// パースされたモデル情報
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,38 +17,6 @@ pub struct ParsedModel {
     pub capabilities: Option<Vec<String>>,
     /// Upstream-reported API surfaces.
     pub supported_apis: Vec<SupportedAPI>,
-}
-
-/// OpenAI形式のモデルレスポンス
-/// `{"data": [{"id": "model-name", "object": "model", ...}]}`
-#[derive(Debug, Deserialize)]
-pub struct OpenAiModelsResponse {
-    /// モデルのリスト
-    pub data: Vec<OpenAiModel>,
-}
-
-/// OpenAI形式の個別モデル
-#[derive(Debug, Deserialize)]
-pub struct OpenAiModel {
-    /// モデルID
-    pub id: String,
-}
-
-/// Ollama形式のモデルレスポンス
-/// `{"models": [{"name": "llama3:latest", "model": "llama3:latest", ...}]}`
-#[derive(Debug, Deserialize)]
-pub struct OllamaModelsResponse {
-    /// モデルのリスト
-    pub models: Vec<OllamaModel>,
-}
-
-/// Ollama形式の個別モデル
-#[derive(Debug, Deserialize)]
-pub struct OllamaModel {
-    /// モデル名
-    pub name: Option<String>,
-    /// モデル識別子（nameがない場合のフォールバック）
-    pub model: Option<String>,
 }
 
 /// レスポンスの形式

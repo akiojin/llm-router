@@ -318,7 +318,6 @@ async fn initialize_inner(
         db_pool,
         jwt_secret,
         http_client,
-        queue_config: crate::config::QueueConfig::from_env(),
         event_bus: {
             let bus = crate::events::create_shared_event_bus();
             update_manager.set_event_bus(bus.clone());

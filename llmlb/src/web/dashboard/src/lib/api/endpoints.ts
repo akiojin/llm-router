@@ -89,18 +89,6 @@ export interface DownloadTask {
 }
 
 /**
- * SPEC-e8e9326e: Model metadata from endpoint
- */
-export interface ModelMetadata {
-  model: string
-  context_length?: number
-  size_bytes?: number
-  quantization?: string
-  family?: string
-  parameter_size?: string
-}
-
-/**
  * SPEC-8c32349f: Endpoint today stats (daily summary for a single day)
  */
 export interface EndpointTodayStats {
@@ -141,55 +129,6 @@ export interface ModelTpsEntry {
   average_duration_ms: number | null
 }
 
-export interface TpsBenchmarkRequest {
-  model: string
-  api_kind?: TpsApiKind
-  total_requests?: number
-  concurrency?: number
-  max_tokens?: number
-  temperature?: number
-}
-
-export interface TpsBenchmarkEndpointSummary {
-  endpoint_id: string
-  endpoint_name: string
-  requests: number
-  successful_requests: number
-  measured_requests: number
-  success_rate: number
-  mean_tps: number | null
-  p50_tps: number | null
-  p95_tps: number | null
-}
-
-export interface TpsBenchmarkResult {
-  api_kind: TpsApiKind
-  source: TpsSource
-  total_requests: number
-  successful_requests: number
-  measured_requests: number
-  success_rate: number
-  mean_tps: number | null
-  p50_tps: number | null
-  p95_tps: number | null
-  per_endpoint: TpsBenchmarkEndpointSummary[]
-}
-
-export interface TpsBenchmarkRun {
-  run_id: string
-  status: 'running' | 'completed' | 'failed'
-  requested_at: string
-  completed_at: string | null
-  request: TpsBenchmarkRequest
-  result: TpsBenchmarkResult | null
-  error: string | null
-}
-
-export interface TpsBenchmarkAccepted {
-  run_id: string
-  status: 'running'
-}
-
 function extractAssistantDeltaText(parsed: {
   choices?: Array<{
     delta?: {
@@ -206,12 +145,6 @@ function extractAssistantDeltaText(parsed: {
 export const endpointsApi = {
   /** List endpoints for dashboard */
   list: () => fetchWithAuth<DashboardEndpoint[]>('/api/dashboard/endpoints'),
-
-  /** SPEC-e8e9326e: List endpoints by type */
-  listByType: (type: EndpointType) =>
-    fetchWithAuth<DashboardEndpoint[]>('/api/endpoints', {
-      params: { type },
-    }),
 
   /** Create endpoint */
   create: (data: {
@@ -297,12 +230,6 @@ export const endpointsApi = {
   getDownloadProgress: (id: string) =>
     fetchWithAuth<{ tasks: DownloadTask[] }>(
       `/api/endpoints/${id}/download/progress`
-    ),
-
-  /** SPEC-e8e9326e: Get model metadata */
-  getModelInfo: (id: string, model: string) =>
-    fetchWithAuth<ModelMetadata>(
-      `/api/endpoints/${id}/models/${encodeURIComponent(model)}/info`
     ),
 
   /** SPEC-8c32349f: Get today's request statistics for an endpoint */
@@ -391,15 +318,4 @@ export const endpointsApi = {
 
     return response.json()
   },
-}
-
-export const benchmarkApi = {
-  startTpsBenchmark: (request: TpsBenchmarkRequest) =>
-    fetchWithAuth<TpsBenchmarkAccepted>('/api/benchmarks/tps', {
-      method: 'POST',
-      body: JSON.stringify(request),
-    }),
-
-  getTpsBenchmark: (runId: string) =>
-    fetchWithAuth<TpsBenchmarkRun>(`/api/benchmarks/tps/${runId}`),
 }

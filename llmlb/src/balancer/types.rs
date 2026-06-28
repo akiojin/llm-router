@@ -12,7 +12,6 @@ use std::{
         atomic::{AtomicUsize, Ordering as AtomicOrdering},
         Arc,
     },
-    time::Duration as StdDuration,
 };
 use uuid::Uuid;
 
@@ -63,17 +62,6 @@ impl Drop for QueueWaiterGuard {
     fn drop(&mut self) {
         self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
     }
-}
-
-/// アドミッション制御の判断結果
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AdmissionDecision {
-    /// 即座に受け入れ
-    Accept,
-    /// 遅延付きで受け入れ
-    AcceptWithDelay(StdDuration),
-    /// リジェクト
-    Reject,
 }
 
 // SPEC-f8e3a1b7: Node依存のヘルパー関数は削除されました

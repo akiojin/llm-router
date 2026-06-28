@@ -25,9 +25,6 @@ pub mod registry;
 /// データベースアクセス
 pub mod db;
 
-/// メトリクス収集・管理
-pub mod metrics;
-
 /// モデル管理
 pub mod models;
 
@@ -114,8 +111,6 @@ pub struct AppState {
     pub jwt_secret: String,
     /// 共有HTTPクライアント（接続プーリング有効）
     pub http_client: reqwest::Client,
-    /// リクエスト待機キュー設定
-    pub queue_config: config::QueueConfig,
     /// ダッシュボードイベントバス
     pub event_bus: events::SharedEventBus,
     /// エンドポイントレジストリ

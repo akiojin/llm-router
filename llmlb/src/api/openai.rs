@@ -890,27 +890,19 @@ async fn proxy_openai_post(
     } else {
         None
     };
-    let queue_config = state.queue_config;
     let mut queued_wait_ms: Option<u128> = None;
 
     // FR-004: エンドポイント選択失敗時もリクエスト履歴に記録する
     let endpoint = match if let Some(required_api) = required_supported_api {
         select_available_endpoint_with_queue_for_model_and_api(
             state,
-            queue_config,
             &resolved_model,
             required_api,
             tps_api_kind,
         )
         .await
     } else {
-        select_available_endpoint_with_queue_for_model(
-            state,
-            queue_config,
-            &resolved_model,
-            tps_api_kind,
-        )
-        .await
+        select_available_endpoint_with_queue_for_model(state, &resolved_model, tps_api_kind).await
     } {
         Ok(QueueSelection::Ready {
             endpoint,

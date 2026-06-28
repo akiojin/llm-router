@@ -232,7 +232,6 @@ mod tests {
             db_pool: pool,
             jwt_secret: "test-secret".to_string(),
             http_client,
-            queue_config: crate::config::QueueConfig::from_env(),
             event_bus: crate::events::create_shared_event_bus(),
             endpoint_registry,
             inference_gate,

@@ -8,15 +8,6 @@ export interface ChatMessage {
   content: string | Array<unknown>
 }
 
-export interface ChatSession {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  model?: string
-  created_at: string
-  updated_at: string
-}
-
 export interface ChatCompletionRequest {
   model: string
   messages: ChatMessage[]
@@ -112,15 +103,5 @@ export const chatApi = {
       throw await createApiErrorFromResponse(response)
     }
     return response.json()
-  },
-
-  // Session management (local storage based for now)
-  getSessions: async (): Promise<ChatSession[]> => {
-    const sessions = localStorage.getItem('chat_sessions')
-    return sessions ? JSON.parse(sessions) : []
-  },
-
-  saveSessions: async (sessions: ChatSession[]): Promise<void> => {
-    localStorage.setItem('chat_sessions', JSON.stringify(sessions))
   },
 }

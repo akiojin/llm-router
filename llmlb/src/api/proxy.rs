@@ -11,7 +11,6 @@ use crate::common::{
 };
 use crate::token::StreamingTokenAccumulator;
 use crate::{
-    config::QueueConfig,
     types::endpoint::{Endpoint, SupportedAPI},
     AppState,
 };
@@ -35,7 +34,6 @@ pub(crate) enum QueueSelection {
 /// モデル対応のエンドポイントをTPS優先・キュー付きで選択
 pub(crate) async fn select_available_endpoint_with_queue_for_model(
     state: &AppState,
-    _queue_config: QueueConfig,
     model_id: &str,
     api_kind: Option<TpsApiKind>,
 ) -> Result<QueueSelection, LbError> {
@@ -61,7 +59,6 @@ pub(crate) async fn select_available_endpoint_with_queue_for_model(
 /// モデルと必須APIに対応するエンドポイントをTPS優先・キュー付きで選択
 pub(crate) async fn select_available_endpoint_with_queue_for_model_and_api(
     state: &AppState,
-    _queue_config: QueueConfig,
     model_id: &str,
     required_api: SupportedAPI,
     api_kind: Option<TpsApiKind>,

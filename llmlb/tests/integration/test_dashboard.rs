@@ -55,7 +55,6 @@ async fn build_test_app() -> (AppState, Router) {
         db_pool: db_pool.clone(),
         jwt_secret,
         http_client,
-        queue_config: llmlb::config::QueueConfig::from_env(),
         event_bus: llmlb::events::create_shared_event_bus(),
         endpoint_registry,
         inference_gate,

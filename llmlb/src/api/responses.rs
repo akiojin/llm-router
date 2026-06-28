@@ -139,29 +139,21 @@ pub async fn post_responses(
         }
     }
 
-    let queue_config = state.queue_config;
-
     // モデル対応エンドポイントをキュー付きで選択（モデル集合内で分散）
-    let (endpoint, queued_wait_ms) = match select_available_endpoint_with_queue_for_model(
-        &state,
-        queue_config,
-        &model,
-        tps_api_kind,
-    )
-    .await
-    {
-        Ok(QueueSelection::Ready {
-            endpoint,
-            queued_wait_ms,
-        }) => (*endpoint, queued_wait_ms),
-        Err(e) => {
-            if matches!(e, LbError::NoCapableEndpoints(_)) {
-                let message = format!("No available endpoints support model: {}", model);
-                return Ok(model_unavailable_response(message));
+    let (endpoint, queued_wait_ms) =
+        match select_available_endpoint_with_queue_for_model(&state, &model, tps_api_kind).await {
+            Ok(QueueSelection::Ready {
+                endpoint,
+                queued_wait_ms,
+            }) => (*endpoint, queued_wait_ms),
+            Err(e) => {
+                if matches!(e, LbError::NoCapableEndpoints(_)) {
+                    let message = format!("No available endpoints support model: {}", model);
+                    return Ok(model_unavailable_response(message));
+                }
+                return Err(AppError::from(e));
             }
-            return Err(AppError::from(e));
-        }
-    };
+        };
 
     info!(
         endpoint_id = %endpoint.id,

@@ -21,14 +21,8 @@ struct SlotsResponse {
 }
 
 /// Individual slot information
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct Slot {
-    /// Slot ID
-    id: u32,
-    /// Whether slot is active
-    #[serde(default)]
-    active: bool,
     /// Context size for this slot
     n_ctx: u32,
 }

@@ -35,8 +35,6 @@ interface UseWebSocketOptions {
   onMessage?: (event: DashboardEvent) => void
   onConnect?: () => void
   onDisconnect?: () => void
-  /** @deprecated Use exponential backoff instead. Kept for interface compatibility. */
-  reconnectInterval?: number
   enabled?: boolean
 }
 

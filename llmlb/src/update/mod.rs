@@ -442,20 +442,6 @@ impl UpdateManager {
         self.inner.state.read().await.clone()
     }
 
-    /// Force an update check now (ignores TTL cache).
-    ///
-    /// Intended for the dashboard "Check for updates" button.
-    /// **Deprecated**: Use [`check_only`] + [`download_background`] instead.
-    pub async fn check_now(&self) -> Result<UpdateState> {
-        match self.check_and_maybe_download(true).await {
-            Ok(()) => Ok(self.state().await),
-            Err(err) => {
-                self.record_check_failure(err.to_string()).await;
-                Err(err)
-            }
-        }
-    }
-
     /// Check GitHub for a newer release (synchronous, no download).
     ///
     /// This only queries the GitHub Releases API (timeout 5 s) and updates the

@@ -71,7 +71,6 @@ async fn build_app() -> (String, Router) {
         db_pool,
         jwt_secret: jwt_secret.clone(),
         http_client,
-        queue_config: llmlb::config::QueueConfig::from_env(),
         event_bus: llmlb::events::create_shared_event_bus(),
         endpoint_registry,
         inference_gate,
