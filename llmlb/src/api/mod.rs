@@ -334,6 +334,11 @@ pub fn create_app(state: AppState) -> Router {
             .layer(middleware::from_fn(
                 crate::auth::middleware::require_password_changed_middleware,
             ))
+            // 状態変更系（PUT /dashboard/settings 等）を他の mutation ルートと同様に
+            // Cookie 認証時の CSRF から保護する（ヘッダ認証はミドルウェア側で対象外）
+            .layer(middleware::from_fn(
+                crate::auth::middleware::csrf_protect_middleware,
+            ))
             .layer(middleware::from_fn_with_state(
                 state.clone(),
                 crate::auth::middleware::require_jwt_auth_middleware,

@@ -14,6 +14,17 @@ use axum::{
 
 use super::error::AppError;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
+
+/// タイミング攻撃緩和用のダミー bcrypt ハッシュ。
+///
+/// 存在しないユーザー名でログイン試行された場合でも、実在ユーザーと同等の
+/// bcrypt 検証コストを発生させることで、応答時間差から有効なユーザー名を
+/// 列挙されるのを防ぐ。実際のパスワードと同じコスト係数で一度だけ生成する。
+static DUMMY_PASSWORD_HASH: LazyLock<String> = LazyLock::new(|| {
+    crate::auth::password::hash_password("dummy_password_for_timing_mitigation")
+        .expect("failed to generate dummy password hash for timing mitigation")
+});
 
 /// ログインリクエスト
 #[derive(Debug, Deserialize)]
@@ -135,13 +146,24 @@ pub async fn login(
         .map_err(|e| {
             tracing::error!("Failed to find user: {}", e);
             AppError(LbError::Database(format!("Failed to find user: {}", e))).into_response()
-        })?
-        .ok_or_else(|| {
-            AppError(LbError::Authentication(
+        })?;
+
+    // タイミング攻撃緩和: ユーザーが存在しない場合でもダミーハッシュに対して
+    // bcrypt 検証を実行し、応答時間を実在ユーザーと均一化してから401を返す。
+    // これにより応答時間差から有効なユーザー名を列挙されるのを防ぐ。結果は破棄する。
+    let user = match user {
+        Some(user) => user,
+        None => {
+            let _ = crate::auth::password::verify_password(
+                &request.password,
+                DUMMY_PASSWORD_HASH.as_str(),
+            );
+            return Err(AppError(LbError::Authentication(
                 "Invalid username or password".to_string(),
             ))
-            .into_response()
-        })?;
+            .into_response());
+        }
+    };
 
     // パスワードを検証
     let is_valid = crate::auth::password::verify_password(&request.password, &user.password_hash)
