@@ -436,7 +436,6 @@ async fn proxy_local_anthropic_messages(
         &endpoint,
         "/v1/chat/completions",
         body_bytes,
-        true,
     )
     .await
     {

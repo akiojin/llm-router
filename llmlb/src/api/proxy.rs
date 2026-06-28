@@ -441,7 +441,6 @@ pub(crate) async fn forward_to_endpoint(
     endpoint: &Endpoint,
     path: &str,
     body: Vec<u8>,
-    stream: bool,
 ) -> Result<reqwest::Response, LbError> {
     let url = format!("{}{}", endpoint.base_url.trim_end_matches('/'), path);
 
@@ -458,7 +457,9 @@ pub(crate) async fn forward_to_endpoint(
         request_builder = request_builder.bearer_auth(api_key);
     }
 
-    let response = request_builder.send().await.map_err(|e| {
+    // 上流のレスポンスは非2xxでもそのまま返し、ステータス処理は呼び出し側に委ねる。
+    // （全呼び出し元が上流のステータス/本文を保持して扱うため、ここでの非2xx→Err化は不要）
+    request_builder.send().await.map_err(|e| {
         tracing::error!(
             "Failed to forward request to endpoint {}: {}",
             endpoint.name,
@@ -471,36 +472,7 @@ pub(crate) async fn forward_to_endpoint(
         } else {
             LbError::Http(classified.record_message)
         }
-    })?;
-
-    // エラーステータスをチェック
-    let status = response.status();
-    if !status.is_success() && !stream {
-        // 非ストリーミングの場合はエラー内容を取得してログ
-        let error_body = match response.text().await {
-            Ok(body) => body,
-            Err(e) => {
-                tracing::debug!(
-                    "Failed to read error body from endpoint {}: {}",
-                    endpoint.name,
-                    e
-                );
-                String::new()
-            }
-        };
-        tracing::warn!(
-            "Endpoint {} returned error {}: {}",
-            endpoint.name,
-            status,
-            error_body
-        );
-        return Err(LbError::Http(format!(
-            "Endpoint returned {}: {}",
-            status, error_body
-        )));
-    }
-
-    Ok(response)
+    })
 }
 
 // NOTE: テストはNodeRegistry廃止に伴い削除されました。
@@ -714,12 +686,6 @@ mod tests {
     fn lb_error_http_format() {
         let err = LbError::Http("Endpoint request failed: connection refused".to_string());
         assert!(err.to_string().contains("Endpoint request failed"));
-    }
-
-    #[test]
-    fn lb_error_http_endpoint_returned_error() {
-        let err = LbError::Http("Endpoint returned 500: Internal Server Error".to_string());
-        assert!(err.to_string().contains("500"));
     }
 
     // --- forward_streaming_response content-type behavior ---

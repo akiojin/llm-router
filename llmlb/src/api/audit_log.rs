@@ -51,6 +51,19 @@ const MAX_AUDIT_PAGE: i64 = 1_000_000;
 /// アーカイブ統合検索時に一度にメモリ展開する最大件数
 const MAX_AUDIT_FETCH_LIMIT: i64 = 10_000;
 
+/// アーカイブ統合検索の総件数を「ページングで実際に到達可能な最大件数」に丸める。
+///
+/// クロスDBマージでは各ソースの先頭 `MAX_AUDIT_FETCH_LIMIT` 件のみを取得して
+/// マージするため、グローバルに正しい並びは先頭 `MAX_AUDIT_FETCH_LIMIT` 件まで。
+/// それを超える深ページは items が空になるのに total が全件を返すと、ページングが
+/// 取得不能なページを提示してしまう。total を fetch 窓に丸めて整合させる
+/// （完全対応は ATTACH-UNION か cursor pagination による再設計が必要）。
+fn clamp_archive_total(main_total: i64, archive_total: i64) -> i64 {
+    main_total
+        .saturating_add(archive_total)
+        .min(MAX_AUDIT_FETCH_LIMIT)
+}
+
 impl From<AuditLogQueryParams> for AuditLogFilter {
     fn from(params: AuditLogQueryParams) -> Self {
         Self {
@@ -214,7 +227,7 @@ async fn query_with_archive(
     let offset = page.saturating_sub(1).saturating_mul(per_page) as usize;
     let limit = per_page as usize;
     let paged_items = all_items.into_iter().skip(offset).take(limit).collect();
-    let total = main_total + archive_total;
+    let total = clamp_archive_total(main_total, archive_total);
 
     Ok((paged_items, total))
 }
@@ -277,6 +290,23 @@ mod tests {
 
     async fn create_test_pool() -> sqlx::SqlitePool {
         crate::db::test_utils::test_db_pool().await
+    }
+
+    #[test]
+    fn clamp_archive_total_caps_at_fetch_limit() {
+        // fetch 窓を超える深い総数は到達可能な最大件数(MAX_AUDIT_FETCH_LIMIT)に丸める
+        assert_eq!(clamp_archive_total(8000, 5000), MAX_AUDIT_FETCH_LIMIT);
+        assert_eq!(
+            clamp_archive_total(MAX_AUDIT_FETCH_LIMIT, 1),
+            MAX_AUDIT_FETCH_LIMIT
+        );
+    }
+
+    #[test]
+    fn clamp_archive_total_preserves_small_totals() {
+        // 窓に収まる総数はそのまま返し、ページング整合を壊さない
+        assert_eq!(clamp_archive_total(100, 50), 150);
+        assert_eq!(clamp_archive_total(0, 0), 0);
     }
 
     fn create_test_entry(

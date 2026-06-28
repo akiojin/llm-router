@@ -197,11 +197,10 @@ pub async fn post_responses(
     // エンドポイントにリクエストを転送
     //
     // NOTE: Responses APIはレスポンス本文（ステータス含む）をそのまま返したい。
-    // forward_to_endpoint() は stream=false の場合に非2xxをErr化するため、
-    // ここでは常に "stream=true 相当"（= エラーもレスポンスとして受け取る）で呼び出す。
+    // forward_to_endpoint() は上流の非2xxもそのまま返すため、エラー本文も
+    // レスポンスとして受け取り、ステータスを保持してクライアントへ転送する。
     let response =
-        match forward_to_endpoint(&state.http_client, &endpoint, "/v1/responses", body, true).await
-        {
+        match forward_to_endpoint(&state.http_client, &endpoint, "/v1/responses", body).await {
             Ok(response) => response,
             Err(e) => {
                 let duration = start.elapsed();
