@@ -230,21 +230,30 @@ pub async fn post_responses(
 
     // ストリーミングの場合はそのままパススルー
     if stream {
-        let outcome = if response_status.is_success() {
-            RequestOutcome::Success
-        } else {
-            RequestOutcome::Error
-        };
         let succeeded = response_status.is_success();
-        request_lease
-            .complete(outcome, duration)
-            .await
-            .map_err(AppError::from)?;
 
-        // SPEC-f8e3a1b7: 成功時に推論レイテンシを更新
-        if succeeded {
-            update_inference_latency(&state.endpoint_registry, endpoint.id, duration);
+        let mut axum_response = if succeeded {
+            // lease と推論レイテンシ更新は forwarder に移譲し、ストリーム完走時に
+            // 実時間で確定する（ヘッダー受信時点での早期解放を避ける: lease-ttfb）。
+            forward_streaming_response_with_tps_tracking(
+                response,
+                endpoint.id,
+                model.clone(),
+                tps_api_kind,
+                endpoint.endpoint_type,
+                start,
+                state.endpoint_registry.clone(),
+                state.load_manager.clone(),
+                state.event_bus.clone(),
+                Some(request_lease),
+            )
+            .map_err(AppError::from)?
         } else {
+            // 失敗時はトークンストリームが無いため、ここで lease を完了し統計を記録する
+            request_lease
+                .complete(RequestOutcome::Error, duration)
+                .await
+                .map_err(AppError::from)?;
             record_endpoint_request_stats(
                 state.endpoint_registry.clone(),
                 endpoint.id,
@@ -257,22 +266,6 @@ pub async fn post_responses(
                 state.load_manager.clone(),
                 state.event_bus.clone(),
             );
-        }
-
-        let mut axum_response = if succeeded {
-            forward_streaming_response_with_tps_tracking(
-                response,
-                endpoint.id,
-                model.clone(),
-                tps_api_kind,
-                endpoint.endpoint_type,
-                start,
-                state.endpoint_registry.clone(),
-                state.load_manager.clone(),
-                state.event_bus.clone(),
-            )
-            .map_err(AppError::from)?
-        } else {
             forward_streaming_response(response).map_err(AppError::from)?
         };
         if let Some(wait_ms) = queued_wait_ms {

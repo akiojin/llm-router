@@ -150,6 +150,7 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
     endpoint_registry: crate::registry::endpoints::EndpointRegistry,
     load_manager: crate::balancer::LoadManager,
     event_bus: crate::events::SharedEventBus,
+    request_lease: Option<crate::balancer::RequestLease>,
 ) -> Result<Response, LbError> {
     struct TpsTrackingState {
         upstream: Pin<Box<dyn Stream<Item = Result<axum::body::Bytes, reqwest::Error>> + Send>>,
@@ -164,6 +165,10 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
         load_manager: crate::balancer::LoadManager,
         event_bus: crate::events::SharedEventBus,
         stats_recorded: bool,
+        // ストリーム完走時に実時間で完了する RequestLease。
+        // ヘッダー受信時点で早期解放すると、ストリーミング中の assigned_active が
+        // 過小になり、レイテンシも過小評価され、idle 通知も早まる（lease-ttfb）。
+        request_lease: Option<crate::balancer::RequestLease>,
     }
 
     impl TpsTrackingState {
@@ -204,6 +209,38 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
                 self.event_bus.clone(),
             );
         }
+
+        /// ストリーム終端で RequestLease を実時間で完了する。
+        ///
+        /// 成功時はストリーム完走までの実時間で推論レイテンシも更新する
+        /// （ヘッダー受信時点の過小なレイテンシではなく）。
+        /// 明示的に完了しなかった場合（クライアント切断等）は lease の Drop が
+        /// Error 扱いで自動完了するため、カウンタ残留は起きない。
+        async fn finish_lease(&mut self, outcome: crate::balancer::RequestOutcome) {
+            let full = self.request_started_at.elapsed();
+            if matches!(outcome, crate::balancer::RequestOutcome::Success) {
+                if let Err(err) = self
+                    .endpoint_registry
+                    .update_inference_latency(self.endpoint_id, full.as_millis() as f64)
+                    .await
+                {
+                    tracing::debug!(
+                        endpoint_id = %self.endpoint_id,
+                        error = %err,
+                        "Failed to update inference latency at stream end"
+                    );
+                }
+            }
+            if let Some(lease) = self.request_lease.take() {
+                if let Err(err) = lease.complete(outcome, full).await {
+                    tracing::warn!(
+                        endpoint_id = %self.endpoint_id,
+                        error = %err,
+                        "Failed to complete streaming request lease"
+                    );
+                }
+            }
+        }
     }
 
     impl Drop for TpsTrackingState {
@@ -242,6 +279,7 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
         load_manager,
         event_bus,
         stats_recorded: false,
+        request_lease,
     };
 
     let tracked_stream = futures::stream::try_unfold(state, |mut state| async move {
@@ -253,11 +291,17 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
             }
             Some(Err(err)) => {
                 state.record_stats_once(false, 0, 0);
+                state
+                    .finish_lease(crate::balancer::RequestOutcome::Error)
+                    .await;
                 Err(io::Error::other(err))
             }
             None => {
                 let (output_tokens, duration_ms) = state.finalize_output_tokens_and_duration();
                 state.record_stats_once(true, output_tokens, duration_ms);
+                state
+                    .finish_lease(crate::balancer::RequestOutcome::Success)
+                    .await;
                 Ok(None)
             }
         }
@@ -791,6 +835,93 @@ mod tests {
 
         let axum_response = forward_streaming_response(reqwest_response).unwrap();
         assert_eq!(axum_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    // --- lease-ttfb: ストリーミング forwarder は配信完了まで lease を保持する ---
+
+    #[tokio::test]
+    async fn streaming_forwarder_holds_lease_until_stream_consumed() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("create test db");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        let registry = crate::registry::endpoints::EndpointRegistry::new(pool)
+            .await
+            .expect("create registry");
+        let endpoint = Endpoint::new(
+            "lease-stream-ep".to_string(),
+            "http://localhost:1".to_string(),
+            crate::types::endpoint::EndpointType::OpenaiCompatible,
+        );
+        let endpoint_id = endpoint.id;
+        registry.add(endpoint).await.expect("add endpoint");
+        let load_manager = crate::balancer::LoadManager::new(Arc::new(registry.clone()));
+        let event_bus = crate::events::create_shared_event_bus();
+
+        let lease = load_manager
+            .begin_request(endpoint_id)
+            .await
+            .expect("begin request");
+        assert_eq!(
+            load_manager
+                .snapshot(endpoint_id)
+                .await
+                .unwrap()
+                .active_requests,
+            1,
+            "begin_request must mark one active request"
+        );
+
+        let response = reqwest::Response::from(
+            axum::http::Response::builder()
+                .status(200)
+                .header("content-type", "text/event-stream")
+                .body("data: {\"choices\":[]}\n\ndata: [DONE]\n\n")
+                .unwrap(),
+        );
+
+        let axum_response = forward_streaming_response_with_tps_tracking(
+            response,
+            endpoint_id,
+            "m".to_string(),
+            None,
+            crate::types::endpoint::EndpointType::OpenaiCompatible,
+            Instant::now(),
+            registry,
+            load_manager.clone(),
+            event_bus,
+            Some(lease),
+        )
+        .expect("forward streaming");
+
+        // ストリーム未消費の段階では lease は保持されたまま（早期解放しない）
+        assert_eq!(
+            load_manager
+                .snapshot(endpoint_id)
+                .await
+                .unwrap()
+                .active_requests,
+            1,
+            "lease must be held until the stream is consumed"
+        );
+
+        // ボディを完全に消費するとストリーム終端で lease が完了する
+        let _ = axum::body::to_bytes(axum_response.into_body(), usize::MAX)
+            .await
+            .expect("consume body");
+
+        assert_eq!(
+            load_manager
+                .snapshot(endpoint_id)
+                .await
+                .unwrap()
+                .active_requests,
+            0,
+            "lease must be completed after the stream is fully consumed"
+        );
     }
 
     // --- Timeout configuration in forward_to_endpoint ---

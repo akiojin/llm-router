@@ -1111,32 +1111,6 @@ async fn proxy_openai_post(
     if stream {
         let duration = start.elapsed();
         let succeeded = response.status().is_success();
-        let outcome = if succeeded {
-            RequestOutcome::Success
-        } else {
-            RequestOutcome::Error
-        };
-        request_lease
-            .complete(outcome, duration)
-            .await
-            .map_err(AppError::from)?;
-        if succeeded {
-            // SPEC-f8e3a1b7: 成功時に推論レイテンシを更新
-            update_inference_latency(&state.endpoint_registry, endpoint_id, duration);
-        } else {
-            record_endpoint_request_stats(
-                state.endpoint_registry.clone(),
-                endpoint_id,
-                model.clone(),
-                false,
-                0,
-                0,
-                tps_api_kind,
-                endpoint_type,
-                state.load_manager.clone(),
-                state.event_bus.clone(),
-            );
-        }
 
         let mut axum_response = if succeeded {
             {
@@ -1154,6 +1128,8 @@ async fn proxy_openai_post(
                 );
                 save_request_record(state.request_history.clone(), record);
             }
+            // lease と推論レイテンシ更新は forwarder に移譲し、ストリーム完走時に
+            // 実時間で確定する（ヘッダー受信時点での早期解放を避ける: lease-ttfb）。
             forward_streaming_response_with_tps_tracking(
                 response,
                 endpoint_id,
@@ -1164,9 +1140,28 @@ async fn proxy_openai_post(
                 state.endpoint_registry.clone(),
                 state.load_manager.clone(),
                 state.event_bus.clone(),
+                Some(request_lease),
             )
             .map_err(AppError::from)?
         } else {
+            // 失敗時はトークンストリームが無いため、ここで lease を完了し統計を記録する
+            request_lease
+                .complete(RequestOutcome::Error, duration)
+                .await
+                .map_err(AppError::from)?;
+            record_endpoint_request_stats(
+                state.endpoint_registry.clone(),
+                endpoint_id,
+                model.clone(),
+                false,
+                0,
+                0,
+                tps_api_kind,
+                endpoint_type,
+                state.load_manager.clone(),
+                state.event_bus.clone(),
+            );
+
             let status = response.status();
             let headers = response.headers().clone();
             let body_bytes = response.bytes().await.unwrap_or_default();

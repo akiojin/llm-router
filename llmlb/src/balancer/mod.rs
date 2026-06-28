@@ -1291,6 +1291,54 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // 選択(Online)→割当(begin_request)の間にエンドポイントが Offline/Error へ
+    // 遷移する TOCTOU を塞ぐ。begin_request は dead 状態への割当を拒否する。
+    #[tokio::test]
+    async fn begin_request_offline_endpoint_returns_error() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+        load_manager
+            .endpoint_registry()
+            .update_status(endpoint_id, EndpointStatus::Offline, None, Some("down"))
+            .await
+            .expect("update status to offline");
+        let result = load_manager.begin_request(endpoint_id).await;
+        assert!(
+            result.is_err(),
+            "begin_request must reject offline endpoints (TOCTOU guard)"
+        );
+    }
+
+    #[tokio::test]
+    async fn begin_request_error_endpoint_returns_error() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+        load_manager
+            .endpoint_registry()
+            .update_status(endpoint_id, EndpointStatus::Error, None, Some("boom"))
+            .await
+            .expect("update status to error");
+        let result = load_manager.begin_request(endpoint_id).await;
+        assert!(
+            result.is_err(),
+            "begin_request must reject error-state endpoints (TOCTOU guard)"
+        );
+    }
+
+    // Pending は従来どおり許可する（begin_request は歴史的に状態を問わなかった。
+    // 本番では選択が Online のみ返すため、Pending への直接割当は回帰させない）。
+    #[tokio::test]
+    async fn begin_request_pending_endpoint_is_allowed() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+        // setup の既定状態は Pending
+        let result = load_manager.begin_request(endpoint_id).await;
+        assert!(
+            result.is_ok(),
+            "begin_request must still allow pending endpoints"
+        );
+    }
+
     #[tokio::test]
     async fn finish_request_unknown_endpoint_returns_error() {
         let _lock = TEST_LOCK.lock().await;
@@ -2214,9 +2262,18 @@ impl LoadManager {
     }
 
     /// リクエスト開始を記録
+    ///
+    /// 選択(find_by_model は Online のみ返す)から本メソッド呼び出しまでの間に
+    /// エンドポイントが Offline/Error へ遷移する TOCTOU を塞ぐため、dead 状態
+    /// (Offline/Error)への割当を拒否する。Pending は従来どおり許可する。
     pub async fn begin_request(&self, endpoint_id: Uuid) -> RouterResult<RequestLease> {
-        if self.endpoint_registry.get(endpoint_id).await.is_none() {
+        let Some(endpoint) = self.endpoint_registry.get(endpoint_id).await else {
             return Err(LbError::EndpointNotFound(endpoint_id));
+        };
+        if endpoint.status == crate::types::endpoint::EndpointStatus::Offline
+            || endpoint.status == crate::types::endpoint::EndpointStatus::Error
+        {
+            return Err(LbError::EndpointOffline(endpoint_id));
         }
 
         let mut state = self.state.write().await;
