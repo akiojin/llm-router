@@ -100,8 +100,9 @@ use crate::{
         models::{list_registered_models, load_registered_model, LifecycleStatus},
         openai_util::{
             classify_upstream_request_error, model_unavailable_response, openai_error_response,
-            openai_error_response_with_type, probe_ollama_model_loaded,
+            openai_error_response_with_type, probe_ollama_model_loaded, read_capped_body,
             sanitize_openai_payload_for_history, upstream_error_message_from_bytes,
+            UPSTREAM_ERROR_SUMMARY_MAX_BYTES,
         },
         proxy::{
             forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
@@ -979,22 +980,18 @@ async fn proxy_openai_post(
         &endpoint_models,
     );
 
-    let upstream_model = state
-        .endpoint_registry
-        .list_models(endpoint_id)
-        .await
-        .ok()
-        .and_then(|endpoint_models| {
-            endpoint_models
-                .into_iter()
-                .find(|endpoint_model| {
-                    endpoint_model.model_id == model
-                        || endpoint_model.model_id == resolved_model
-                        || endpoint_model.canonical_name.as_deref() == Some(model.as_str())
-                        || endpoint_model.canonical_name.as_deref() == Some(resolved_model.as_str())
-                })
-                .map(|endpoint_model| endpoint_model.model_id)
+    // 上の list_models 結果を再利用する（1リクエストあたりの list_models 呼び出しを
+    // 2回から1回に削減）。取得失敗時は endpoint_models が空 Vec のため find は None を
+    // 返し、従来どおり resolve_engine_name のフォールバックに流れる。
+    let upstream_model = endpoint_models
+        .iter()
+        .find(|endpoint_model| {
+            endpoint_model.model_id == model
+                || endpoint_model.model_id == resolved_model
+                || endpoint_model.canonical_name.as_deref() == Some(model.as_str())
+                || endpoint_model.canonical_name.as_deref() == Some(resolved_model.as_str())
         })
+        .map(|endpoint_model| endpoint_model.model_id.clone())
         .or_else(|| {
             crate::models::mapping::resolve_engine_name(&model, &endpoint_type).map(str::to_string)
         })
@@ -1247,7 +1244,9 @@ async fn proxy_openai_post(
         let status = response.status();
         // OpenAI互換経路では upstream 非2xx は 502 に正規化して返す
         let status_code = StatusCode::BAD_GATEWAY;
-        let body_bytes = response.bytes().await.unwrap_or_default();
+        // ボディはエラー要約にしか使わず、クライアントには新規 JSON を返すため、
+        // 巨大ボディによるメモリ枯渇を避けて先頭部分のみ読み取る。
+        let body_bytes = read_capped_body(response, UPSTREAM_ERROR_SUMMARY_MAX_BYTES).await;
         let message = upstream_error_message_from_bytes(status, &body_bytes);
 
         {

@@ -153,6 +153,39 @@ pub fn upstream_error_message_from_bytes(status: StatusCode, body_bytes: &[u8]) 
     }
 }
 
+/// 上流エラー要約のために読み取るボディの最大バイト数（4KB）。
+///
+/// エラーメッセージの要約には先頭の数 KB で十分であり、悪意/誤動作の上流が
+/// 巨大なエラーボディを返してもメモリを枯渇させないための上限。
+pub const UPSTREAM_ERROR_SUMMARY_MAX_BYTES: usize = 4096;
+
+/// レスポンスボディを先頭 `max_bytes` までに制限して読み取る。
+///
+/// `response.bytes()` は全文をメモリに展開するため、エラー要約のように
+/// 先頭部分しか必要としない用途では本関数で読み取り量を上限化する。
+/// 残りのチャンクは読まずに破棄する。読み取り中のエラーはそこまでの
+/// 内容を返す（要約用途では致命的でない）。
+pub async fn read_capped_body(response: reqwest::Response, max_bytes: usize) -> Vec<u8> {
+    use futures::StreamExt;
+
+    let mut stream = response.bytes_stream();
+    let mut buf: Vec<u8> = Vec::new();
+    while buf.len() < max_bytes {
+        match stream.next().await {
+            Some(Ok(chunk)) => {
+                let remaining = max_bytes - buf.len();
+                if chunk.len() > remaining {
+                    buf.extend_from_slice(&chunk[..remaining]);
+                    break;
+                }
+                buf.extend_from_slice(&chunk);
+            }
+            Some(Err(_)) | None => break,
+        }
+    }
+    buf
+}
+
 fn is_tls_error(error: &reqwest::Error) -> bool {
     error_chain_contains(error, &["certificate", "cert", "tls", "ssl", "handshake"])
 }
