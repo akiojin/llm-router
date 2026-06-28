@@ -92,6 +92,9 @@ async fn initialize_inner(
 
     // HTTPクライアント（接続プーリング有効）を作成
     let http_client = reqwest::Client::builder()
+        // 接続確立のタイムアウト（応答しないエンドポイントで無期限ハングするのを防ぐ）。
+        // ストリーミングを壊さないよう全体のリクエストタイムアウトは設けない。
+        .connect_timeout(std::time::Duration::from_secs(10))
         .pool_max_idle_per_host(32)
         .pool_idle_timeout(std::time::Duration::from_secs(60))
         .tcp_keepalive(std::time::Duration::from_secs(30))

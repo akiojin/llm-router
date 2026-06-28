@@ -2,7 +2,7 @@
 //!
 //! 環境変数または対話式で管理者を作成
 
-use crate::auth::password::hash_password;
+use crate::auth::password::{hash_password, validate_password};
 use crate::common::auth::UserRole;
 use crate::common::error::LbError;
 use crate::config::get_env_with_fallback;
@@ -35,6 +35,9 @@ pub async fn create_admin_from_env(pool: &sqlx::SqlitePool) -> Result<Option<Str
     // ADMIN_USERNAMEが設定されていなければデフォルト値を使用
     let username = get_env_with_fallback("LLMLB_ADMIN_USERNAME", "ADMIN_USERNAME")
         .unwrap_or_else(|| "admin".to_string());
+
+    // パスワード要件を検証（弱い管理者パスワードでの起動を防ぐ）
+    validate_password(&password)?;
 
     // パスワードをハッシュ化
     let password_hash = hash_password(&password)?;
@@ -90,6 +93,9 @@ pub async fn create_admin_interactive(pool: &sqlx::SqlitePool) -> Result<String,
     if password.is_empty() {
         return Err(LbError::Internal("Password cannot be empty".to_string()));
     }
+
+    // パスワード要件を検証（8文字以上・大文字・数字）
+    validate_password(password)?;
 
     // パスワードをハッシュ化
     let password_hash = hash_password(password)?;
@@ -244,7 +250,7 @@ mod tests {
 
         // 環境変数を設定
         std::env::set_var("ADMIN_USERNAME", "testadmin");
-        std::env::set_var("ADMIN_PASSWORD", "testpass123");
+        std::env::set_var("ADMIN_PASSWORD", "Testpass123");
 
         let result = create_admin_from_env(&pool).await;
         assert!(result.is_ok());
@@ -282,7 +288,7 @@ mod tests {
 
         // ADMIN_USERNAMEを削除してデフォルト値を使用
         std::env::remove_var("ADMIN_USERNAME");
-        std::env::set_var("ADMIN_PASSWORD", "testpass123");
+        std::env::set_var("ADMIN_PASSWORD", "Testpass123");
 
         let result = create_admin_from_env(&pool).await;
         assert!(result.is_ok());
@@ -303,7 +309,7 @@ mod tests {
 
         // 環境変数を設定
         std::env::set_var("ADMIN_USERNAME", "firstadmin");
-        std::env::set_var("ADMIN_PASSWORD", "firstpass123");
+        std::env::set_var("ADMIN_PASSWORD", "Firstpass123");
 
         let result = ensure_admin_exists(&pool).await;
         assert!(result.is_ok());
