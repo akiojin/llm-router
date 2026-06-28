@@ -38,6 +38,12 @@ use uuid::Uuid;
 const UNSPECIFIED_IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 const ANTHROPIC_CLOUD_ENDPOINT_ID: &str = "00000000-0000-0000-0000-00000000c003";
 
+/// 非ストリーミングの Anthropic クラウド転送に適用する全体タイムアウト（秒）。
+///
+/// 共有 http_client には全体タイムアウトが無いため、応答しないクラウドで
+/// 無期限ハングするのを防ぐ。ストリーミング経路にはストリームが途中で切れるため付与しない。
+const ANTHROPIC_CLOUD_TIMEOUT_SECS: u64 = 300;
+
 #[derive(Debug)]
 struct ConvertedAnthropicRequest {
     openai_payload: Value,
@@ -192,6 +198,12 @@ async fn proxy_anthropic_cloud_messages(
         .json(&upstream_body);
     if let Some(beta) = anthropic_beta {
         builder = builder.header("anthropic-beta", beta);
+    }
+    // 非ストリーミングは有界レスポンスのため全体タイムアウトを付与する。
+    // ストリーミングは connect_timeout（共有 client）のみで担保し、
+    // 全体タイムアウトでストリームが途中で切れるのを避ける。
+    if !stream {
+        builder = builder.timeout(std::time::Duration::from_secs(ANTHROPIC_CLOUD_TIMEOUT_SECS));
     }
 
     let upstream = match builder.send().await {
@@ -1171,6 +1183,37 @@ impl AnthropicStreamTracker {
             self.load_manager.clone(),
             self.event_bus.clone(),
         );
+    }
+}
+
+impl Drop for AnthropicStreamTracker {
+    /// クライアント切断などで try_unfold が完走せず drop された場合のフォールバック。
+    /// stats_recorded が false のまま破棄されると統計が漏れるため、ここで記録する。
+    /// （proxy.rs の TpsTrackingState::drop を踏襲）
+    fn drop(&mut self) {
+        if self.stats_recorded {
+            return;
+        }
+
+        // 未処理の行バッファをトークン集計へ反映してから確定する。
+        if !self.upstream_line_buffer.is_empty() {
+            let pending = std::mem::take(&mut self.upstream_line_buffer);
+            self.accumulator
+                .process_chunk(pending.trim_end_matches('\r'));
+        }
+        let usage = self.accumulator.finalize();
+
+        // record_endpoint_request_stats は内部で tokio::spawn するため、ランタイム外で
+        // drop されると panic しうる。Handle の存在を確認してから記録する。
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.record_stats_once(true, usage);
+        } else {
+            tracing::warn!(
+                endpoint_id = %self.endpoint_id,
+                model_id = %self.model_id,
+                "Anthropic streaming tracker dropped without runtime; skipping stats fallback"
+            );
+        }
     }
 }
 

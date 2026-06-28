@@ -153,6 +153,15 @@ impl AudioBackend {
             .unwrap_or("127.0.0.1");
         host.parse::<IpAddr>().unwrap_or(LOCALHOST)
     }
+
+    /// 上流転送リクエストの全体タイムアウト
+    ///
+    /// 共有 http_client には全体タイムアウトが無いため、応答しないエンドポイントで
+    /// 無期限ハングするのを防ぐ。音声認識/合成は単一の有界レスポンス（トークン
+    /// ストリームではない）のため全体タイムアウトを付与しても問題ない。
+    fn inference_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.0.inference_timeout_secs as u64)
+    }
 }
 
 /// 音声認識対応バックエンドを選択
@@ -331,7 +340,13 @@ pub async fn transcriptions(
         form = form.text("response_format", fmt);
     }
 
-    let response = match client.post(&url).multipart(form).send().await {
+    let response = match client
+        .post(&url)
+        .multipart(form)
+        .timeout(backend.inference_timeout())
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             return openai_error(
@@ -432,7 +447,13 @@ pub async fn speech(
     let client = &state.http_client;
     let url = backend.url("/v1/audio/speech");
 
-    let response = match client.post(&url).json(&payload).send().await {
+    let response = match client
+        .post(&url)
+        .json(&payload)
+        .timeout(backend.inference_timeout())
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             return openai_error(
