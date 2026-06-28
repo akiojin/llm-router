@@ -799,9 +799,14 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_audit_logs_requires_admin_role() {
         let state = test_state().await;
-        let viewer_token =
-            crate::auth::jwt::create_jwt("viewer-user", UserRole::Viewer, &state.jwt_secret, false)
-                .expect("create viewer jwt");
+        let viewer_token = crate::auth::jwt::create_jwt(
+            "viewer-user",
+            UserRole::Viewer,
+            &state.jwt_secret,
+            false,
+            0,
+        )
+        .expect("create viewer jwt");
         let mut app = create_app(state);
 
         let response = app
@@ -887,9 +892,14 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_audit_logs_allows_admin_role() {
         let state = test_state().await;
-        let admin_token =
-            crate::auth::jwt::create_jwt("admin-user", UserRole::Admin, &state.jwt_secret, false)
-                .expect("create admin jwt");
+        let admin_token = crate::auth::jwt::create_jwt(
+            "admin-user",
+            UserRole::Admin,
+            &state.jwt_secret,
+            false,
+            0,
+        )
+        .expect("create admin jwt");
         let mut app = create_app(state);
 
         let response = app

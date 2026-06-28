@@ -1575,6 +1575,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 0,
             must_change_password: false,
+            password_changed_at: 0,
         };
 
         let response = update_endpoint(
@@ -2115,6 +2116,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 0,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert!(ensure_admin(&claims).is_ok());
     }
@@ -2126,6 +2128,7 @@ mod tests {
             role: UserRole::Viewer,
             exp: 0,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert!(ensure_admin(&claims).is_err());
     }

@@ -108,6 +108,7 @@ pub async fn login(
             crate::common::auth::UserRole::Admin,
             &app_state.jwt_secret,
             false,
+            0,
         )
         .map_err(|e| {
             tracing::error!("Failed to create JWT: {}", e);
@@ -199,6 +200,7 @@ pub async fn login(
         user.role,
         &app_state.jwt_secret,
         user.must_change_password,
+        user.password_changed_at,
     )
     .map_err(|e| {
         tracing::error!("Failed to create JWT: {}", e);
@@ -478,6 +480,7 @@ pub async fn register(
 pub async fn change_password(
     Extension(claims): Extension<Claims>,
     State(app_state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<ChangePasswordRequest>,
 ) -> Result<impl IntoResponse, Response> {
     let user_id: uuid::Uuid = claims.sub.parse().map_err(|_| {
@@ -499,8 +502,8 @@ pub async fn change_password(
             .into_response()
         })?;
 
-    // パスワードを更新
-    crate::db::users::update(
+    // パスワードを更新（password_changed_at が bump され、他の既存セッションは無効化される）
+    let updated_user = crate::db::users::update(
         &app_state.db_pool,
         user_id,
         None,
@@ -531,7 +534,37 @@ pub async fn change_password(
 
     tracing::info!("Password changed for user: {}", user_id);
 
-    Ok(StatusCode::OK)
+    // 自分自身のセッションが無効化されないよう、新しい password_changed_at を持つ
+    // 新JWTを発行してレスポンスで返す（旧トークンは以降 401 になる）。
+    let expires_in = 86400;
+    let token = crate::auth::jwt::create_jwt(
+        &user_id.to_string(),
+        claims.role,
+        &app_state.jwt_secret,
+        false,
+        updated_user.password_changed_at,
+    )
+    .map_err(|e| {
+        tracing::error!("Failed to create JWT: {}", e);
+        AppError(LbError::Jwt(format!("Failed to create JWT: {}", e))).into_response()
+    })?;
+
+    let is_secure = is_request_secure(&headers);
+    let cookie = crate::auth::build_jwt_cookie(&token, expires_in, is_secure);
+    let csrf_cookie = crate::auth::build_csrf_cookie(
+        &crate::auth::generate_random_token(32),
+        expires_in,
+        is_secure,
+    );
+    let mut response_headers = HeaderMap::new();
+    response_headers.append(header::SET_COOKIE, cookie.parse().unwrap());
+    response_headers.append(header::SET_COOKIE, csrf_cookie.parse().unwrap());
+
+    Ok((
+        StatusCode::OK,
+        response_headers,
+        Json(serde_json::json!({ "token": token, "expires_in": expires_in })),
+    ))
 }
 
 #[cfg(test)]

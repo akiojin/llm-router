@@ -24,6 +24,7 @@ fn admin_jwt(secret: &str) -> String {
         llmlb::common::auth::UserRole::Admin,
         secret,
         false,
+        0,
     )
     .expect("create admin jwt")
 }

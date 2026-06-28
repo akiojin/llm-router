@@ -23,6 +23,7 @@ pub fn create_jwt(
     role: UserRole,
     secret: &str,
     must_change_password: bool,
+    password_changed_at: i64,
 ) -> Result<String, LbError> {
     let expiration = Utc::now()
         .checked_add_signed(chrono::Duration::hours(JWT_EXPIRATION_HOURS))
@@ -34,6 +35,7 @@ pub fn create_jwt(
         role,
         exp: expiration,
         must_change_password,
+        password_changed_at,
     };
 
     encode(
@@ -71,7 +73,7 @@ mod tests {
 
     #[test]
     fn create_jwt_must_change_password_true_roundtrip() {
-        let token = create_jwt("user1", UserRole::Admin, TEST_SECRET, true).unwrap();
+        let token = create_jwt("user1", UserRole::Admin, TEST_SECRET, true, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         assert!(claims.must_change_password);
         assert_eq!(claims.sub, "user1");
@@ -79,7 +81,7 @@ mod tests {
 
     #[test]
     fn create_jwt_must_change_password_false_roundtrip() {
-        let token = create_jwt("user2", UserRole::Viewer, TEST_SECRET, false).unwrap();
+        let token = create_jwt("user2", UserRole::Viewer, TEST_SECRET, false, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         assert!(!claims.must_change_password);
         assert_eq!(claims.sub, "user2");
@@ -87,13 +89,13 @@ mod tests {
 
     #[test]
     fn create_jwt_empty_secret() {
-        let result = create_jwt("user", UserRole::Admin, "", false);
+        let result = create_jwt("user", UserRole::Admin, "", false, 0);
         assert!(result.is_ok());
     }
 
     #[test]
     fn create_jwt_empty_user_id() {
-        let token = create_jwt("", UserRole::Admin, TEST_SECRET, false).unwrap();
+        let token = create_jwt("", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         assert_eq!(claims.sub, "");
     }
@@ -101,15 +103,15 @@ mod tests {
     #[test]
     fn create_jwt_very_long_user_id() {
         let long_id = "u".repeat(10_000);
-        let token = create_jwt(&long_id, UserRole::Admin, TEST_SECRET, false).unwrap();
+        let token = create_jwt(&long_id, UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         assert_eq!(claims.sub, long_id);
     }
 
     #[test]
     fn admin_and_viewer_role_roundtrip() {
-        let admin_token = create_jwt("u", UserRole::Admin, TEST_SECRET, false).unwrap();
-        let viewer_token = create_jwt("u", UserRole::Viewer, TEST_SECRET, false).unwrap();
+        let admin_token = create_jwt("u", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
+        let viewer_token = create_jwt("u", UserRole::Viewer, TEST_SECRET, false, 0).unwrap();
         let ac = verify_jwt(&admin_token, TEST_SECRET).unwrap();
         let vc = verify_jwt(&viewer_token, TEST_SECRET).unwrap();
         assert_eq!(ac.role, UserRole::Admin);
@@ -118,8 +120,8 @@ mod tests {
 
     #[test]
     fn two_tokens_from_same_input_differ() {
-        let t1 = create_jwt("u", UserRole::Admin, TEST_SECRET, false).unwrap();
-        let t2 = create_jwt("u", UserRole::Admin, TEST_SECRET, false).unwrap();
+        let t1 = create_jwt("u", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
+        let t2 = create_jwt("u", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         // exp timestamp may differ by a second; tokens should still be distinct or equivalent
         // Both must be valid regardless
         assert!(verify_jwt(&t1, TEST_SECRET).is_ok());
@@ -140,7 +142,7 @@ mod tests {
 
     #[test]
     fn token_roundtrip_all_fields_match() {
-        let token = create_jwt("alice", UserRole::Viewer, TEST_SECRET, true).unwrap();
+        let token = create_jwt("alice", UserRole::Viewer, TEST_SECRET, true, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         assert_eq!(claims.sub, "alice");
         assert_eq!(claims.role, UserRole::Viewer);
@@ -151,8 +153,8 @@ mod tests {
 
     #[test]
     fn different_user_ids_produce_distinguishable_tokens() {
-        let t1 = create_jwt("user-a", UserRole::Admin, TEST_SECRET, false).unwrap();
-        let t2 = create_jwt("user-b", UserRole::Admin, TEST_SECRET, false).unwrap();
+        let t1 = create_jwt("user-a", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
+        let t2 = create_jwt("user-b", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         let c1 = verify_jwt(&t1, TEST_SECRET).unwrap();
         let c2 = verify_jwt(&t2, TEST_SECRET).unwrap();
         assert_ne!(c1.sub, c2.sub);
@@ -160,7 +162,7 @@ mod tests {
 
     #[test]
     fn jwt_expiration_within_24_hours() {
-        let token = create_jwt("u", UserRole::Admin, TEST_SECRET, false).unwrap();
+        let token = create_jwt("u", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         let now = Utc::now().timestamp() as usize;
         let diff_hours = (claims.exp - now) / 3600;
@@ -170,7 +172,7 @@ mod tests {
 
     #[test]
     fn verify_with_wrong_secret_fails() {
-        let token = create_jwt("user1", UserRole::Admin, TEST_SECRET, false).unwrap();
+        let token = create_jwt("user1", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         let result = verify_jwt(&token, "wrong_secret_key_12345678");
         assert!(result.is_err());
     }
@@ -187,7 +189,7 @@ mod tests {
 
     #[test]
     fn create_jwt_unicode_user_id() {
-        let token = create_jwt("ユーザー日本語", UserRole::Viewer, TEST_SECRET, false).unwrap();
+        let token = create_jwt("ユーザー日本語", UserRole::Viewer, TEST_SECRET, false, 0).unwrap();
         let claims = verify_jwt(&token, TEST_SECRET).unwrap();
         assert_eq!(claims.sub, "ユーザー日本語");
     }
@@ -195,22 +197,22 @@ mod tests {
     #[test]
     fn create_jwt_special_chars_secret() {
         let secret = "!@#$%^&*()_+-={}[]|;':\",./<>?";
-        let token = create_jwt("user", UserRole::Admin, secret, false).unwrap();
+        let token = create_jwt("user", UserRole::Admin, secret, false, 0).unwrap();
         let claims = verify_jwt(&token, secret).unwrap();
         assert_eq!(claims.sub, "user");
     }
 
     #[test]
     fn token_has_three_parts() {
-        let token = create_jwt("u", UserRole::Admin, TEST_SECRET, false).unwrap();
+        let token = create_jwt("u", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
         let parts: Vec<&str> = token.split('.').collect();
         assert_eq!(parts.len(), 3);
     }
 
     #[test]
     fn different_roles_have_different_tokens() {
-        let t1 = create_jwt("u", UserRole::Admin, TEST_SECRET, false).unwrap();
-        let t2 = create_jwt("u", UserRole::Viewer, TEST_SECRET, false).unwrap();
+        let t1 = create_jwt("u", UserRole::Admin, TEST_SECRET, false, 0).unwrap();
+        let t2 = create_jwt("u", UserRole::Viewer, TEST_SECRET, false, 0).unwrap();
         // Payload differs due to different role
         assert_ne!(t1.split('.').nth(1), t2.split('.').nth(1));
     }
@@ -226,7 +228,7 @@ mod tests {
 
     #[test]
     fn create_jwt_with_single_char_secret() {
-        let token = create_jwt("u", UserRole::Admin, "x", false).unwrap();
+        let token = create_jwt("u", UserRole::Admin, "x", false, 0).unwrap();
         assert!(verify_jwt(&token, "x").is_ok());
     }
 }

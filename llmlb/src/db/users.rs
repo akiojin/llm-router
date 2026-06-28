@@ -63,8 +63,8 @@ pub async fn create_with_id(
     };
 
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, role, created_at, last_login, must_change_password)
-         VALUES (?, ?, ?, ?, ?, NULL, ?)",
+        "INSERT INTO users (id, username, password_hash, role, created_at, last_login, must_change_password, password_changed_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
     )
     .bind(id.to_string())
     .bind(username)
@@ -72,6 +72,8 @@ pub async fn create_with_id(
     .bind(role_str)
     .bind(created_at.to_rfc3339())
     .bind(must_change_password as i32)
+    // 作成時は 0。最初のパスワード変更で >0 に bump され、それ以降のみセッション無効化が効く
+    .bind(0_i64)
     .execute(pool)
     .await
     .map_err(|e| {
@@ -90,6 +92,7 @@ pub async fn create_with_id(
         created_at,
         last_login: None,
         must_change_password,
+        password_changed_at: 0,
     })
 }
 
@@ -105,7 +108,7 @@ pub async fn create_with_id(
 /// * `Err(LbError)` - 検索失敗
 pub async fn find_by_username(pool: &SqlitePool, username: &str) -> Result<Option<User>, LbError> {
     let row = sqlx::query_as::<_, UserRow>(
-        "SELECT id, username, password_hash, role, created_at, last_login, must_change_password FROM users WHERE username = ?"
+        "SELECT id, username, password_hash, role, created_at, last_login, must_change_password, password_changed_at FROM users WHERE username = ?"
     )
     .bind(username)
     .fetch_optional(pool)
@@ -125,7 +128,7 @@ pub async fn find_by_username(pool: &SqlitePool, username: &str) -> Result<Optio
 /// * `Err(LbError)` - 取得失敗
 pub async fn list(pool: &SqlitePool) -> Result<Vec<User>, LbError> {
     let rows = sqlx::query_as::<_, UserRow>(
-        "SELECT id, username, password_hash, role, created_at, last_login, must_change_password FROM users ORDER BY created_at DESC"
+        "SELECT id, username, password_hash, role, created_at, last_login, must_change_password, password_changed_at FROM users ORDER BY created_at DESC"
     )
     .fetch_all(pool)
     .await
@@ -196,12 +199,22 @@ pub async fn update(
     } else {
         current.must_change_password
     };
+    // パスワード変更時は password_changed_at を厳密単調増加で更新し、既存JWTセッションを無効化する
+    let new_password_changed_at = if password_hash.is_some() {
+        std::cmp::max(
+            Utc::now().timestamp_millis(),
+            current.password_changed_at + 1,
+        )
+    } else {
+        current.password_changed_at
+    };
 
-    sqlx::query("UPDATE users SET username = ?, password_hash = ?, role = ?, must_change_password = ? WHERE id = ?")
+    sqlx::query("UPDATE users SET username = ?, password_hash = ?, role = ?, must_change_password = ?, password_changed_at = ? WHERE id = ?")
         .bind(new_username)
         .bind(new_password_hash)
         .bind(role_str)
         .bind(new_must_change_password)
+        .bind(new_password_changed_at)
         .bind(id.to_string())
         .execute(pool)
         .await
@@ -215,6 +228,7 @@ pub async fn update(
         created_at: current.created_at,
         last_login: current.last_login,
         must_change_password: new_must_change_password,
+        password_changed_at: new_password_changed_at,
     })
 }
 
@@ -271,7 +285,7 @@ pub async fn delete(pool: &SqlitePool, id: Uuid) -> Result<(), LbError> {
 /// * `Err(LbError)` - 検索失敗
 pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<User>, LbError> {
     let row = sqlx::query_as::<_, UserRow>(
-        "SELECT id, username, password_hash, role, created_at, last_login, must_change_password FROM users WHERE id = ?",
+        "SELECT id, username, password_hash, role, created_at, last_login, must_change_password, password_changed_at FROM users WHERE id = ?",
     )
     .bind(id.to_string())
     .fetch_optional(pool)
@@ -350,6 +364,8 @@ struct UserRow {
     created_at: String,
     last_login: Option<String>,
     must_change_password: i32,
+    #[sqlx(default)]
+    password_changed_at: i64,
 }
 
 impl UserRow {
@@ -377,6 +393,7 @@ impl UserRow {
             created_at,
             last_login,
             must_change_password: self.must_change_password != 0,
+            password_changed_at: self.password_changed_at,
         }
     }
 }

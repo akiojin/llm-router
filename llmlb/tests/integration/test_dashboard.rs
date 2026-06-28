@@ -73,7 +73,8 @@ async fn build_test_app() -> (AppState, Router) {
 }
 
 fn ws_url_with_token(addr: std::net::SocketAddr, secret: &str) -> String {
-    let token = create_jwt("test-admin", UserRole::Admin, secret, false).expect("create test jwt");
+    let token =
+        create_jwt("test-admin", UserRole::Admin, secret, false, 0).expect("create test jwt");
     format!("ws://{}/ws/dashboard?token={}", addr, token)
 }
 

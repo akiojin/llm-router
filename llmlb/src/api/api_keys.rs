@@ -581,6 +581,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         let result = parse_user_id_from_claims(&claims);
         assert!(result.is_ok());
@@ -594,6 +595,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         let result = parse_user_id_from_claims(&claims);
         assert!(result.is_err());
@@ -606,6 +608,7 @@ mod tests {
             role: UserRole::Viewer,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         let result = parse_user_id_from_claims(&claims);
         assert!(result.is_err());

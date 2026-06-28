@@ -449,3 +449,150 @@ async fn test_change_password_clears_must_change_flag() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["user"]["must_change_password"], false);
 }
+
+// ---------------------------------------------------------------------------
+// セッション無効化（password_changed_at）
+// ---------------------------------------------------------------------------
+
+/// 自分でパスワードを変更すると、旧トークンは無効化され、レスポンスの新トークンが有効になる
+#[tokio::test]
+#[serial]
+async fn test_session_revoked_after_self_password_change() {
+    let (app, _db_pool) = build_app().await;
+    let token1 = login_admin(&app).await;
+
+    // 旧トークンで /api/auth/me は 200
+    let me1 = app
+        .clone()
+        .oneshot(
+            bearer_request(&token1)
+                .method("GET")
+                .uri("/api/auth/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(me1.status(), StatusCode::OK);
+
+    // パスワード変更（新トークンが返る）
+    let resp = app
+        .clone()
+        .oneshot(
+            bearer_request(&token1)
+                .method("PUT")
+                .uri("/api/auth/change-password")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "new_password": "NewAdminPass123" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    let token2 = body["token"]
+        .as_str()
+        .expect("change-password should return a fresh token")
+        .to_string();
+
+    // 旧トークンは無効化され 401
+    let me_old = app
+        .clone()
+        .oneshot(
+            bearer_request(&token1)
+                .method("GET")
+                .uri("/api/auth/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        me_old.status(),
+        StatusCode::UNAUTHORIZED,
+        "old token must be revoked after password change"
+    );
+
+    // 新トークンは有効
+    let me_new = app
+        .oneshot(
+            bearer_request(&token2)
+                .method("GET")
+                .uri("/api/auth/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(me_new.status(), StatusCode::OK);
+}
+
+/// 管理者が他ユーザーのパスワードをリセットすると、そのユーザーの既存トークンが無効化される
+#[tokio::test]
+#[serial]
+async fn test_session_revoked_after_admin_password_reset() {
+    let (app, db_pool) = build_app().await;
+
+    // viewer ユーザーを作成
+    let vhash = llmlb::auth::password::hash_password("viewerpass123").unwrap();
+    let viewer = llmlb::db::users::create(&db_pool, "victim", &vhash, UserRole::Viewer, false)
+        .await
+        .unwrap();
+
+    // viewer でログイン
+    let (status, body) = login(&app, "victim", "viewerpass123").await;
+    assert_eq!(status, StatusCode::OK);
+    let token_v = body["token"].as_str().unwrap().to_string();
+
+    // 旧トークンで /api/auth/me は 200
+    let me1 = app
+        .clone()
+        .oneshot(
+            bearer_request(&token_v)
+                .method("GET")
+                .uri("/api/auth/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(me1.status(), StatusCode::OK);
+
+    // 管理者が viewer のパスワードをリセット
+    let admin_token = login_admin(&app).await;
+    let reset = app
+        .clone()
+        .oneshot(
+            bearer_request(&admin_token)
+                .method("PUT")
+                .uri(format!("/api/users/{}", viewer.id))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "password": "ResetPass123" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reset.status(), StatusCode::OK);
+
+    // viewer の旧トークンは無効化され 401
+    let me_after = app
+        .oneshot(
+            bearer_request(&token_v)
+                .method("GET")
+                .uri("/api/auth/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        me_after.status(),
+        StatusCode::UNAUTHORIZED,
+        "victim token must be revoked after admin password reset"
+    );
+}
