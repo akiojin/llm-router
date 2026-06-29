@@ -18,32 +18,33 @@ export interface ChatCompletionRequest {
   user?: string
 }
 
-export const chatApi = {
-  complete: async (
-    request: ChatCompletionRequest,
-    onDelta?: (delta: AssistantTextParts) => void,
-    signal?: AbortSignal
-  ) => {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
+// チャット補完 POST の共通実装。path で通常 Chat と Load Test 用エンドポイントを切り替える。
+const postChatCompletion = async (
+  path: string,
+  request: ChatCompletionRequest,
+  onDelta?: (delta: AssistantTextParts) => void,
+  signal?: AbortSignal
+) => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  }
 
-    const csrfToken = getCsrfToken()
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken
-    }
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken
+  }
 
-    const response = await fetch(`${API_BASE}/api/dashboard/playground/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(request),
-      credentials: 'include',
-      signal,
-    })
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(request),
+    credentials: 'include',
+    signal,
+  })
 
-    if (!response.ok) {
-      throw await createApiErrorFromResponse(response)
-    }
+  if (!response.ok) {
+    throw await createApiErrorFromResponse(response)
+  }
 
     if (request.stream && onDelta) {
       const reader = response.body?.getReader()
@@ -81,7 +82,19 @@ export const chatApi = {
     }
 
     return response.json()
-  },
+}
+
+export const chatApi = {
+  // 通常の Chat プレイグラウンド（全認証ユーザー）
+  complete: (
+    request: ChatCompletionRequest,
+    onDelta?: (delta: AssistantTextParts) => void,
+    signal?: AbortSignal
+  ) => postChatCompletion('/api/dashboard/playground/chat/completions', request, onDelta, signal),
+
+  // Load Test 用（admin ロール限定エンドポイント）。非ストリーミングのみ使用。
+  completeLoadTest: (request: ChatCompletionRequest, signal?: AbortSignal) =>
+    postChatCompletion('/api/dashboard/playground/load-test/chat/completions', request, undefined, signal),
 
   getModels: async (): Promise<OpenAIModelsResponse> => {
     const response = await fetch(`${API_BASE}/api/dashboard/playground/models`, {

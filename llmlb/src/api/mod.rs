@@ -317,6 +317,33 @@ pub fn create_app(state: AppState) -> Router {
             crate::inference_gate::inference_gate_middleware,
         ));
 
+    // Load Test 専用エンドポイント: Chat と同じハンドラを再利用しつつ admin ロール限定。
+    // Load Test は LB 経由で実推論を大量発行する運用ツールのため、viewer からの過負荷を防ぐ。
+    // ミドルウェア順は dashboard_audit_routes を踏襲（jwt_auth で Claims を設定 → admin_role で判定）。
+    let dashboard_playground_loadtest_routes = Router::new()
+        .route(
+            "/dashboard/playground/load-test/chat/completions",
+            post(openai::dashboard_playground_chat_completions),
+        )
+        .layer(DefaultBodyLimit::max(OPENAI_BODY_LIMIT_BYTES))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::require_password_changed_middleware,
+        ))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::csrf_protect_middleware,
+        ))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::require_admin_role_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth::middleware::require_jwt_auth_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.inference_gate.clone(),
+            crate::inference_gate::inference_gate_middleware,
+        ));
+
     // 監査ログAPI (SPEC-8301d106): adminロールのみ
     let dashboard_audit_routes = Router::new()
         .route("/dashboard/audit-logs", get(audit_log::list_audit_logs))
@@ -357,6 +384,7 @@ pub fn create_app(state: AppState) -> Router {
         dashboard_general_routes
             .merge(dashboard_audit_routes)
             .merge(dashboard_playground_routes)
+            .merge(dashboard_playground_loadtest_routes)
     };
 
     // システムAPI（更新状態/適用）

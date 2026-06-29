@@ -11,6 +11,7 @@ import {
 } from '@/lib/api'
 import { cn, isAbortError } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/useAuth'
 import { usePlayground } from '@/hooks/usePlayground'
 import { splitAssistantMessage } from '@/lib/reasoning'
 import {
@@ -136,7 +137,17 @@ function buildDistributionRows(records: RequestResponseRecord[]): DistributionRo
 }
 
 export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBalancerPlaygroundProps) {
+  const { user } = useAuth()
+  // Load Test は実推論を大量発行するため admin ロール限定（Chat は全ユーザー可）。
+  const isAdmin = user?.role === 'admin'
   const [mode, setMode] = useState<PlaygroundMode>('chat')
+
+  // 非 admin が Load Test モードに留まらないよう Chat へ矯正する。
+  useEffect(() => {
+    if (!isAdmin && mode === 'load_test') {
+      setMode('chat')
+    }
+  }, [isAdmin, mode])
 
   const [loadTestTotalRequests, setLoadTestTotalRequests] = useState(
     String(DEFAULT_LOAD_TEST_SETTINGS.totalRequests)
@@ -392,7 +403,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   }
 
   const startLoadTest = async () => {
-    if (!pg.selectedModel || isLoadTesting) return
+    // Load Test は admin ロール限定（バックエンドの専用エンドポイントでも強制）。
+    if (!isAdmin || !pg.selectedModel || isLoadTesting) return
 
     const totalRequests = Math.max(1, toNumberValue(loadTestTotalRequests, DEFAULT_LOAD_TEST_SETTINGS.totalRequests))
     const concurrency = Math.max(1, toNumberValue(loadTestConcurrency, DEFAULT_LOAD_TEST_SETTINGS.concurrency))
@@ -433,7 +445,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
         loadTestAbortControllersRef.current.add(requestAbortController)
 
         try {
-          await chatApi.complete(
+          await chatApi.completeLoadTest(
             {
               model: pg.selectedModel,
               messages: requestMessages,
@@ -442,7 +454,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               max_tokens: effectiveMaxTokens,
               user: runTag,
             },
-            undefined,
             requestAbortController.signal
           )
           success += 1
@@ -757,16 +768,18 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
               Chat
             </Button>
-            <Button
-              size="sm"
-              variant={mode === 'load_test' ? 'default' : 'outline'}
-              onClick={() => setMode('load_test')}
-              className="h-7"
-              id="lb-mode-load-test"
-            >
-              <Gauge className="mr-1.5 h-3.5 w-3.5" />
-              Load Test
-            </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant={mode === 'load_test' ? 'default' : 'outline'}
+                onClick={() => setMode('load_test')}
+                className="h-7"
+                id="lb-mode-load-test"
+              >
+                <Gauge className="mr-1.5 h-3.5 w-3.5" />
+                Load Test
+              </Button>
+            )}
           </div>
 
           <Select value={pg.selectedModel} onValueChange={pg.setSelectedModel}>
