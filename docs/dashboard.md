@@ -19,10 +19,19 @@ llmlb serves the admin dashboard UI as a React SPA.
 
 - Route: `#lb-playground`
 - Purpose: load balancer routing and distribution validation
+- Modes:
+  - Chat: available to all authenticated users.
+  - Load Test: **admin role only**. It issues many real inference
+    requests through the load balancer, so viewers cannot run it
+    (hidden in the UI and rejected with 403 by the backend).
 - APIs:
-  - `GET /v1/models` (API key)
-  - `POST /v1/chat/completions` (API key)
-  - `GET /api/dashboard/request-responses` (JWT only, for distribution aggregation)
+  - `GET /api/dashboard/playground/models` (JWT/session)
+  - `POST /api/dashboard/playground/chat/completions`
+    (Chat; JWT/session + CSRF)
+  - `POST /api/dashboard/playground/load-test/chat/completions`
+    (Load Test; JWT/session + CSRF + admin role)
+  - `GET /api/dashboard/request-responses`
+    (JWT only, for distribution aggregation)
 
 ## Dashboard APIs used by UI
 
