@@ -130,5 +130,9 @@ mod system_info_public_test;
 #[path = "integration/settings_test.rs"]
 mod settings_test;
 
+// LB Playground の Load Test を admin ロール限定にする
+#[path = "integration/playground_load_test_access_test.rs"]
+mod playground_load_test_access_test;
+
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.
