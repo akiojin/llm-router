@@ -14,6 +14,20 @@
       "system": "System"
     }
   },
+  "playground": {
+    "backToDashboard": "Back to Dashboard",
+    "settings": "Settings",
+    "clearChat": "Clear Chat",
+    "inputPlaceholder": "Type a message or attach files...",
+    "send": "Send",
+    "stop": "Stop",
+    "stopHint": "Stop generating (Esc)",
+    "attachImage": "Attach image",
+    "attachAudio": "Attach audio",
+    "showReasoning": "Show reasoning",
+    "generating": "Generating response...",
+    "copyMessage": "Copy message"
+  },
   "header": {
     "connection": "Connection: {{status}}",
     "online": "Online",

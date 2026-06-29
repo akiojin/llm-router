@@ -1,4 +1,5 @@
 import { useState, type RefObject, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -142,6 +143,7 @@ export function PlaygroundBase({
   sidebarWidth = 'w-72',
   sidebarId,
 }: PlaygroundBaseProps) {
+  const { t } = useTranslation()
   // モバイルではサイドバーをドロワー化（既定で隠し、ハンバーガーで開く）。md 以上は常時表示。
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -182,7 +184,7 @@ export function PlaygroundBase({
             }}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Dashboard
+            {t('playground.backToDashboard')}
           </Button>
           <Button
             variant="outline"
@@ -193,7 +195,7 @@ export function PlaygroundBase({
             }}
           >
             <Settings className="mr-2 h-4 w-4" />
-            Settings
+            {t('playground.settings')}
           </Button>
           {sidebarExtra}
         </div>
@@ -211,7 +213,7 @@ export function PlaygroundBase({
             }}
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Clear Chat
+            {t('playground.clearChat')}
           </Button>
         </div>
       </div>

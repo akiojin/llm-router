@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Image as ImageIcon, Mic, X, Volume2, Send, Loader2 } from 'lucide-react'
@@ -44,13 +45,15 @@ export function ChatForm({
   onImageAttach,
   onAudioAttach,
   sendDisabled = false,
-  placeholder = 'Type a message or attach files...',
+  placeholder,
   maxWidth = 'max-w-4xl',
   showAttachButtons = true,
   extraContent,
   sendButton,
   inputId,
 }: ChatFormProps) {
+  const { t } = useTranslation()
+  const effectivePlaceholder = placeholder ?? t('playground.inputPlaceholder')
   // テキストエリアの高さを内容に応じて自動調整（最大 200px）
   useEffect(() => {
     const el = inputRef.current
@@ -122,7 +125,7 @@ export function ChatForm({
                 variant="outline"
                 size="icon"
                 onClick={() => imageInputRef.current?.click()}
-                title="Attach image"
+                title={t('playground.attachImage')}
                 className="shrink-0"
               >
                 <ImageIcon className="h-4 w-4" />
@@ -131,7 +134,7 @@ export function ChatForm({
                 variant="outline"
                 size="icon"
                 onClick={() => audioInputRef.current?.click()}
-                title="Attach audio"
+                title={t('playground.attachAudio')}
                 className="shrink-0"
               >
                 <Mic className="h-4 w-4" />
@@ -142,7 +145,6 @@ export function ChatForm({
           <Textarea
             ref={inputRef}
             rows={1}
-            placeholder={placeholder}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={(e) => {
@@ -157,6 +159,7 @@ export function ChatForm({
             onPaste={onPaste}
             disabled={disabled}
             id={inputId}
+            placeholder={effectivePlaceholder}
             className="max-h-[200px] min-h-[2.5rem] resize-none"
           />
 
@@ -166,11 +169,11 @@ export function ChatForm({
             <Button
               variant="destructive"
               onClick={onStop}
-              title="Stop generating (Esc)"
+              title={t('playground.stopHint')}
               className="shrink-0 animate-pulse ring-2 ring-destructive/40"
             >
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Stop
+              {t('playground.stop')}
             </Button>
           ) : (
             <Button
@@ -179,7 +182,7 @@ export function ChatForm({
               className="shrink-0"
             >
               <Send className="mr-2 h-4 w-4" />
-              Send
+              {t('playground.send')}
             </Button>
           )}
         </div>
