@@ -4,6 +4,16 @@
     "language": "Language",
     "footer": "LLM Load Balancer Dashboard v1.0"
   },
+  "dashboard": {
+    "tabs": {
+      "endpoints": "Endpoints",
+      "models": "Models",
+      "usage": "Usage",
+      "requests": "Requests",
+      "traffic": "Traffic",
+      "system": "System"
+    }
+  },
   "header": {
     "connection": "Connection: {{status}}",
     "online": "Online",

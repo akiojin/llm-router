@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   dashboardApi,
@@ -91,6 +92,7 @@ function formatCountdown(targetIso: string): string | null {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const isViewer = user?.role === 'viewer'
   const isAdmin = user?.role === 'admin'
@@ -898,27 +900,27 @@ export default function Dashboard() {
             <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
               <TabsTrigger value="endpoints" className="gap-2">
                 <Globe className="h-4 w-4" />
-                <span className="hidden sm:inline">Endpoints</span>
+                <span className="hidden sm:inline">{t('dashboard.tabs.endpoints')}</span>
               </TabsTrigger>
               <TabsTrigger value="models" className="gap-2">
                 <Package className="h-4 w-4" />
-                <span className="hidden sm:inline">Models</span>
+                <span className="hidden sm:inline">{t('dashboard.tabs.models')}</span>
               </TabsTrigger>
               <TabsTrigger value="statistics" className="gap-2">
                 <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Usage</span>
+                <span className="hidden sm:inline">{t('dashboard.tabs.usage')}</span>
               </TabsTrigger>
               <TabsTrigger value="history" className="gap-2">
                 <History className="h-4 w-4" />
-                <span className="hidden sm:inline">Requests</span>
+                <span className="hidden sm:inline">{t('dashboard.tabs.requests')}</span>
               </TabsTrigger>
               <TabsTrigger value="clients" className="gap-2">
                 <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Traffic</span>
+                <span className="hidden sm:inline">{t('dashboard.tabs.traffic')}</span>
               </TabsTrigger>
               <TabsTrigger value="logs" className="gap-2">
                 <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">System</span>
+                <span className="hidden sm:inline">{t('dashboard.tabs.system')}</span>
               </TabsTrigger>
             </TabsList>
 

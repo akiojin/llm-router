@@ -4,6 +4,16 @@
     "language": "言語",
     "footer": "LLM Load Balancer ダッシュボード v1.0"
   },
+  "dashboard": {
+    "tabs": {
+      "endpoints": "エンドポイント",
+      "models": "モデル",
+      "usage": "使用状況",
+      "requests": "リクエスト",
+      "traffic": "トラフィック",
+      "system": "システム"
+    }
+  },
   "header": {
     "connection": "接続: {{status}}",
     "online": "オンライン",
