@@ -1058,6 +1058,8 @@ function ModelRow({
           <Button
             variant="secondary"
             size="icon"
+            aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+            aria-expanded={isExpanded}
             className="h-6 w-6 bg-transparent shadow-none hover:bg-muted/70"
           >
             {isExpanded ? (
@@ -1077,6 +1079,7 @@ function ModelRow({
                 <Button
                   variant="secondary"
                   size="icon"
+                  aria-label="Open in playground"
                   className="h-7 w-7 bg-transparent shadow-none hover:bg-muted/70"
                   disabled={!model.ready}
                   onClick={(e) => {

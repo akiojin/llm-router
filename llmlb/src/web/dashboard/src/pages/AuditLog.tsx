@@ -10,7 +10,8 @@ import { AuditLogTable } from '@/components/audit/AuditLogTable'
 import { AuditLogFilters } from '@/components/audit/AuditLogFilters'
 import { HashChainStatus } from '@/components/audit/HashChainStatus'
 import { Button } from '@/components/ui/button'
-import { ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TablePagination } from '@/components/ui/table-pagination'
+import { ShieldCheck, ChevronLeft } from 'lucide-react'
 
 interface AuditLogPageProps {
   onBack: () => void
@@ -90,36 +91,12 @@ export default function AuditLogPage({ onBack }: AuditLogPageProps) {
 
         <AuditLogTable entries={data?.items || []} loading={isLoading} />
 
-        {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {data?.total.toLocaleString()} entries total
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage <= 1}
-                onClick={() => handlePageChange(currentPage - 1)}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {currentPage} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage >= totalPages}
-                onClick={() => handlePageChange(currentPage + 1)}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={data?.total}
+          onPageChange={handlePageChange}
+        />
       </main>
     </div>
   )

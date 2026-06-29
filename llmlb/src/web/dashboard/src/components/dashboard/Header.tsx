@@ -202,6 +202,8 @@ export function Header({
               size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
+              aria-label="Refresh dashboard"
+              title="Refresh"
             >
               <RefreshCw
                 className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
@@ -209,7 +211,14 @@ export function Header({
             </Button>
 
             {/* Theme Toggle */}
-            <Button id="theme-toggle" variant="outline" size="icon" onClick={toggleTheme}>
+            <Button
+              id="theme-toggle"
+              variant="outline"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title="Toggle theme"
+            >
               {theme === 'dark' ? (
                 <Sun className="h-4 w-4" />
               ) : (
@@ -220,7 +229,7 @@ export function Header({
             {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative">
+                <Button variant="outline" size="icon" className="relative" aria-label="User menu">
                   <User className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
