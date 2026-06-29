@@ -4,6 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  PasswordStrengthMeter,
+  isPasswordValid,
+} from '@/components/auth/PasswordStrengthMeter'
 import { toast } from '@/hooks/use-toast'
 import { Cpu, Lock } from 'lucide-react'
 
@@ -25,11 +29,11 @@ export default function ChangePasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (newPassword.length < 6) {
+    if (!isPasswordValid(newPassword)) {
       toast({
         variant: 'destructive',
-        title: 'Validation error',
-        description: 'Password must be at least 6 characters',
+        title: 'Password too weak',
+        description: 'Use at least 8 characters including an uppercase letter and a number.',
       })
       return
     }
@@ -124,7 +128,7 @@ export default function ChangePasswordPage() {
                     <Input
                       id="new-password"
                       type="password"
-                      placeholder="Enter new password (min. 6 characters)"
+                      placeholder="Enter a new password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       className="pl-10"
@@ -133,6 +137,7 @@ export default function ChangePasswordPage() {
                       autoFocus
                     />
                   </div>
+                  <PasswordStrengthMeter password={newPassword} />
                 </div>
 
                 <div className="space-y-2">

@@ -4,6 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  PasswordStrengthMeter,
+  isPasswordValid,
+} from '@/components/auth/PasswordStrengthMeter'
 import { toast } from '@/hooks/use-toast'
 import { Cpu, Lock, User, Ticket, CheckCircle2 } from 'lucide-react'
 
@@ -27,11 +31,11 @@ export default function RegisterPage() {
       return
     }
 
-    if (password.length < 6) {
+    if (!isPasswordValid(password)) {
       toast({
         variant: 'destructive',
-        title: 'Password too short',
-        description: 'Password must be at least 6 characters',
+        title: 'Password too weak',
+        description: 'Use at least 8 characters including an uppercase letter and a number.',
       })
       return
     }
@@ -201,6 +205,7 @@ export default function RegisterPage() {
                       autoComplete="new-password"
                     />
                   </div>
+                  <PasswordStrengthMeter password={password} />
                 </div>
 
                 <div className="space-y-2">

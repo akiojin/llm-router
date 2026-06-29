@@ -27,10 +27,10 @@ function methodBadgeVariant(method: string): 'default' | 'secondary' | 'destruct
 }
 
 function statusColor(code: number): string {
-  if (code >= 200 && code < 300) return 'text-green-600'
-  if (code >= 300 && code < 400) return 'text-yellow-600'
-  if (code >= 400 && code < 500) return 'text-orange-600'
-  return 'text-red-600'
+  if (code >= 200 && code < 300) return 'text-success font-medium'
+  if (code >= 300 && code < 400) return 'text-warning font-medium'
+  if (code >= 400 && code < 500) return 'text-orange-600 dark:text-orange-400 font-medium'
+  return 'text-destructive font-medium'
 }
 
 export function AuditLogTable({ entries, loading }: AuditLogTableProps) {
