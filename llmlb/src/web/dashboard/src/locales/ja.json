@@ -1,0 +1,22 @@
+{
+  "common": {
+    "appName": "LLM Load Balancer",
+    "language": "言語"
+  },
+  "login": {
+    "subtitle": "ミッションコントロール ダッシュボード",
+    "title": "サインイン",
+    "description": "ダッシュボードにアクセスするには認証情報を入力してください",
+    "username": "ユーザー名",
+    "usernamePlaceholder": "ユーザー名を入力",
+    "password": "パスワード",
+    "passwordPlaceholder": "パスワードを入力",
+    "signingIn": "サインインしています...",
+    "signIn": "サインイン",
+    "failedTitle": "ログインに失敗しました",
+    "failedDescription": "ユーザー名またはパスワードが正しくありません",
+    "haveInvite": "招待コードをお持ちですか？",
+    "register": "登録",
+    "footer": "LLM Load Balancer ダッシュボード v1.0"
+  }
+}

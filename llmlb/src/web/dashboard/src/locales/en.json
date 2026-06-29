@@ -1,0 +1,22 @@
+{
+  "common": {
+    "appName": "LLM Load Balancer",
+    "language": "Language"
+  },
+  "login": {
+    "subtitle": "Mission Control Dashboard",
+    "title": "Sign in",
+    "description": "Enter your credentials to access the dashboard",
+    "username": "Username",
+    "usernamePlaceholder": "Enter your username",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signingIn": "Signing in...",
+    "signIn": "Sign in",
+    "failedTitle": "Login failed",
+    "failedDescription": "Invalid username or password",
+    "haveInvite": "Have an invitation code?",
+    "register": "Register",
+    "footer": "LLM Load Balancer Dashboard v1.0"
+  }
+}

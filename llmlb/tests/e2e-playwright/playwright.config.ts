@@ -43,6 +43,9 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // ダッシュボードは i18n(EN/JA)対応。E2E は常に英語で実行して文言アサーションを
+    // 安定させる（実ユーザーはブラウザ言語/言語切替で JA を選べる）。
+    locale: 'en-US',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

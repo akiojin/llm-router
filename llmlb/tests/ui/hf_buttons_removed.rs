@@ -119,8 +119,11 @@ fn dashboard_has_no_japanese_text() {
     );
 }
 
+/// ダッシュボードは i18n(EN/JA) 対応に移行したため、翻訳文字列(JS バンドル内の
+/// ja.json)は日本語を含んでよい。一方、静的 HTML シェル（エントリ HTML）は
+/// 言語非依存の英語のままに保つ（ローカライズは JS 側の i18n が担う）。
 #[test]
-fn dashboard_static_assets_have_no_japanese_text() {
+fn dashboard_html_shells_have_no_japanese_text() {
     let html_paths = [
         "src/web/static/index.html",
         "src/web/static/login.html",
@@ -131,22 +134,5 @@ fn dashboard_static_assets_have_no_japanese_text() {
     for path in html_paths {
         let content = get_file_content(path);
         assert_no_japanese(&content, path);
-    }
-
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let assets_dir = root.join("src/web/static/assets");
-    for entry in fs::read_dir(assets_dir).expect("Failed to read dashboard assets directory") {
-        let entry = entry.expect("Failed to read dashboard asset entry");
-        let path = entry.path();
-        let is_js = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext == "js");
-        if !is_js {
-            continue;
-        }
-        let path_str = path.to_string_lossy().to_string();
-        let content = fs::read_to_string(&path).expect("Failed to read dashboard JS asset");
-        assert_no_japanese(&content, &path_str);
     }
 }
