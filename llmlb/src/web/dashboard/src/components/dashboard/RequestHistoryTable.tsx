@@ -10,6 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   Select,
   SelectContent,
@@ -177,11 +178,12 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
               <TableBody id="request-history-tbody">
                 {paginatedHistory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <History className="h-8 w-8" />
-                        <p>No request history</p>
-                      </div>
+                    <TableCell colSpan={7} className="p-0">
+                      <EmptyState
+                        icon={<History className="h-8 w-8" />}
+                        title="No request history"
+                        description="Requests will appear here once traffic is routed through the balancer."
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (

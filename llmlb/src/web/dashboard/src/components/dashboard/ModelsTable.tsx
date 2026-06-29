@@ -65,6 +65,7 @@ import {
   Trash2,
   Server,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ModelAddWizard } from './ModelAddWizard'
 import { ModelDeleteDialog } from './ModelDeleteDialog'
 
@@ -802,8 +803,11 @@ export function ModelsTable({
               <TableBody>
                 {viewerFiltered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                      {search ? 'No models match your search' : 'No models registered'}
+                    <TableCell colSpan={3} className="p-0">
+                      <EmptyState
+                        icon={<Package className="h-10 w-10" />}
+                        title={search ? 'No models match your search' : 'No models registered'}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -980,13 +984,20 @@ export function ModelsTable({
             <TableBody>
               {sorted.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={visibleColumns.length + 2}
-                    className="text-center py-8 text-muted-foreground"
-                  >
-                    {search || statusFilter !== 'all' || activeApiFilters.length > 0
-                      ? 'No models match the filter criteria'
-                      : 'No models registered'}
+                  <TableCell colSpan={visibleColumns.length + 2} className="p-0">
+                    <EmptyState
+                      icon={<Package className="h-10 w-10" />}
+                      title={
+                        search || statusFilter !== 'all' || activeApiFilters.length > 0
+                          ? 'No models match the filter criteria'
+                          : 'No models registered'
+                      }
+                      description={
+                        search || statusFilter !== 'all' || activeApiFilters.length > 0
+                          ? undefined
+                          : 'Register a model or connect an endpoint that serves models.'
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ) : (

@@ -65,6 +65,7 @@ import {
   Trash2,
   Plus,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 /**
  * SPEC-e8e9326e: Router-Driven Endpoint Registration System
@@ -429,10 +430,20 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               <TableBody>
                 {paginatedEndpoints.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      {search || statusFilter !== 'all'
-                        ? 'No endpoints match the filter criteria'
-                        : 'No endpoints registered'}
+                    <TableCell colSpan={9} className="p-0">
+                      <EmptyState
+                        icon={<Server className="h-10 w-10" />}
+                        title={
+                          search || statusFilter !== 'all'
+                            ? 'No endpoints match the filter criteria'
+                            : 'No endpoints registered'
+                        }
+                        description={
+                          search || statusFilter !== 'all'
+                            ? undefined
+                            : 'Add an endpoint to start routing inference requests.'
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
