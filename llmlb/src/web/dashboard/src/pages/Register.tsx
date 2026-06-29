@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { authApi, ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,10 +9,12 @@ import {
   PasswordStrengthMeter,
   isPasswordValid,
 } from '@/components/auth/PasswordStrengthMeter'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { toast } from '@/hooks/use-toast'
 import { Cpu, Lock, User, Ticket, CheckCircle2 } from 'lucide-react'
 
 export default function RegisterPage() {
+  const { t } = useTranslation()
   const [invitationCode, setInvitationCode] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -25,8 +28,8 @@ export default function RegisterPage() {
     if (password !== confirmPassword) {
       toast({
         variant: 'destructive',
-        title: 'Password mismatch',
-        description: 'Passwords do not match',
+        title: t('register.mismatchTitle'),
+        description: t('register.mismatchDescription'),
       })
       return
     }
@@ -34,8 +37,8 @@ export default function RegisterPage() {
     if (!isPasswordValid(password)) {
       toast({
         variant: 'destructive',
-        title: 'Password too weak',
-        description: 'Use at least 8 characters including an uppercase letter and a number.',
+        title: t('register.weakTitle'),
+        description: t('register.weakDescription'),
       })
       return
     }
@@ -50,23 +53,23 @@ export default function RegisterPage() {
       })
       setIsSuccess(true)
       toast({
-        title: 'Registration successful',
-        description: 'You can now sign in with your credentials',
+        title: t('register.successTitle'),
+        description: t('register.successDescription'),
       })
     } catch (error) {
-      let message = 'Registration failed'
+      let message = t('register.failedTitle')
       if (error instanceof ApiError) {
         if (error.status === 400) {
-          message = 'Invalid or expired invitation code'
+          message = t('register.invalidCode')
         } else if (error.status === 409) {
-          message = 'Username already exists'
+          message = t('register.userExists')
         } else if (error.message) {
           message = error.message
         }
       }
       toast({
         variant: 'destructive',
-        title: 'Registration failed',
+        title: t('register.failedTitle'),
         description: message,
       })
     } finally {
@@ -89,10 +92,10 @@ export default function RegisterPage() {
               </div>
               <div className="text-center">
                 <h1 className="font-display text-3xl font-bold tracking-tight">
-                  Registration Complete
+                  {t('register.completeTitle')}
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Your account has been created successfully.
+                  {t('register.completeSubtitle')}
                 </p>
               </div>
             </div>
@@ -101,14 +104,14 @@ export default function RegisterPage() {
               <CardContent className="pt-6">
                 <div className="space-y-4 text-center">
                   <p className="text-muted-foreground">
-                    You can now sign in with your new credentials.
+                    {t('register.completeBody')}
                   </p>
                   <Button
                     variant="glow"
                     className="w-full"
                     onClick={() => window.location.href = '/dashboard/login.html'}
                   >
-                    Go to Sign In
+                    {t('register.goToSignIn')}
                   </Button>
                 </div>
               </CardContent>
@@ -128,6 +131,11 @@ export default function RegisterPage() {
       <div className="absolute -left-40 -top-40 h-80 w-80 rounded-full bg-primary/20 blur-[100px]" />
       <div className="absolute -bottom-40 -right-40 h-80 w-80 rounded-full bg-primary/10 blur-[100px]" />
 
+      {/* Language switcher */}
+      <div className="absolute right-4 top-4 z-10">
+        <LanguageSwitcher />
+      </div>
+
       {/* Content */}
       <div className="relative flex min-h-screen items-center justify-center p-4">
         <div className="w-full max-w-md animate-fade-up">
@@ -138,10 +146,10 @@ export default function RegisterPage() {
             </div>
             <div className="text-center">
               <h1 className="font-display text-3xl font-bold tracking-tight">
-                LLM Load Balancer
+                {t('common.appName')}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Create your account
+                {t('register.subtitle')}
               </p>
             </div>
           </div>
@@ -149,15 +157,13 @@ export default function RegisterPage() {
           {/* Register Card */}
           <Card className="glass border-border/50">
             <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl font-semibold">Register</CardTitle>
-              <CardDescription>
-                Enter your invitation code and create an account
-              </CardDescription>
+              <CardTitle className="text-2xl font-semibold">{t('register.title')}</CardTitle>
+              <CardDescription>{t('register.description')}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="invitation-code">Invitation Code</Label>
+                  <Label htmlFor="invitation-code">{t('register.invitationCode')}</Label>
                   <div className="relative">
                     <Ticket className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -174,13 +180,13 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username">{t('register.username')}</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="username"
                       type="text"
-                      placeholder="Choose a username"
+                      placeholder={t('register.usernamePlaceholder')}
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       className="pl-10"
@@ -191,13 +197,13 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t('register.password')}</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="password"
                       type="password"
-                      placeholder="Create a password"
+                      placeholder={t('register.passwordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10"
@@ -209,13 +215,13 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Label htmlFor="confirm-password">{t('register.confirmPassword')}</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="confirm-password"
                       type="password"
-                      placeholder="Confirm your password"
+                      placeholder={t('register.confirmPlaceholder')}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="pl-10"
@@ -234,21 +240,21 @@ export default function RegisterPage() {
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Creating account...
+                      {t('register.creating')}
                     </div>
                   ) : (
-                    'Create Account'
+                    t('register.submit')
                   )}
                 </Button>
               </form>
 
               <div className="mt-4 text-center text-sm text-muted-foreground">
-                Already have an account?{' '}
+                {t('register.haveAccount')}{' '}
                 <a
                   href="/dashboard/login.html"
                   className="text-primary hover:underline"
                 >
-                  Sign in
+                  {t('register.signIn')}
                 </a>
               </div>
             </CardContent>
@@ -256,7 +262,7 @@ export default function RegisterPage() {
 
           {/* Footer */}
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            LLM Load Balancer Dashboard v1.0
+            {t('common.footer')}
           </p>
         </div>
       </div>

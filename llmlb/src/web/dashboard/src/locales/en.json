@@ -1,7 +1,8 @@
 {
   "common": {
     "appName": "LLM Load Balancer",
-    "language": "Language"
+    "language": "Language",
+    "footer": "LLM Load Balancer Dashboard v1.0"
   },
   "login": {
     "subtitle": "Mission Control Dashboard",
@@ -18,5 +19,55 @@
     "haveInvite": "Have an invitation code?",
     "register": "Register",
     "footer": "LLM Load Balancer Dashboard v1.0"
+  },
+  "register": {
+    "subtitle": "Create your account",
+    "title": "Register",
+    "description": "Enter your invitation code and create an account",
+    "invitationCode": "Invitation Code",
+    "invitationPlaceholder": "inv_xxxxxxxxxxxxxxxx",
+    "username": "Username",
+    "usernamePlaceholder": "Choose a username",
+    "password": "Password",
+    "passwordPlaceholder": "Create a password",
+    "confirmPassword": "Confirm Password",
+    "confirmPlaceholder": "Confirm your password",
+    "creating": "Creating account...",
+    "submit": "Create Account",
+    "haveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "mismatchTitle": "Password mismatch",
+    "mismatchDescription": "Passwords do not match",
+    "weakTitle": "Password too weak",
+    "weakDescription": "Use at least 8 characters including an uppercase letter and a number.",
+    "successTitle": "Registration successful",
+    "successDescription": "You can now sign in with your credentials",
+    "failedTitle": "Registration failed",
+    "invalidCode": "Invalid or expired invitation code",
+    "userExists": "Username already exists",
+    "completeTitle": "Registration Complete",
+    "completeSubtitle": "Your account has been created successfully.",
+    "completeBody": "You can now sign in with your new credentials.",
+    "goToSignIn": "Go to Sign In"
+  },
+  "changePassword": {
+    "title": "Change Password",
+    "subtitle": "Mission Control Dashboard",
+    "description": "You must change your password before continuing.",
+    "newPassword": "New Password",
+    "newPlaceholder": "Enter a new password",
+    "confirmPassword": "Confirm Password",
+    "confirmPlaceholder": "Confirm new password",
+    "changing": "Changing password...",
+    "submit": "Change Password",
+    "loading": "Loading...",
+    "weakTitle": "Password too weak",
+    "weakDescription": "Use at least 8 characters including an uppercase letter and a number.",
+    "validationTitle": "Validation error",
+    "mismatch": "Passwords do not match",
+    "changedTitle": "Password changed",
+    "changedDescription": "Please sign in with your new password",
+    "failedTitle": "Failed to change password",
+    "failedDescription": "Please try again"
   }
 }

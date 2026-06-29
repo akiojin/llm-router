@@ -1,7 +1,8 @@
 {
   "common": {
     "appName": "LLM Load Balancer",
-    "language": "言語"
+    "language": "言語",
+    "footer": "LLM Load Balancer ダッシュボード v1.0"
   },
   "login": {
     "subtitle": "ミッションコントロール ダッシュボード",
@@ -18,5 +19,55 @@
     "haveInvite": "招待コードをお持ちですか？",
     "register": "登録",
     "footer": "LLM Load Balancer ダッシュボード v1.0"
+  },
+  "register": {
+    "subtitle": "アカウントを作成",
+    "title": "登録",
+    "description": "招待コードを入力してアカウントを作成してください",
+    "invitationCode": "招待コード",
+    "invitationPlaceholder": "inv_xxxxxxxxxxxxxxxx",
+    "username": "ユーザー名",
+    "usernamePlaceholder": "ユーザー名を選択",
+    "password": "パスワード",
+    "passwordPlaceholder": "パスワードを作成",
+    "confirmPassword": "パスワード（確認）",
+    "confirmPlaceholder": "パスワードを再入力",
+    "creating": "アカウントを作成しています...",
+    "submit": "アカウント作成",
+    "haveAccount": "すでにアカウントをお持ちですか？",
+    "signIn": "サインイン",
+    "mismatchTitle": "パスワードが一致しません",
+    "mismatchDescription": "パスワードが一致しません",
+    "weakTitle": "パスワードが脆弱です",
+    "weakDescription": "8文字以上で、大文字と数字を含めてください。",
+    "successTitle": "登録が完了しました",
+    "successDescription": "認証情報でサインインできます",
+    "failedTitle": "登録に失敗しました",
+    "invalidCode": "招待コードが無効または期限切れです",
+    "userExists": "そのユーザー名は既に存在します",
+    "completeTitle": "登録完了",
+    "completeSubtitle": "アカウントが正常に作成されました。",
+    "completeBody": "新しい認証情報でサインインできます。",
+    "goToSignIn": "サインインへ"
+  },
+  "changePassword": {
+    "title": "パスワード変更",
+    "subtitle": "ミッションコントロール ダッシュボード",
+    "description": "続行する前にパスワードを変更してください。",
+    "newPassword": "新しいパスワード",
+    "newPlaceholder": "新しいパスワードを入力",
+    "confirmPassword": "パスワード（確認）",
+    "confirmPlaceholder": "新しいパスワードを再入力",
+    "changing": "パスワードを変更しています...",
+    "submit": "パスワードを変更",
+    "loading": "読み込み中...",
+    "weakTitle": "パスワードが脆弱です",
+    "weakDescription": "8文字以上で、大文字と数字を含めてください。",
+    "validationTitle": "入力エラー",
+    "mismatch": "パスワードが一致しません",
+    "changedTitle": "パスワードを変更しました",
+    "changedDescription": "新しいパスワードでサインインしてください",
+    "failedTitle": "パスワードの変更に失敗しました",
+    "failedDescription": "もう一度お試しください"
   }
 }
