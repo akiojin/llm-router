@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { type LogEntry, dashboardApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -29,6 +30,7 @@ import { toast } from '@/hooks/use-toast'
 type LogLevel = 'all' | 'error' | 'warn' | 'info' | 'debug'
 
 export function LogViewer() {
+  const { t } = useTranslation()
   const [levelFilter, setLevelFilter] = useState<LogLevel>('all')
   const [autoScroll, setAutoScroll] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -66,12 +68,12 @@ export function LogViewer() {
   }
 
   const handleClear = () => {
-    toast({ title: 'Log clearing is handled on the server side' })
+    toast({ title: t('logs.clearServerSide') })
   }
 
   const handleDownload = () => {
     if (!filteredLogs || filteredLogs.length === 0) {
-      toast({ title: 'No logs to download', variant: 'destructive' })
+      toast({ title: t('logs.noLogsToDownload'), variant: 'destructive' })
       return
     }
 
@@ -86,7 +88,7 @@ export function LogViewer() {
     a.download = `logs-llmlb-${new Date().toISOString().slice(0, 10)}.txt`
     a.click()
     URL.revokeObjectURL(url)
-    toast({ title: 'Logs downloaded' })
+    toast({ title: t('logs.downloaded') })
   }
 
   const getLevelColor = (level: string) => {
@@ -104,7 +106,7 @@ export function LogViewer() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Log Viewer
+            {t('logs.title')}
             {filteredLogs && (
               <Badge variant="secondary" className="ml-2">
                 {filteredLogs.length}
@@ -116,7 +118,7 @@ export function LogViewer() {
             {/* Source Label (router only) */}
             <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
               <Server className="h-4 w-4" />
-              <span className="text-sm font-medium">LLM Load Balancer</span>
+              <span className="text-sm font-medium">{t('common.appName')}</span>
             </div>
 
             {/* Level Filter */}
@@ -125,11 +127,11 @@ export function LogViewer() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="warn">Warn</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="debug">Debug</SelectItem>
+                <SelectItem value="all">{t('logs.levelAll')}</SelectItem>
+                <SelectItem value="error">{t('logs.levelError')}</SelectItem>
+                <SelectItem value="warn">{t('logs.levelWarn')}</SelectItem>
+                <SelectItem value="info">{t('logs.levelInfo')}</SelectItem>
+                <SelectItem value="debug">{t('logs.levelDebug')}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -141,7 +143,7 @@ export function LogViewer() {
                 onCheckedChange={setAutoScroll}
               />
               <Label htmlFor="auto-scroll" className="text-sm">
-                Auto-scroll
+                {t('logs.autoScroll')}
               </Label>
             </div>
           </div>
@@ -159,15 +161,15 @@ export function LogViewer() {
             disabled={isRefetching}
           >
             <RefreshCw className={cn('mr-2 h-4 w-4', isRefetching && 'animate-spin')} />
-            Refresh
+            {t('logs.refresh')}
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownload}>
             <Download className="mr-2 h-4 w-4" />
-            Download
+            {t('logs.download')}
           </Button>
           <Button variant="outline" size="sm" onClick={handleClear}>
             <Trash2 className="mr-2 h-4 w-4" />
-            Clear
+            {t('logs.clear')}
           </Button>
         </div>
 
@@ -179,7 +181,7 @@ export function LogViewer() {
           >
             {!filteredLogs || filteredLogs.length === 0 ? (
               <div className="flex h-32 items-center justify-center text-muted-foreground">
-                No logs available
+                {t('logs.noLogsAvailable')}
               </div>
             ) : (
               filteredLogs.map((log, i) => (

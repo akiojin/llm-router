@@ -77,7 +77,8 @@
     "curlDescription": "Copy this command to replay the current request.",
     "close": "Close",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "copyCode": "Copy code"
   },
   "header": {
     "connection": "Connection: {{status}}",
@@ -844,5 +845,21 @@
     "strong": "Strong",
     "veryStrong": "Very strong",
     "requirementsLabel": "Password requirements"
+  },
+  "logs": {
+    "title": "Log Viewer",
+    "autoScroll": "Auto-scroll",
+    "refresh": "Refresh",
+    "download": "Download",
+    "clear": "Clear",
+    "noLogsAvailable": "No logs available",
+    "clearServerSide": "Log clearing is handled on the server side",
+    "noLogsToDownload": "No logs to download",
+    "downloaded": "Logs downloaded",
+    "levelAll": "All",
+    "levelError": "Error",
+    "levelWarn": "Warn",
+    "levelInfo": "Info",
+    "levelDebug": "Debug"
   }
 }

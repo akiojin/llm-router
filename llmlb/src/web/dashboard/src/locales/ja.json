@@ -77,7 +77,8 @@
     "curlDescription": "このコマンドをコピーすると現在のリクエストを再現できます。",
     "close": "閉じる",
     "copy": "コピー",
-    "copied": "コピーしました"
+    "copied": "コピーしました",
+    "copyCode": "コードをコピー"
   },
   "header": {
     "connection": "接続: {{status}}",
@@ -844,5 +845,21 @@
     "strong": "強い",
     "veryStrong": "非常に強い",
     "requirementsLabel": "パスワード要件"
+  },
+  "logs": {
+    "title": "ログビューア",
+    "autoScroll": "自動スクロール",
+    "refresh": "更新",
+    "download": "ダウンロード",
+    "clear": "クリア",
+    "noLogsAvailable": "ログがありません",
+    "clearServerSide": "ログのクリアはサーバー側で処理されます",
+    "noLogsToDownload": "ダウンロードするログがありません",
+    "downloaded": "ログをダウンロードしました",
+    "levelAll": "すべて",
+    "levelError": "エラー",
+    "levelWarn": "警告",
+    "levelInfo": "情報",
+    "levelDebug": "デバッグ"
   }
 }
