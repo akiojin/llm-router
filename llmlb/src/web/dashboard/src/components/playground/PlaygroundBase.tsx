@@ -143,7 +143,7 @@ export function PlaygroundBase({
 }: PlaygroundBaseProps) {
   return (
     <div className="flex h-screen bg-background">
-      <div id={sidebarId} className={`${sidebarWidth} border-r flex flex-col`}>
+      <div id={sidebarId} className={`${sidebarWidth} shrink-0 border-r flex flex-col`}>
         <div className="p-4 border-b">{sidebarHeader}</div>
 
         {sidebarInfo}
