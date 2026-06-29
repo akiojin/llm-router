@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import {
@@ -18,6 +19,7 @@ interface AuditLogPageProps {
 }
 
 export default function AuditLogPage({ onBack }: AuditLogPageProps) {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const [filters, setFilters] = useState<FilterType>({
     page: 1,
@@ -49,12 +51,12 @@ export default function AuditLogPage({ onBack }: AuditLogPageProps) {
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
           <ShieldCheck className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold">Access Denied</h2>
+          <h2 className="mt-4 text-lg font-semibold">{t('audit.accessDenied')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Admin role is required to view audit logs.
+            {t('audit.accessDeniedDescription')}
           </p>
           <Button variant="link" onClick={onBack} className="mt-4">
-            Back to Dashboard
+            {t('audit.backToDashboard')}
           </Button>
         </div>
       </div>
@@ -70,13 +72,13 @@ export default function AuditLogPage({ onBack }: AuditLogPageProps) {
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={onBack}>
               <ChevronLeft className="mr-1 h-4 w-4" />
-              Dashboard
+              {t('audit.dashboard')}
             </Button>
             <div className="h-6 w-px bg-border" />
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-primary" />
               <h1 className="font-display text-lg font-semibold tracking-tight">
-                Audit Log
+                {t('audit.title')}
               </h1>
             </div>
           </div>

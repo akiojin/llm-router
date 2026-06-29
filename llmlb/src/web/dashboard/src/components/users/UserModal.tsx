@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi, type User, type CreateUserResponse } from '@/lib/api'
 import {
@@ -65,6 +66,7 @@ interface UserModalProps {
 }
 
 export function UserModal({ open, onOpenChange }: UserModalProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<User | null>(null)
@@ -96,8 +98,9 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     },
     onError: (error) => {
       toast({
-        title: 'Failed to create user',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('users.failedToCreateUser'),
+        description:
+          error instanceof Error ? error.message : t('users.unknownError'),
         variant: 'destructive',
       })
     },
@@ -116,12 +119,13 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       resetForm()
       setEditUser(null)
-      toast({ title: 'User updated' })
+      toast({ title: t('users.userUpdated') })
     },
     onError: (error) => {
       toast({
-        title: 'Failed to update user',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('users.failedToUpdateUser'),
+        description:
+          error instanceof Error ? error.message : t('users.unknownError'),
         variant: 'destructive',
       })
     },
@@ -133,12 +137,13 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setDeleteUser(null)
-      toast({ title: 'User deleted' })
+      toast({ title: t('users.userDeleted') })
     },
     onError: (error) => {
       toast({
-        title: 'Failed to delete user',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('users.failedToDeleteUser'),
+        description:
+          error instanceof Error ? error.message : t('users.unknownError'),
         variant: 'destructive',
       })
     },
@@ -211,18 +216,18 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       if (method !== 'manual') {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
-        toast({ title: 'Copied to clipboard' })
+        toast({ title: t('users.copiedToClipboard') })
         return
       }
 
       setCopied(false)
       selectTextForManualCopy(generatedPassword)
       toast({
-        title: 'Auto copy unavailable',
-        description: 'Press Ctrl+C to copy the selected value.',
+        title: t('users.autoCopyUnavailable'),
+        description: t('users.autoCopyUnavailableDescription'),
       })
     } catch {
-      toast({ title: 'Failed to copy', variant: 'destructive' })
+      toast({ title: t('users.failedToCopy'), variant: 'destructive' })
     }
   }
 
@@ -231,14 +236,14 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       return (
         <Badge variant="default" className="gap-1">
           <Shield className="h-3 w-3" />
-          Admin
+          {t('users.admin')}
         </Badge>
       )
     }
     return (
       <Badge variant="secondary" className="gap-1">
         <UserIcon className="h-3 w-3" />
-        Viewer
+        {t('users.viewer')}
       </Badge>
     )
   }
@@ -250,10 +255,10 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              User Management
+              {t('users.title')}
             </DialogTitle>
             <DialogDescription>
-              Manage dashboard users and their permissions.
+              {t('users.description')}
             </DialogDescription>
           </DialogHeader>
 
@@ -262,7 +267,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
             <div className="flex justify-between">
               <Button onClick={handleOpenCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add User
+                {t('users.addUser')}
               </Button>
               <Button variant="outline" size="icon" onClick={() => refetch()}>
                 <RefreshCw className="h-4 w-4" />
@@ -278,16 +283,16 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
               ) : !users || (users as User[]).length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                   <Users className="h-8 w-8" />
-                  <p>No users</p>
+                  <p>{t('users.noUsers')}</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Username</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>{t('users.username')}</TableHead>
+                      <TableHead>{t('users.role')}</TableHead>
+                      <TableHead>{t('users.created')}</TableHead>
+                      <TableHead className="text-right">{t('users.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -334,37 +339,37 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle>{t('users.createTitle')}</DialogTitle>
             <DialogDescription>
-              Add a new dashboard user. A password will be automatically generated.
+              {t('users.createDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="create-username">Username</Label>
+              <Label htmlFor="create-username">{t('users.username')}</Label>
               <Input
                 id="create-username"
-                placeholder="johndoe"
+                placeholder={t('users.usernamePlaceholder')}
                 value={formUsername}
                 onChange={(e) => setFormUsername(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-role">Role</Label>
+              <Label htmlFor="create-role">{t('users.role')}</Label>
               <Select value={formRole} onValueChange={(v) => setFormRole(v as 'admin' | 'viewer')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="viewer">{t('users.viewer')}</SelectItem>
+                  <SelectItem value="admin">{t('users.admin')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
-              Cancel
+              {t('users.cancel')}
             </Button>
             <Button
               onClick={handleCreate}
@@ -373,7 +378,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
               {createMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Create
+              {t('users.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -392,10 +397,9 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>User Created Successfully</DialogTitle>
+            <DialogTitle>{t('users.userCreatedTitle')}</DialogTitle>
             <DialogDescription>
-              Please save this password. It will only be shown once.
-              The user will be required to change it on first login.
+              {t('users.userCreatedDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -424,7 +428,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
                 cleanupManualCopyBuffer()
               }}
             >
-              I have saved the password
+              {t('users.savedPasswordButton')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -441,14 +445,14 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>{t('users.editTitle')}</DialogTitle>
             <DialogDescription>
-              Update user "{editUser?.username}".
+              {t('users.editDescription', { username: editUser?.username })}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-username">Username</Label>
+              <Label htmlFor="edit-username">{t('users.username')}</Label>
               <Input
                 id="edit-username"
                 value={formUsername}
@@ -456,7 +460,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-password">Password (leave blank to keep)</Label>
+              <Label htmlFor="edit-password">{t('users.passwordLabel')}</Label>
               <Input
                 id="edit-password"
                 type="password"
@@ -466,21 +470,21 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-role">Role</Label>
+              <Label htmlFor="edit-role">{t('users.role')}</Label>
               <Select value={formRole} onValueChange={(v) => setFormRole(v as 'admin' | 'viewer')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="viewer">{t('users.viewer')}</SelectItem>
+                  <SelectItem value="admin">{t('users.admin')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseEditDialog}>
-              Cancel
+              {t('users.cancel')}
             </Button>
             <Button
               onClick={handleUpdate}
@@ -489,7 +493,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
               {updateMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Update
+              {t('users.update')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -499,14 +503,15 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       <AlertDialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogTitle>{t('users.deleteTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteUser?.username}"? This
-              action cannot be undone.
+              {t('users.deleteConfirmDescription', {
+                username: deleteUser?.username,
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('users.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -514,7 +519,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
               {deleteMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Delete
+              {t('users.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
