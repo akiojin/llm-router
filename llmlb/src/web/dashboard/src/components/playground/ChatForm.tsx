@@ -1,6 +1,6 @@
-import { type RefObject } from 'react'
+import { useEffect, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Image as ImageIcon, Mic, X, Volume2, Send, Loader2 } from 'lucide-react'
 import type { MessageAttachment } from './types'
 
@@ -13,8 +13,8 @@ interface ChatFormProps {
   disabled?: boolean
   attachments: MessageAttachment[]
   onRemoveAttachment: (index: number) => void
-  onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void
-  inputRef: RefObject<HTMLInputElement | null>
+  onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+  inputRef: RefObject<HTMLTextAreaElement | null>
   imageInputRef: RefObject<HTMLInputElement | null>
   audioInputRef: RefObject<HTMLInputElement | null>
   onImageAttach: (file: File) => void
@@ -51,6 +51,14 @@ export function ChatForm({
   sendButton,
   inputId,
 }: ChatFormProps) {
+  // テキストエリアの高さを内容に応じて自動調整（最大 200px）
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+  }, [input, inputRef])
+
   return (
     <div className="border-t p-4 bg-gradient-to-b from-background via-background to-muted/5">
       <div className={`${maxWidth} mx-auto space-y-3`}>
@@ -84,7 +92,7 @@ export function ChatForm({
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex items-end gap-2">
           {showAttachButtons && (
             <>
               <input
@@ -131,8 +139,9 @@ export function ChatForm({
             </>
           )}
 
-          <Input
+          <Textarea
             ref={inputRef}
+            rows={1}
             placeholder={placeholder}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
@@ -140,17 +149,26 @@ export function ChatForm({
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault()
                 onSend()
+              } else if (e.key === 'Escape' && isStreaming) {
+                e.preventDefault()
+                onStop()
               }
             }}
             onPaste={onPaste}
             disabled={disabled}
             id={inputId}
+            className="max-h-[200px] min-h-[2.5rem] resize-none"
           />
 
           {sendButton ? (
             sendButton
           ) : isStreaming ? (
-            <Button variant="destructive" onClick={onStop} className="shrink-0">
+            <Button
+              variant="destructive"
+              onClick={onStop}
+              title="Stop generating (Esc)"
+              className="shrink-0 animate-pulse ring-2 ring-destructive/40"
+            >
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Stop
             </Button>

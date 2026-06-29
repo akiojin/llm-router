@@ -73,6 +73,21 @@ export function truncate(str: string, length: number): string {
   return `${str.slice(0, length)}...`
 }
 
+/**
+ * fetch の中断（AbortController.abort()）由来のエラーかを安全に判定する。
+ * 中断は「失敗」ではなくユーザー操作・unmount による正常な打ち切りなので、
+ * エラートースト等の対象から除外するために使う。
+ */
+export function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  return (error as { name?: unknown }).name === 'AbortError'
+}
+
 export function debounce<T extends (...args: unknown[]) => unknown>(
   fn: T,
   delay: number

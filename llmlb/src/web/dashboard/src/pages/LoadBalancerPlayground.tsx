@@ -9,13 +9,15 @@ import {
   type OpenAIModelsResponse,
   type RequestResponseRecord,
 } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, isAbortError } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 import { usePlayground } from '@/hooks/usePlayground'
+import { splitAssistantMessage } from '@/lib/reasoning'
 import {
   PlaygroundBase,
   getErrorMessage,
   transformMessage,
+  MAX_INPUT_CHARS,
   type Message,
 } from '@/components/playground'
 import { Button } from '@/components/ui/button'
@@ -79,19 +81,6 @@ interface LoadBalancerPlaygroundProps {
   initialModel?: string
 }
 
-function extractAssistantMessageText(response: {
-  choices?: Array<{
-    message?: {
-      content?: string
-      reasoning?: string
-      reasoning_content?: string
-    }
-  }>
-}): string {
-  const message = response.choices?.[0]?.message
-  return message?.content || message?.reasoning_content || message?.reasoning || ''
-}
-
 function generateRunId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -101,17 +90,6 @@ function generateRunId(): string {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    return error.name === 'AbortError'
-  }
-  if (!error || typeof error !== 'object') {
-    return false
-  }
-  const withName = error as { name?: unknown }
-  return withName.name === 'AbortError'
 }
 
 function toNumberValue(value: string, fallback: number): number {
@@ -295,6 +273,15 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   const sendMessage = async () => {
     if ((!pg.input.trim() && pg.attachments.length === 0) || !pg.selectedModel || pg.isStreaming) return
 
+    if (pg.input.length > MAX_INPUT_CHARS) {
+      toast({
+        title: 'Message too long',
+        description: `Keep your message under ${MAX_INPUT_CHARS.toLocaleString()} characters.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
     const runId = generateRunId()
     const runTag = `lbpg:${runId}:1`
 
@@ -321,6 +308,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
 
       if (pg.streamEnabled) {
         let assistantContent = ''
+        let assistantReasoning = ''
         pg.setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
 
         await chatApi.complete(
@@ -332,11 +320,17 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             max_tokens: effectiveMaxTokens,
             user: runTag,
           },
-          (chunk) => {
-            assistantContent += chunk
+          (delta) => {
+            assistantContent += delta.content
+            assistantReasoning += delta.reasoning
+            if (!isMountedRef.current) return
             pg.setMessages((prev) => {
               const updated = [...prev]
-              updated[updated.length - 1] = { role: 'assistant', content: assistantContent }
+              updated[updated.length - 1] = {
+                role: 'assistant',
+                content: assistantContent,
+                reasoning: assistantReasoning || undefined,
+              }
               return updated
             })
           },
@@ -356,15 +350,17 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
           pg.abortControllerRef.current.signal
         )
 
+        const { content, reasoning } = splitAssistantMessage(response)
         pg.setMessages((prev) => [...prev, {
           role: 'assistant',
-          content: extractAssistantMessageText(response),
+          content,
+          reasoning: reasoning || undefined,
         }])
       }
 
       await fetchDistributionForRun(runId, 1)
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
+      if (!isAbortError(error)) {
         const description =
           error instanceof ApiError
             ? getErrorMessage(error)

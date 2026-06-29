@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { endpointsApi, ApiError, type DashboardEndpoint } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, isAbortError } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 import { usePlayground } from '@/hooks/usePlayground'
-import { PlaygroundBase, getErrorMessage, transformMessage, type Message } from '@/components/playground'
+import { splitAssistantMessage } from '@/lib/reasoning'
+import { PlaygroundBase, getErrorMessage, transformMessage, MAX_INPUT_CHARS, type Message } from '@/components/playground'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,19 +20,6 @@ import { Cpu, CircleDot, Loader2, Code } from 'lucide-react'
 interface EndpointPlaygroundProps {
   endpointId: string
   onBack: () => void
-}
-
-function extractAssistantMessageText(data: {
-  choices?: Array<{
-    message?: {
-      content?: string
-      reasoning?: string
-      reasoning_content?: string
-    }
-  }>
-}): string {
-  const message = data.choices?.[0]?.message
-  return message?.content || message?.reasoning_content || message?.reasoning || ''
 }
 
 function getStatusBadgeVariant(
@@ -128,6 +116,15 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
   const sendMessage = async () => {
     if ((!pg.input.trim() && pg.attachments.length === 0) || !pg.selectedModel || pg.isStreaming) return
 
+    if (pg.input.length > MAX_INPUT_CHARS) {
+      toast({
+        title: 'Message too long',
+        description: `Keep your message under ${MAX_INPUT_CHARS.toLocaleString()} characters.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
     const userMessage: Message = {
       role: 'user',
       content: pg.input.trim(),
@@ -147,6 +144,7 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
 
       if (pg.streamEnabled) {
         let assistantContent = ''
+        let assistantReasoning = ''
         pg.setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
 
         await endpointsApi.chatCompletions(
@@ -158,12 +156,17 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
             temperature: pg.temperature,
             max_tokens: effectiveMaxTokens,
           },
-          (chunk) => {
-            assistantContent += chunk
+          (delta) => {
+            assistantContent += delta.content
+            assistantReasoning += delta.reasoning
             if (!isMountedRef.current) return
             pg.setMessages((prev) => {
               const updated = [...prev]
-              updated[updated.length - 1] = { role: 'assistant', content: assistantContent }
+              updated[updated.length - 1] = {
+                role: 'assistant',
+                content: assistantContent,
+                reasoning: assistantReasoning || undefined,
+              }
               return updated
             })
           },
@@ -183,13 +186,15 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
           pg.abortControllerRef.current.signal
         )
 
+        const { content, reasoning } = splitAssistantMessage(data)
         pg.setMessages((prev) => [...prev, {
           role: 'assistant',
-          content: extractAssistantMessageText(data),
+          content,
+          reasoning: reasoning || undefined,
         }])
       }
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
+      if (!isAbortError(error)) {
         toast({
           title: 'Failed to send message',
           description:

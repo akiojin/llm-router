@@ -31,8 +31,8 @@ interface PlaygroundBaseProps {
   inputDisabled?: boolean
   attachments: MessageAttachment[]
   onRemoveAttachment: (index: number) => void
-  onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void
-  inputRef: RefObject<HTMLInputElement | null>
+  onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+  inputRef: RefObject<HTMLTextAreaElement | null>
   imageInputRef: RefObject<HTMLInputElement | null>
   audioInputRef: RefObject<HTMLInputElement | null>
   onImageAttach: (file: File) => void

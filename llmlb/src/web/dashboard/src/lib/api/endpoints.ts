@@ -3,6 +3,7 @@
 
 import { createApiErrorFromResponse, fetchWithAuth, getCsrfToken, API_BASE } from './client'
 import type { TpsApiKind, TpsSource } from './dashboard'
+import { splitAssistantDelta, type AssistantTextParts } from '../reasoning'
 
 /**
  * SPEC-e8e9326e: Router-Driven Endpoint Registration System
@@ -129,19 +130,6 @@ export interface ModelTpsEntry {
   average_duration_ms: number | null
 }
 
-function extractAssistantDeltaText(parsed: {
-  choices?: Array<{
-    delta?: {
-      content?: string
-      reasoning?: string
-      reasoning_content?: string
-    }
-  }>
-}): string {
-  const delta = parsed.choices?.[0]?.delta
-  return delta?.content || delta?.reasoning_content || delta?.reasoning || ''
-}
-
 export const endpointsApi = {
   /** List endpoints for dashboard */
   list: () => fetchWithAuth<DashboardEndpoint[]>('/api/dashboard/endpoints'),
@@ -260,7 +248,7 @@ export const endpointsApi = {
       temperature?: number
       max_tokens?: number
     },
-    onChunk?: (chunk: string) => void,
+    onDelta?: (delta: AssistantTextParts) => void,
     signal?: AbortSignal
   ) => {
     const headers: HeadersInit = {
@@ -283,7 +271,7 @@ export const endpointsApi = {
       throw await createApiErrorFromResponse(response)
     }
 
-    if (request.stream && onChunk) {
+    if (request.stream && onDelta) {
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No response body')
 
@@ -304,9 +292,9 @@ export const endpointsApi = {
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data)
-              const content = extractAssistantDeltaText(parsed)
-              if (content) {
-                onChunk(content)
+              const delta = splitAssistantDelta(parsed)
+              if (delta.content || delta.reasoning) {
+                onDelta(delta)
               }
             } catch {
               // Ignore parse errors
