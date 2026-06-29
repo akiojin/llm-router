@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -124,9 +125,9 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div role="status" aria-label={t('common.loading')} aria-busy="true" className="space-y-4">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-12 shimmer rounded" />
+              <Skeleton key={i} className="h-12" />
             ))}
           </div>
         </CardContent>

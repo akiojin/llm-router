@@ -2,7 +2,8 @@
   "common": {
     "appName": "LLM Load Balancer",
     "language": "Language",
-    "footer": "LLM Load Balancer Dashboard v1.0"
+    "footer": "LLM Load Balancer Dashboard v1.0",
+    "loading": "Loading"
   },
   "dashboard": {
     "tabs": {
