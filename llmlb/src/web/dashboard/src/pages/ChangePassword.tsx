@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,12 +8,10 @@ import {
   PasswordStrengthMeter,
   isPasswordValid,
 } from '@/components/auth/PasswordStrengthMeter'
-import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { toast } from '@/hooks/use-toast'
 import { Cpu, Lock } from 'lucide-react'
 
 export default function ChangePasswordPage() {
-  const { t } = useTranslation()
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -35,8 +32,8 @@ export default function ChangePasswordPage() {
     if (!isPasswordValid(newPassword)) {
       toast({
         variant: 'destructive',
-        title: t('changePassword.weakTitle'),
-        description: t('changePassword.weakDescription'),
+        title: 'Password too weak',
+        description: 'Use at least 8 characters including an uppercase letter and a number.',
       })
       return
     }
@@ -44,8 +41,8 @@ export default function ChangePasswordPage() {
     if (newPassword !== confirmPassword) {
       toast({
         variant: 'destructive',
-        title: t('changePassword.validationTitle'),
-        description: t('changePassword.mismatch'),
+        title: 'Validation error',
+        description: 'Passwords do not match',
       })
       return
     }
@@ -55,8 +52,8 @@ export default function ChangePasswordPage() {
     try {
       await authApi.changePassword(newPassword)
       toast({
-        title: t('changePassword.changedTitle'),
-        description: t('changePassword.changedDescription'),
+        title: 'Password changed',
+        description: 'Please sign in with your new password',
       })
       // Redirect to login after short delay so toast is visible
       setTimeout(() => {
@@ -65,8 +62,8 @@ export default function ChangePasswordPage() {
     } catch {
       toast({
         variant: 'destructive',
-        title: t('changePassword.failedTitle'),
-        description: t('changePassword.failedDescription'),
+        title: 'Failed to change password',
+        description: 'Please try again',
       })
     } finally {
       setIsLoading(false)
@@ -81,7 +78,7 @@ export default function ChangePasswordPage() {
             <div className="h-12 w-12 rounded-full border-4 border-primary/20" />
             <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-4 border-transparent border-t-primary" />
           </div>
-          <p className="text-sm text-muted-foreground">{t('changePassword.loading')}</p>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
@@ -96,11 +93,6 @@ export default function ChangePasswordPage() {
       <div className="absolute -left-40 -top-40 h-80 w-80 rounded-full bg-primary/20 blur-[100px]" />
       <div className="absolute -bottom-40 -right-40 h-80 w-80 rounded-full bg-primary/10 blur-[100px]" />
 
-      {/* Language switcher */}
-      <div className="absolute right-4 top-4 z-10">
-        <LanguageSwitcher />
-      </div>
-
       {/* Content */}
       <div className="relative flex min-h-screen items-center justify-center p-4">
         <div className="w-full max-w-md animate-fade-up">
@@ -111,10 +103,10 @@ export default function ChangePasswordPage() {
             </div>
             <div className="text-center">
               <h1 className="font-display text-3xl font-bold tracking-tight">
-                {t('common.appName')}
+                LLM Load Balancer
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                {t('changePassword.subtitle')}
+                Mission Control Dashboard
               </p>
             </div>
           </div>
@@ -122,19 +114,19 @@ export default function ChangePasswordPage() {
           {/* Change Password Card */}
           <Card className="glass border-border/50">
             <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl font-semibold">{t('changePassword.title')}</CardTitle>
-              <CardDescription>{t('changePassword.description')}</CardDescription>
+              <CardTitle className="text-2xl font-semibold">Change Password</CardTitle>
+              <CardDescription>You must change your password before continuing.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="new-password">{t('changePassword.newPassword')}</Label>
+                  <Label htmlFor="new-password">New Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="new-password"
                       type="password"
-                      placeholder={t('changePassword.newPlaceholder')}
+                      placeholder="Enter a new password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       className="pl-10"
@@ -148,13 +140,13 @@ export default function ChangePasswordPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">{t('changePassword.confirmPassword')}</Label>
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="confirm-password"
                       type="password"
-                      placeholder={t('changePassword.confirmPlaceholder')}
+                      placeholder="Confirm new password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="pl-10"
@@ -173,10 +165,10 @@ export default function ChangePasswordPage() {
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      {t('changePassword.changing')}
+                      Changing password...
                     </div>
                   ) : (
-                    t('changePassword.submit')
+                    'Change Password'
                   )}
                 </Button>
               </form>
@@ -185,7 +177,7 @@ export default function ChangePasswordPage() {
 
           {/* Footer */}
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            {t('common.footer')}
+            LLM Load Balancer Dashboard v1.0
           </p>
         </div>
       </div>

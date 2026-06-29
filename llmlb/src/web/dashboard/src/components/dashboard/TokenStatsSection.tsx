@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   Bar,
@@ -26,11 +25,10 @@ interface TokenChartDatum {
 
 /** 入力/出力トークンを期間ごとに積み上げ表示するバーチャート。 */
 function TokenBarChart({ data }: { data: TokenChartDatum[] }) {
-  const { t } = useTranslation()
   return (
     <div
       role="img"
-      aria-label={t('analytics.tokenStatistics')}
+      aria-label="Token Statistics"
       className="mb-4 h-64 w-full"
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -61,11 +59,11 @@ function TokenBarChart({ data }: { data: TokenChartDatum[] }) {
             labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
             formatter={(value, name) => [
               formatNumber(Number(value ?? 0)),
-              name === 'input' ? t('analytics.input') : t('analytics.output'),
+              name === 'input' ? 'Input' : 'Output',
             ]}
           />
           <Legend
-            formatter={(value) => (value === 'input' ? t('analytics.input') : t('analytics.output'))}
+            formatter={(value) => (value === 'input' ? 'Input' : 'Output')}
             wrapperStyle={{ fontSize: '12px' }}
           />
           <Bar dataKey="input" stackId="tokens" fill="hsl(var(--chart-1))" radius={[0, 0, 0, 0]} />
@@ -78,9 +76,8 @@ function TokenBarChart({ data }: { data: TokenChartDatum[] }) {
 
 /** ローディング中のアクセシブルなスケルトン表示（スクリーンリーダーへ通知）。 */
 function StatsLoading({ rows }: { rows: number }) {
-  const { t } = useTranslation()
   return (
-    <div role="status" aria-label={t('common.loading')} aria-busy="true" className="space-y-2">
+    <div role="status" aria-label="Loading" aria-busy="true" className="space-y-2">
       {[...Array(rows)].map((_, i) => (
         <Skeleton key={i} className="h-10" />
       ))}
@@ -89,7 +86,6 @@ function StatsLoading({ rows }: { rows: number }) {
 }
 
 export function TokenStatsSection() {
-  const { t } = useTranslation()
   const { data: dailyStats, isLoading: loadingDaily } = useQuery<DailyTokenStats[]>({
     queryKey: ['token-stats-daily'],
     queryFn: () => dashboardApi.getDailyTokenStats(7),
@@ -116,7 +112,7 @@ export function TokenStatsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5" />
-          {t('analytics.tokenStatistics')}
+          Token Statistics
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -124,11 +120,11 @@ export function TokenStatsSection() {
           <TabsList>
             <TabsTrigger value="daily" className="gap-2">
               <TrendingUp className="h-4 w-4" />
-              {t('analytics.daily')}
+              Daily
             </TabsTrigger>
             <TabsTrigger value="monthly" className="gap-2">
               <Calendar className="h-4 w-4" />
-              {t('analytics.monthly')}
+              Monthly
             </TabsTrigger>
           </TabsList>
 
@@ -139,11 +135,11 @@ export function TokenStatsSection() {
               <div className="space-y-2">
                 <TokenBarChart data={dailyChart} />
                 <div className="grid grid-cols-5 gap-2 text-sm font-medium text-muted-foreground border-b pb-2">
-                  <div>{t('analytics.date')}</div>
-                  <div className="text-right">{t('analytics.requests')}</div>
-                  <div className="text-right">{t('analytics.input')}</div>
-                  <div className="text-right">{t('analytics.output')}</div>
-                  <div className="text-right">{t('analytics.total')}</div>
+                  <div>Date</div>
+                  <div className="text-right">Requests</div>
+                  <div className="text-right">Input</div>
+                  <div className="text-right">Output</div>
+                  <div className="text-right">Total</div>
                 </div>
                 {dailyStats.map((stat) => (
                   <div key={stat.date} className="grid grid-cols-5 gap-2 text-sm py-2 border-b border-border/50">
@@ -158,7 +154,7 @@ export function TokenStatsSection() {
             ) : (
               <EmptyState
                 icon={<MessageSquare className="h-10 w-10" />}
-                title={t('analytics.noDailyStatistics')}
+                title="No daily statistics available"
               />
             )}
           </TabsContent>
@@ -170,11 +166,11 @@ export function TokenStatsSection() {
               <div className="space-y-2">
                 <TokenBarChart data={monthlyChart} />
                 <div className="grid grid-cols-5 gap-2 text-sm font-medium text-muted-foreground border-b pb-2">
-                  <div>{t('analytics.month')}</div>
-                  <div className="text-right">{t('analytics.requests')}</div>
-                  <div className="text-right">{t('analytics.input')}</div>
-                  <div className="text-right">{t('analytics.output')}</div>
-                  <div className="text-right">{t('analytics.total')}</div>
+                  <div>Month</div>
+                  <div className="text-right">Requests</div>
+                  <div className="text-right">Input</div>
+                  <div className="text-right">Output</div>
+                  <div className="text-right">Total</div>
                 </div>
                 {monthlyStats.map((stat) => (
                   <div key={stat.month} className="grid grid-cols-5 gap-2 text-sm py-2 border-b border-border/50">
@@ -189,7 +185,7 @@ export function TokenStatsSection() {
             ) : (
               <EmptyState
                 icon={<MessageSquare className="h-10 w-10" />}
-                title={t('analytics.noMonthlyStatistics')}
+                title="No monthly statistics available"
               />
             )}
           </TabsContent>

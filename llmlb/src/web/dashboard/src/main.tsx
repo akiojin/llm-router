@@ -5,7 +5,6 @@ import { AuthProvider } from '@/hooks/useAuth'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/toaster'
 import App from './App'
-import './i18n'
 import './index.css'
 
 const queryClient = new QueryClient({

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { type ClientIpRanking } from '@/lib/api'
 import { ClientDrilldown } from './ClientDrilldown'
 import { Button } from '@/components/ui/button'
@@ -21,7 +20,6 @@ export function ClientRankingTable({
   perPage,
   onPageChange,
 }: ClientRankingTableProps) {
-  const { t } = useTranslation()
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage))
   const [selectedIp, setSelectedIp] = useState<string | null>(null)
 
@@ -44,17 +42,17 @@ export function ClientRankingTable({
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="w-8 px-2 py-3" />
-              <th className="px-4 py-3 text-left font-medium">{t('analytics.ipAddress')}</th>
-              <th className="px-4 py-3 text-right font-medium">{t('analytics.requests')}</th>
-              <th className="px-4 py-3 text-left font-medium">{t('analytics.lastSeen')}</th>
-              <th className="px-4 py-3 text-center font-medium">{t('analytics.status')}</th>
+              <th className="px-4 py-3 text-left font-medium">IP Address</th>
+              <th className="px-4 py-3 text-right font-medium">Requests</th>
+              <th className="px-4 py-3 text-left font-medium">Last Seen</th>
+              <th className="px-4 py-3 text-center font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {rankings.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                  {t('analytics.noClientData')}
+                  No client data available
                 </td>
               </tr>
             ) : (
@@ -80,7 +78,7 @@ export function ClientRankingTable({
                     <td className="px-4 py-3 text-center">
                       {r.is_alert && (
                         <Badge variant="destructive" className="text-xs">
-                          {t('analytics.alert')}
+                          Alert
                         </Badge>
                       )}
                     </td>
@@ -102,7 +100,7 @@ export function ClientRankingTable({
       {totalCount > perPage && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            {t('analytics.clientsTotal', { count: totalCount })}
+            {`${totalCount} clients total`}
           </p>
           <div className="flex items-center gap-2">
             <Button

@@ -1,12 +1,10 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { auditLogApi, HashChainVerifyResult } from '@/lib/api'
 import { ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react'
 
 export function HashChainStatus() {
-  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<HashChainVerifyResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -18,7 +16,7 @@ export function HashChainStatus() {
       const res = await auditLogApi.verify()
       setResult(res)
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('audit.verificationFailed'))
+      setError(e instanceof Error ? e.message : 'Verification failed')
     } finally {
       setLoading(false)
     }
@@ -37,18 +35,18 @@ export function HashChainStatus() {
         ) : (
           <ShieldCheck className="mr-2 h-4 w-4" />
         )}
-        {t('audit.verifyHashChain')}
+        Verify Hash Chain
       </Button>
       {result && (
         result.valid ? (
           <Badge variant="default" className="bg-green-600">
             <ShieldCheck className="mr-1 h-3 w-3" />
-            {t('audit.verified', { batches: result.batches_checked })}
+            {`Verified (${result.batches_checked} batches)`}
           </Badge>
         ) : (
           <Badge variant="destructive">
             <ShieldAlert className="mr-1 h-3 w-3" />
-            {t('audit.tampered', { batch: result.tampered_batch })}
+            {`Tampered: Batch ${result.tampered_batch}`}
           </Badge>
         )
       )}

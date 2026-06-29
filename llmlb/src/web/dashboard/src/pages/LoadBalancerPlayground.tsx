@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   chatApi,
@@ -137,7 +136,6 @@ function buildDistributionRows(records: RequestResponseRecord[]): DistributionRo
 }
 
 export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBalancerPlaygroundProps) {
-  const { t } = useTranslation()
   const [mode, setMode] = useState<PlaygroundMode>('chat')
 
   const [loadTestTotalRequests, setLoadTestTotalRequests] = useState(
@@ -182,13 +180,13 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
 
   useEffect(() => {
     if (!modelsError) return
-    let description = t('lbPlaygroundPage.fetchModelsError')
+    let description = 'Failed to fetch model list'
     if (modelsError instanceof ApiError) {
       description = getErrorMessage(modelsError)
     } else if (modelsError instanceof Error) {
       description = modelsError.message
     }
-    toast({ title: t('lbPlaygroundPage.errorTitle'), description, variant: 'destructive' })
+    toast({ title: 'Error', description, variant: 'destructive' })
   }, [modelsError])
 
   useEffect(() => {
@@ -266,7 +264,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
         updatedAt: new Date().toISOString(),
       })
     } catch (error) {
-      setDistributionError(error instanceof Error ? error.message : t('lbPlaygroundPage.loadDistributionError'))
+      setDistributionError(error instanceof Error ? error.message : 'Failed to load distribution')
     } finally {
       setIsRefreshingDistribution(false)
     }
@@ -277,10 +275,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
 
     if (pg.input.length > MAX_INPUT_CHARS) {
       toast({
-        title: t('lbPlaygroundPage.messageTooLongTitle'),
-        description: t('lbPlaygroundPage.messageTooLongDescription', {
-          count: MAX_INPUT_CHARS.toLocaleString(),
-        }),
+        title: 'Message too long',
+        description: `Keep your message under ${MAX_INPUT_CHARS.toLocaleString()} characters.`,
         variant: 'destructive',
       })
       return
@@ -370,9 +366,9 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             ? getErrorMessage(error)
             : error instanceof Error
               ? error.message
-              : t('lbPlaygroundPage.unknownError')
+              : 'Unknown error'
 
-        toast({ title: t('lbPlaygroundPage.sendMessageError'), description, variant: 'destructive' })
+        toast({ title: 'Failed to send message', description, variant: 'destructive' })
         // Drop only the optimistic empty assistant placeholder (streaming),
         // keep the user's message, and restore the input so it can be resent.
         pg.setMessages((prev) => {
@@ -402,7 +398,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
     const concurrency = Math.max(1, toNumberValue(loadTestConcurrency, DEFAULT_LOAD_TEST_SETTINGS.concurrency))
     const intervalMs = Math.max(0, toNumberValue(loadTestIntervalMs, DEFAULT_LOAD_TEST_SETTINGS.intervalMs))
 
-    const prompt = pg.input.trim() || t('lbPlaygroundPage.loadTestDefaultPrompt')
+    const prompt = pg.input.trim() || 'Load balancing validation request'
     const runId = generateRunId()
 
     setIsLoadTesting(true)
@@ -481,11 +477,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
         ...prev,
         {
           role: 'assistant',
-          content: t('lbPlaygroundPage.loadTestFinished', {
-            requests: finalCount,
-            success,
-            errors: error,
-          }),
+          content: `Load test finished. requests=${finalCount}, success=${success}, error=${error}`,
         },
       ])
     } finally {
@@ -542,12 +534,12 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   const loadTestSettingsPanel = mode === 'load_test' ? (
     <div className="rounded-lg border bg-muted/20 p-3 space-y-3" id="lb-load-test-settings">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">{t('lbPlaygroundPage.loadTestSettings')}</p>
-        <Badge variant="secondary">{t('lbPlaygroundPage.defaultHigh')}</Badge>
+        <p className="text-sm font-medium">Load test settings</p>
+        <Badge variant="secondary">Default: High</Badge>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="lb-total-requests" className="text-xs">{t('lbPlaygroundPage.requestsLabel')}</Label>
+          <Label htmlFor="lb-total-requests" className="text-xs">Requests</Label>
           <Input
             id="lb-total-requests"
             type="number"
@@ -558,7 +550,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="lb-concurrency" className="text-xs">{t('lbPlaygroundPage.concurrencyLabel')}</Label>
+          <Label htmlFor="lb-concurrency" className="text-xs">Concurrency</Label>
           <Input
             id="lb-concurrency"
             type="number"
@@ -569,7 +561,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="lb-interval-ms" className="text-xs">{t('lbPlaygroundPage.intervalLabel')}</Label>
+          <Label htmlFor="lb-interval-ms" className="text-xs">Interval (ms)</Label>
           <Input
             id="lb-interval-ms"
             type="number"
@@ -584,14 +576,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       {loadTestProgress && (
         <div className="space-y-2" id="lb-load-test-progress">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{t('lbPlaygroundPage.progressCompleted', {
-              completed: loadTestProgress.completed,
-              total: loadTestProgress.total,
-            })}</span>
-            <span>{t('lbPlaygroundPage.progressStats', {
-              success: loadTestProgress.success,
-              error: loadTestProgress.error,
-            })}</span>
+            <span>{`${loadTestProgress.completed}/${loadTestProgress.total} completed`}</span>
+            <span>{`success=${loadTestProgress.success}, error=${loadTestProgress.error}`}</span>
           </div>
           <div className="h-2 rounded-full bg-muted">
             <div
@@ -608,7 +594,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
     pg.isStreaming ? (
       <Button variant="destructive" onClick={pg.stopGeneration} className="shrink-0" id="lb-stop-chat">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        {t('lbPlaygroundPage.stop')}
+        Stop
       </Button>
     ) : (
       <Button
@@ -618,7 +604,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
         id="lb-send-chat"
       >
         <Send className="mr-2 h-4 w-4" />
-        {t('lbPlaygroundPage.send')}
+        Send
       </Button>
     )
   ) : isLoadTesting ? (
@@ -629,7 +615,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       id="lb-stop-load-test"
     >
       <Square className="mr-2 h-4 w-4" />
-      {isStoppingLoadTest ? t('lbPlaygroundPage.stopping') : t('lbPlaygroundPage.stop')}
+      {isStoppingLoadTest ? 'Stopping...' : 'Stop'}
     </Button>
   ) : (
     <Button
@@ -639,7 +625,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       id="lb-start-load-test"
     >
       <Play className="mr-2 h-4 w-4" />
-      {t('lbPlaygroundPage.startLoadTest')}
+      Start Load Test
     </Button>
   )
 
@@ -648,7 +634,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Network className="h-4 w-4 text-primary" />
-          {t('lbPlaygroundPage.requestDistribution')}
+          Request Distribution
         </div>
         {distributionSummary && (
           <Button
@@ -660,7 +646,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             disabled={isRefreshingDistribution}
           >
             <RefreshCw className={cn('mr-2 h-3.5 w-3.5', isRefreshingDistribution && 'animate-spin')} />
-            {t('lbPlaygroundPage.refresh')}
+            Refresh
           </Button>
         )}
       </div>
@@ -675,24 +661,19 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       {distributionSummary && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground" id="lb-distribution-summary">
-            {t('lbPlaygroundPage.distributionSummary', {
-              runId: distributionSummary.runId.slice(0, 8),
-              matched: distributionSummary.matchedCount,
-              expected: distributionSummary.expectedCount,
-              updated: new Date(distributionSummary.updatedAt).toLocaleTimeString(),
-            })}
+            {`Run: ${distributionSummary.runId.slice(0, 8)} | Matched: ${distributionSummary.matchedCount}/${distributionSummary.expectedCount} | Updated: ${new Date(distributionSummary.updatedAt).toLocaleTimeString()}`}
           </p>
           <div className="rounded-md border bg-background">
             <div className="grid grid-cols-[1fr_80px_80px_80px_120px] border-b px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>{t('lbPlaygroundPage.endpointHeader')}</span>
-              <span className="text-right">{t('lbPlaygroundPage.countHeader')}</span>
-              <span className="text-right">{t('lbPlaygroundPage.successHeader')}</span>
-              <span className="text-right">{t('lbPlaygroundPage.errorHeader')}</span>
-              <span className="text-right">{t('lbPlaygroundPage.avgMsHeader')}</span>
+              <span>Endpoint</span>
+              <span className="text-right">Count</span>
+              <span className="text-right">Success</span>
+              <span className="text-right">Error</span>
+              <span className="text-right">Avg ms</span>
             </div>
             {distributionSummary.rows.length === 0 ? (
               <p className="px-3 py-3 text-xs text-muted-foreground">
-                {t('lbPlaygroundPage.noRecords')}
+                No records found for this run yet.
               </p>
             ) : (
               distributionSummary.rows.map((row) => (
@@ -726,8 +707,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             <Network className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <h1 className="font-semibold text-sm">{t('lbPlaygroundPage.loadBalancer')}</h1>
-            <p className="text-xs text-muted-foreground">{t('lbPlaygroundPage.playground')}</p>
+            <h1 className="font-semibold text-sm">Load Balancer</h1>
+            <p className="text-xs text-muted-foreground">Playground</p>
           </div>
         </div>
       }
@@ -738,15 +719,15 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             className="text-xs text-muted-foreground flex items-center gap-2"
           >
             <ShieldCheck className="h-3 w-3" />
-            <span className="font-medium">{t('lbPlaygroundPage.dashboardSession')}</span>
-            <Badge variant="default">{t('lbPlaygroundPage.active')}</Badge>
+            <span className="font-medium">Dashboard session:</span>
+            <Badge variant="default">Active</Badge>
           </div>
           <div className="text-xs text-muted-foreground">
-            <span className="font-medium">{t('lbPlaygroundPage.modelsLabel')}</span> {modelOptions.length}
+            <span className="font-medium">Models:</span> {modelOptions.length}
           </div>
           <div className="text-xs text-muted-foreground">
-            <span className="font-medium">{t('lbPlaygroundPage.modeLabel')}</span>{' '}
-            {mode === 'chat' ? t('lbPlaygroundPage.interactiveChat') : t('lbPlaygroundPage.loadTestMode')}
+            <span className="font-medium">Mode:</span>{' '}
+            {mode === 'chat' ? 'Interactive chat' : 'Load test'}
           </div>
         </div>
       }
@@ -759,7 +740,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             disabled={isLoadingModels}
           >
             <RefreshCw className={cn('mr-2 h-4 w-4', isLoadingModels && 'animate-spin')} />
-            {t('lbPlaygroundPage.refreshModels')}
+            Refresh Models
           </Button>
         </>
       }
@@ -774,7 +755,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               id="lb-mode-chat"
             >
               <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-              {t('lbPlaygroundPage.chat')}
+              Chat
             </Button>
             <Button
               size="sm"
@@ -784,19 +765,19 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               id="lb-mode-load-test"
             >
               <Gauge className="mr-1.5 h-3.5 w-3.5" />
-              {t('lbPlaygroundPage.loadTest')}
+              Load Test
             </Button>
           </div>
 
           <Select value={pg.selectedModel} onValueChange={pg.setSelectedModel}>
             <SelectTrigger className="w-80" id="lb-model-select">
-              <SelectValue placeholder={t('lbPlaygroundPage.selectModel')} />
+              <SelectValue placeholder="Select a model" />
             </SelectTrigger>
             <SelectContent>
               {isLoadingModels ? (
-                <SelectItem value="__loading__" disabled>{t('lbPlaygroundPage.loadingModels')}</SelectItem>
+                <SelectItem value="__loading__" disabled>Loading models...</SelectItem>
               ) : modelOptions.length === 0 ? (
-                <SelectItem value="__empty__" disabled>{t('lbPlaygroundPage.noModelsAvailable')}</SelectItem>
+                <SelectItem value="__empty__" disabled>No models available</SelectItem>
               ) : (
                 modelOptions.map((model) => (
                   <SelectItem key={model.id} value={model.id}>{model.id}</SelectItem>
@@ -806,21 +787,21 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
           </Select>
 
           {mode === 'chat' && pg.streamEnabled && (
-            <Badge variant="secondary" className="text-xs">{t('lbPlaygroundPage.streaming')}</Badge>
+            <Badge variant="secondary" className="text-xs">Streaming</Badge>
           )}
         </div>
       }
       headerRight={
         <Button variant="outline" size="sm" onClick={() => pg.setCurlOpen(true)}>
           <Code className="mr-2 h-4 w-4" />
-          {t('lbPlaygroundPage.curl')}
+          cURL
         </Button>
       }
       aboveMessages={distributionPanel}
       messages={pg.messages}
       messagesEndRef={pg.messagesEndRef}
-      emptyTitle={t('lbPlaygroundPage.emptyTitle')}
-      emptyDescription={t('lbPlaygroundPage.emptyDescription')}
+      emptyTitle="Start a load balancer conversation"
+      emptyDescription="Choose a model and send requests through the load balancer."
       input={pg.input}
       onInputChange={pg.setInput}
       onSend={() => {
@@ -843,8 +824,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       sendDisabled={!canSendChat}
       inputPlaceholder={
         mode === 'chat'
-          ? t('lbPlaygroundPage.chatPlaceholder')
-          : t('lbPlaygroundPage.loadTestPlaceholder')
+          ? 'Type a message or attach files...'
+          : 'Prompt used for each load test request...'
       }
       showAttachButtons={mode === 'chat'}
       formExtraContent={loadTestSettingsPanel}
@@ -870,7 +851,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       curlCommand={generateCurl()}
       copied={pg.copied}
       onCopyCurl={pg.handleCopyCurl}
-      curlDescription={t('lbPlaygroundPage.curlDescription')}
+      curlDescription="Copy this command to replay the current request through the load balancer."
       resetChat={pg.resetChat}
     />
   )

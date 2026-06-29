@@ -1,5 +1,4 @@
 import { Check, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 // バックエンドのパスワードポリシー（auth/password.rs validate_password）に合わせる:
@@ -11,12 +10,12 @@ interface Criterion {
 }
 
 const CRITERIA: Criterion[] = [
-  { label: 'passwordStrength.req8Chars', test: (pw) => pw.length >= 8, required: true },
-  { label: 'passwordStrength.reqUppercase', test: (pw) => /[A-Z]/.test(pw), required: true },
-  { label: 'passwordStrength.reqNumber', test: (pw) => /[0-9]/.test(pw), required: true },
-  { label: 'passwordStrength.req12Chars', test: (pw) => pw.length >= 12, required: false },
+  { label: 'At least 8 characters', test: (pw) => pw.length >= 8, required: true },
+  { label: 'Contains an uppercase letter', test: (pw) => /[A-Z]/.test(pw), required: true },
+  { label: 'Contains a number', test: (pw) => /[0-9]/.test(pw), required: true },
+  { label: 'At least 12 characters (recommended)', test: (pw) => pw.length >= 12, required: false },
   {
-    label: 'passwordStrength.reqSymbol',
+    label: 'Contains a symbol (recommended)',
     test: (pw) => /[^A-Za-z0-9]/.test(pw),
     required: false,
   },
@@ -28,14 +27,13 @@ export function isPasswordValid(password: string): boolean {
 }
 
 function strengthLabel(
-  score: number,
-  t: (key: string, opts?: Record<string, unknown>) => string
+  score: number
 ): { label: string; barClass: string; textClass: string } {
   if (score <= 2)
-    return { label: t('passwordStrength.weak'), barClass: 'bg-destructive', textClass: 'text-destructive' }
-  if (score <= 3) return { label: t('passwordStrength.fair'), barClass: 'bg-warning', textClass: 'text-warning' }
-  if (score <= 4) return { label: t('passwordStrength.strong'), barClass: 'bg-success', textClass: 'text-success' }
-  return { label: t('passwordStrength.veryStrong'), barClass: 'bg-success', textClass: 'text-success' }
+    return { label: 'Weak', barClass: 'bg-destructive', textClass: 'text-destructive' }
+  if (score <= 3) return { label: 'Fair', barClass: 'bg-warning', textClass: 'text-warning' }
+  if (score <= 4) return { label: 'Strong', barClass: 'bg-success', textClass: 'text-success' }
+  return { label: 'Very strong', barClass: 'bg-success', textClass: 'text-success' }
 }
 
 interface PasswordStrengthMeterProps {
@@ -45,11 +43,10 @@ interface PasswordStrengthMeterProps {
 }
 
 export function PasswordStrengthMeter({ password, className, id }: PasswordStrengthMeterProps) {
-  const { t } = useTranslation()
   if (!password) return null
 
   const score = CRITERIA.reduce((acc, c) => acc + (c.test(password) ? 1 : 0), 0)
-  const { label, barClass, textClass } = strengthLabel(score, t)
+  const { label, barClass, textClass } = strengthLabel(score)
   const segments = CRITERIA.length
 
   return (
@@ -65,7 +62,7 @@ export function PasswordStrengthMeter({ password, className, id }: PasswordStren
         </div>
         <span className={cn('text-xs font-medium', textClass)}>{label}</span>
       </div>
-      <ul className="space-y-1" aria-label={t('passwordStrength.requirementsLabel')}>
+      <ul className="space-y-1" aria-label="Password requirements">
         {CRITERIA.map((c) => {
           const ok = c.test(password)
           return (
@@ -77,7 +74,7 @@ export function PasswordStrengthMeter({ password, className, id }: PasswordStren
               )}
             >
               {ok ? <Check className="h-3 w-3 shrink-0" /> : <X className="h-3 w-3 shrink-0" />}
-              {t(c.label)}
+              {c.label}
             </li>
           )
         })}

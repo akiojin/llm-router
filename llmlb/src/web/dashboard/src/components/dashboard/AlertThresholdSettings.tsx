@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clientsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -7,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Settings2 } from 'lucide-react'
 
 export function AlertThresholdSettings() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [inputValue, setInputValue] = useState('')
@@ -44,7 +42,7 @@ export function AlertThresholdSettings() {
     return (
       <div className="flex items-center gap-2 text-sm">
         <Settings2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">{t('modelDialogs.alertThresholdLabel')}</span>
+        <span className="text-muted-foreground">Alert threshold (1h):</span>
         <Input
           type="number"
           min={1}
@@ -58,10 +56,10 @@ export function AlertThresholdSettings() {
           autoFocus
         />
         <Button size="sm" variant="outline" className="h-7" onClick={save} disabled={mutation.isPending}>
-          {t('modelDialogs.save')}
+          Save
         </Button>
         <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditing(false)}>
-          {t('modelDialogs.cancel')}
+          Cancel
         </Button>
       </div>
     )
@@ -70,10 +68,10 @@ export function AlertThresholdSettings() {
   return (
     <div className="flex items-center gap-2 text-sm">
       <Settings2 className="h-4 w-4 text-muted-foreground" />
-      <span className="text-muted-foreground">{t('modelDialogs.alertThresholdLabel')}</span>
-      <span className="font-medium">{t('modelDialogs.thresholdRequests', { value: threshold })}</span>
+      <span className="text-muted-foreground">Alert threshold (1h):</span>
+      <span className="font-medium">{`${threshold} requests`}</span>
       <Button size="sm" variant="ghost" className="h-7" onClick={startEditing}>
-        {t('modelDialogs.edit')}
+        Edit
       </Button>
     </div>
   )

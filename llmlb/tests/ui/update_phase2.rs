@@ -17,12 +17,6 @@ fn get_system_ts_source() -> String {
     include_str!("../../src/web/dashboard/src/lib/api/system.ts").to_string()
 }
 
-// SPEC #678 i18n: user-facing English text moved to locales/en.json
-// (referenced via `t('dashboardPage.*')`), so text-presence checks read the locale.
-fn get_en_locale() -> String {
-    include_str!("../../src/web/dashboard/src/locales/en.json").to_string()
-}
-
 // T280: FR-022 — DL progress bar shows when PayloadState is downloading
 #[test]
 fn download_progress_bar_displayed_for_downloading_state() {
@@ -62,7 +56,7 @@ fn drain_timeout_countdown_displayed() {
         "Dashboard should reference timeout_at for drain timeout countdown"
     );
     assert!(
-        get_en_locale().contains("Drain timeout in"),
+        source.contains("Drain timeout in"),
         "Dashboard should show drain timeout countdown text"
     );
 }
@@ -75,7 +69,7 @@ fn applying_phase_message_and_timeout_are_displayed() {
         "Dashboard should display applying phase_message when provided"
     );
     assert!(
-        get_en_locale().contains("Apply timeout in"),
+        source.contains("Apply timeout in"),
         "Dashboard should show applying timeout countdown text"
     );
 }
@@ -89,7 +83,7 @@ fn rollback_button_present_with_confirmation() {
         "Dashboard should check rollback_available to show rollback button"
     );
     assert!(
-        get_en_locale().contains("Rollback to previous version"),
+        source.contains("Rollback to previous version"),
         "Dashboard should show 'Rollback to previous version' button"
     );
 }

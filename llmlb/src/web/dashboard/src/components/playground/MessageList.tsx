@@ -1,5 +1,4 @@
 import { useState, type RefObject } from 'react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Bot, Check, ChevronRight, Copy, Loader2, User, Volume2, MessageSquare } from 'lucide-react'
@@ -8,7 +7,6 @@ import { extractMediaFromContent } from './types'
 import { MarkdownMessage } from './MarkdownMessage'
 
 function CopyButton({ text }: { text: string }) {
-  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const handleCopy = async () => {
     try {
@@ -23,7 +21,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      aria-label={t('playground.copyMessage')}
+      aria-label="Copy message"
       className="absolute right-1 top-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground focus-visible:opacity-100 group-hover/msg:opacity-100"
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -41,7 +39,6 @@ interface MessageListProps {
 }
 
 function GeneratingIndicator() {
-  const { t } = useTranslation()
   return (
     <div
       data-testid="playground-generating-indicator"
@@ -49,7 +46,7 @@ function GeneratingIndicator() {
       className="flex items-center gap-2 text-sm text-muted-foreground"
     >
       <Loader2 className="h-4 w-4 animate-spin" />
-      <span>{t('playground.generating')}</span>
+      <span>Generating response...</span>
     </div>
   )
 }
@@ -62,7 +59,6 @@ export function MessageList({
   isGenerating = false,
   maxWidth = 'max-w-4xl',
 }: MessageListProps) {
-  const { t } = useTranslation()
   const lastMessage = messages[messages.length - 1]
   const showPendingMessage =
     isGenerating &&
@@ -102,7 +98,7 @@ export function MessageList({
                   >
                     <summary className="flex cursor-pointer select-none items-center gap-1 px-2 py-1 text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
                       <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
-                      {t('playground.showReasoning')}
+                      Show reasoning
                     </summary>
                     <div className="whitespace-pre-wrap border-t border-border/50 px-2 py-1.5 text-muted-foreground">
                       {message.reasoning}

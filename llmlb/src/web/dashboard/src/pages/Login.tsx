@@ -1,16 +1,13 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { toast } from '@/hooks/use-toast'
 import { Cpu, Lock, User } from 'lucide-react'
 
 export default function LoginPage() {
-  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -29,8 +26,8 @@ export default function LoginPage() {
     } catch {
       toast({
         variant: 'destructive',
-        title: t('login.failedTitle'),
-        description: t('login.failedDescription'),
+        title: 'Login failed',
+        description: 'Invalid username or password',
       })
     } finally {
       setIsLoading(false)
@@ -46,11 +43,6 @@ export default function LoginPage() {
       <div className="absolute -left-40 -top-40 h-80 w-80 rounded-full bg-primary/20 blur-[100px]" />
       <div className="absolute -bottom-40 -right-40 h-80 w-80 rounded-full bg-primary/10 blur-[100px]" />
 
-      {/* Language switcher */}
-      <div className="absolute right-4 top-4 z-10">
-        <LanguageSwitcher />
-      </div>
-
       {/* Content */}
       <div className="relative flex min-h-screen items-center justify-center p-4">
         <div className="w-full max-w-md animate-fade-up">
@@ -61,10 +53,10 @@ export default function LoginPage() {
             </div>
             <div className="text-center">
               <h1 className="font-display text-3xl font-bold tracking-tight">
-                {t('common.appName')}
+                LLM Load Balancer
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                {t('login.subtitle')}
+                Mission Control Dashboard
               </p>
             </div>
           </div>
@@ -72,19 +64,19 @@ export default function LoginPage() {
           {/* Login Card */}
           <Card className="glass border-border/50">
             <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl font-semibold">{t('login.title')}</CardTitle>
-              <CardDescription>{t('login.description')}</CardDescription>
+              <CardTitle className="text-2xl font-semibold">Sign in</CardTitle>
+              <CardDescription>Enter your credentials to access the dashboard</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="username">{t('login.username')}</Label>
+                  <Label htmlFor="username">Username</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="username"
                       type="text"
-                      placeholder={t('login.usernamePlaceholder')}
+                      placeholder="Enter your username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       className="pl-10"
@@ -96,13 +88,13 @@ export default function LoginPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">{t('login.password')}</Label>
+                  <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="password"
                       type="password"
-                      placeholder={t('login.passwordPlaceholder')}
+                      placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10"
@@ -121,21 +113,21 @@ export default function LoginPage() {
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      {t('login.signingIn')}
+                      Signing in...
                     </div>
                   ) : (
-                    t('login.signIn')
+                    'Sign in'
                   )}
                 </Button>
               </form>
 
               <div className="mt-4 text-center text-sm text-muted-foreground">
-                {t('login.haveInvite')}{' '}
+                Have an invitation code?{' '}
                 <a
                   href="/dashboard/register.html"
                   className="text-primary hover:underline"
                 >
-                  {t('login.register')}
+                  Register
                 </a>
               </div>
             </CardContent>
@@ -143,7 +135,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            {t('login.footer')}
+            LLM Load Balancer Dashboard v1.0
           </p>
         </div>
       </div>

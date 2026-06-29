@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Check, Copy } from 'lucide-react'
@@ -11,7 +10,6 @@ interface MarkdownMessageProps {
 }
 
 function CodeBlock({ language, value }: { language?: string; value: string }) {
-  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -33,11 +31,11 @@ function CodeBlock({ language, value }: { language?: string; value: string }) {
         <button
           type="button"
           onClick={handleCopy}
-          aria-label={t('playground.copyCode')}
+          aria-label="Copy code"
           className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.7rem] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? t('playground.copied') : t('playground.copy')}
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
       <pre className="overflow-x-auto px-3 py-2 text-xs leading-relaxed">

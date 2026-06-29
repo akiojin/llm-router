@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   type CatalogSearchResult,
@@ -49,7 +48,6 @@ export function ModelAddWizard({ open, onOpenChange }: ModelAddWizardProps) {
 }
 
 function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [step, setStep] = useState<WizardStep>('search')
   const [searchQuery, setSearchQuery] = useState('')
@@ -164,11 +162,8 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
     queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
     queryClient.invalidateQueries({ queryKey: ['models'] })
     toast({
-      title: t('modelDialogs.downloadRequestsSentTitle'),
-      description: t('modelDialogs.downloadRequestsSentDesc', {
-        repo: selectedModel.repo_id,
-        value: selectedEndpointIds.size,
-      }),
+      title: 'Download requests sent',
+      description: `Initiated download of ${selectedModel.repo_id} to ${selectedEndpointIds.size} endpoint(s)`,
     })
   }
 
@@ -190,10 +185,10 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
     Object.values(downloadStatuses).every((s) => s === 'completed' || s === 'failed')
 
   const stepTitle: Record<WizardStep, string> = {
-    search: t('modelDialogs.stepSearchTitle'),
-    detail: t('modelDialogs.stepDetailTitle'),
-    endpoints: t('modelDialogs.selectEndpoints'),
-    download: t('modelDialogs.stepDownloadTitle'),
+    search: 'Search HuggingFace Models',
+    detail: 'Model Details',
+    endpoints: 'Select Endpoints',
+    download: 'Download Progress',
   }
 
   const downloadableEndpoints = recommendations?.endpoints.filter((ep) => ep.can_download) ?? []
@@ -212,11 +207,11 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
             {stepTitle[step]}
           </DialogTitle>
           <DialogDescription>
-            {step === 'search' && t('modelDialogs.searchDescription')}
+            {step === 'search' && 'Search for models on HuggingFace to add to your endpoints'}
             {step === 'detail' &&
-              t('modelDialogs.detailDescription', { repo: selectedModel?.repo_id ?? '' })}
-            {step === 'endpoints' && t('modelDialogs.endpointsDescription')}
-            {step === 'download' && t('modelDialogs.downloadDescription')}
+              `Details for ${selectedModel?.repo_id ?? ''}`}
+            {step === 'endpoints' && 'Choose which endpoints should download this model'}
+            {step === 'download' && 'Sending download requests to selected endpoints'}
           </DialogDescription>
         </DialogHeader>
 
@@ -227,7 +222,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder={t('modelDialogs.searchPlaceholder')}
+                  placeholder="Search models (e.g., llama, mistral, phi)..."
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-10"
@@ -246,10 +241,10 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>{t('modelDialogs.repository')}</TableHead>
-                        <TableHead>{t('modelDialogs.description')}</TableHead>
-                        <TableHead className="text-right">{t('modelDialogs.downloads')}</TableHead>
-                        <TableHead>{t('modelDialogs.tags')}</TableHead>
+                        <TableHead>Repository</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Downloads</TableHead>
+                        <TableHead>Tags</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -293,13 +288,13 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
 
               {searchResults && searchResults.models.length === 0 && debouncedQuery.length >= 2 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  {t('modelDialogs.noModelsFound', { query: debouncedQuery })}
+                  {`No models found for "${debouncedQuery}"`}
                 </div>
               )}
 
               {!searchResults && !isSearching && debouncedQuery.length < 2 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  {t('modelDialogs.enterAtLeast2Chars')}
+                  Enter at least 2 characters to search
                 </div>
               )}
             </div>
@@ -328,9 +323,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                     )}
                     {modelDetail.downloads != null && (
                       <p className="text-xs text-muted-foreground">
-                        {t('modelDialogs.downloadsLabel', {
-                          value: modelDetail.downloads.toLocaleString(),
-                        })}
+                        {`Downloads: ${modelDetail.downloads.toLocaleString()}`}
                       </p>
                     )}
                   </div>
@@ -338,7 +331,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   {/* Tags */}
                   {modelDetail.tags && modelDetail.tags.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">{t('modelDialogs.tags')}</p>
+                      <p className="text-xs font-medium text-muted-foreground">Tags</p>
                       <div className="flex gap-1 flex-wrap">
                         {modelDetail.tags.map((tag) => (
                           <Badge key={tag} variant="outline" className="text-xs">
@@ -352,7 +345,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   {/* Engine compatibility */}
                   {compatibleEngineEntries.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">{t('modelDialogs.mappedEngineNames')}</p>
+                      <p className="text-xs font-medium text-muted-foreground">Mapped Engine Names</p>
                       <div className="flex gap-1 flex-wrap">
                         {compatibleEngineEntries.map(([engine, name]) => (
                           <Badge key={engine} variant="secondary" className="text-xs">
@@ -367,7 +360,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   {modelDetail.siblings && modelDetail.siblings.length > 0 && (
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">
-                        {t('modelDialogs.filesCount', { value: modelDetail.siblings.length })}
+                        {`Files (${modelDetail.siblings.length})`}
                       </p>
                       <div className="rounded-md border max-h-[200px] overflow-y-auto">
                         <div className="p-2 space-y-0.5">
@@ -388,7 +381,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   {modelDetail.supports_download.length > 0 && (
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">
-                        {t('modelDialogs.supportsDownloadVia')}
+                        Supports Download Via
                       </p>
                       <div className="flex gap-1 flex-wrap">
                         {modelDetail.supports_download.map((engine) => (
@@ -418,7 +411,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   {downloadableEndpoints.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
                       <AlertCircle className="h-8 w-8" />
-                      <p className="text-sm">{t('modelDialogs.noEndpointsAvailable')}</p>
+                      <p className="text-sm">No endpoints available that can download this model</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -459,7 +452,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                 <div className="space-y-1">
                   <Progress value={undefined} className="h-1" />
                   <p className="text-xs text-muted-foreground text-center">
-                    {t('modelDialogs.sendingDownloadRequests')}
+                    Sending download requests...
                   </p>
                 </div>
               )}
@@ -467,7 +460,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
               {allDownloadsFinished && (
                 <div className="text-center py-2">
                   <p className="text-sm text-muted-foreground">
-                    {t('modelDialogs.allRequestsSent')}
+                    All download requests have been sent. Check endpoint details for progress.
                   </p>
                 </div>
               )}
@@ -479,12 +472,12 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
           {step !== 'search' && step !== 'download' && (
             <Button variant="outline" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4 mr-1" />
-              {t('modelDialogs.back')}
+              Back
             </Button>
           )}
           {step === 'detail' && (
             <Button onClick={handleProceedToEndpoints}>
-              {t('modelDialogs.selectEndpoints')}
+              Select Endpoints
             </Button>
           )}
           {step === 'endpoints' && (
@@ -493,18 +486,20 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
               disabled={selectedEndpointIds.size === 0}
             >
               <Download className="h-4 w-4 mr-1" />
-              {t('modelDialogs.downloadToEndpoints', { count: selectedEndpointIds.size })}
+              {selectedEndpointIds.size === 1
+                ? `Download to ${selectedEndpointIds.size} Endpoint`
+                : `Download to ${selectedEndpointIds.size} Endpoints`}
             </Button>
           )}
           {step === 'download' && allDownloadsFinished && (
             <Button onClick={() => onOpenChange(false)}>
               <Check className="h-4 w-4 mr-1" />
-              {t('modelDialogs.done')}
+              Done
             </Button>
           )}
           {step === 'search' && (
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              {t('modelDialogs.cancel')}
+              Cancel
             </Button>
           )}
         </DialogFooter>
@@ -522,7 +517,6 @@ function EndpointCheckRow({
   checked: boolean
   onCheckedChange: () => void
 }) {
-  const { t } = useTranslation()
   return (
     <div
       className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/50"
@@ -537,7 +531,7 @@ function EndpointCheckRow({
           </Badge>
           {endpoint.has_model && (
             <Badge variant="secondary" className="text-xs">
-              {t('modelDialogs.alreadyHasModel')}
+              Already has model
             </Badge>
           )}
         </div>

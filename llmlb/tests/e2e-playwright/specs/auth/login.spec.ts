@@ -61,16 +61,4 @@ test.describe('Login Page', () => {
     expect(page.url()).toContain('register');
   });
 
-  test('L-08: Language switcher toggles English/Japanese (i18n)', async ({ page }) => {
-    // Default (locale en-US) renders English.
-    await expect(page.getByText('Mission Control Dashboard')).toBeVisible();
-
-    // Switch to Japanese.
-    await page.getByRole('button', { name: 'Switch to Japanese' }).click();
-    await expect(page.getByText('ミッションコントロール ダッシュボード')).toBeVisible({ timeout: 5000 });
-
-    // Switch back to English.
-    await page.getByRole('button', { name: 'Switch to English' }).click();
-    await expect(page.getByText('Mission Control Dashboard')).toBeVisible({ timeout: 5000 });
-  });
 });

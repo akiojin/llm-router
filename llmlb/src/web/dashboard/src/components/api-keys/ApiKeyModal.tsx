@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   apiKeysApi,
@@ -84,7 +83,6 @@ const ADMIN_PERMISSION_OPTIONS: ApiKeyPermission[] = [
 ]
 
 export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
-  const { t } = useTranslation()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const queryClient = useQueryClient()
@@ -195,12 +193,12 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       setCopiedId(null)
       resetCreateForm()
       setCreateOpen(false)
-      toast({ title: t('apiKeys.toastCreated') })
+      toast({ title: 'API key created' })
     },
     onError: (error) => {
       toast({
-        title: t('apiKeys.toastCreateFailed'),
-        description: error instanceof Error ? error.message : t('apiKeys.unknownError'),
+        title: 'Failed to create API key',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -212,12 +210,12 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
       setDeleteKey(null)
-      toast({ title: t('apiKeys.toastDeleted') })
+      toast({ title: 'API key deleted' })
     },
     onError: (error) => {
       toast({
-        title: t('apiKeys.toastDeleteFailed'),
-        description: error instanceof Error ? error.message : t('apiKeys.unknownError'),
+        title: 'Failed to delete API key',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -229,7 +227,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       if (method !== 'manual') {
         setCopiedId(id)
         setTimeout(() => setCopiedId(null), 2000)
-        toast({ title: t('apiKeys.toastCopied') })
+        toast({ title: 'Copied full API key' })
         return
       }
 
@@ -241,11 +239,11 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
         selectTextForManualCopy(text)
       }
       toast({
-        title: t('apiKeys.toastAutoCopyUnavailable'),
-        description: t('apiKeys.toastAutoCopyDescription'),
+        title: 'Auto copy unavailable',
+        description: 'Press Ctrl+C to copy the selected value.',
       })
     } catch {
-      toast({ title: t('apiKeys.toastCopyFailed'), variant: 'destructive' })
+      toast({ title: 'Failed to copy', variant: 'destructive' })
     }
   }
 
@@ -290,10 +288,10 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5" />
-              {t('apiKeys.title')}
+              API Keys
             </DialogTitle>
             <DialogDescription>
-              {t('apiKeys.description')}
+              Manage your API keys for programmatic access.
             </DialogDescription>
           </DialogHeader>
 
@@ -302,13 +300,13 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
             <div className="flex justify-between">
               <Button id="create-api-key" onClick={handleOpenCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
-                {t('apiKeys.createKey')}
+                Create Key
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                aria-label={t('apiKeys.refresh')}
-                title={t('apiKeys.refresh')}
+                aria-label="Refresh API keys"
+                title="Refresh API keys"
                 onClick={() => {
                   // Enforce: plaintext keys are copyable only immediately after creation.
                   // Any "refresh" action should make copying impossible, requiring re-creation.
@@ -324,10 +322,10 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
             {createdKey && (
               <div className="rounded-lg border border-success/50 bg-success/10 p-4">
                 <p className="text-sm font-medium text-success mb-2">
-                  {t('apiKeys.createdSuccess')}
+                  API Key Created Successfully
                 </p>
                 <p className="text-xs text-muted-foreground mb-2">
-                  {t('apiKeys.copyNowWarning')}
+                  {"Copy this key now. You won't be able to see it again."}
                 </p>
                 <div className="flex items-center gap-2">
                   <code
@@ -341,8 +339,8 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                     size="icon"
                     aria-label={
                       showKey === 'created'
-                        ? t('apiKeys.hideApiKey')
-                        : t('apiKeys.showApiKey')
+                        ? 'Hide API key'
+                        : 'Show API key'
                     }
                     onClick={() => setShowKey(showKey === 'created' ? null : 'created')}
                   >
@@ -356,8 +354,8 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                     id="copy-api-key"
                     variant="outline"
                     size="icon"
-                    aria-label={t('apiKeys.copyFullKey')}
-                    title={t('apiKeys.copyFullKey')}
+                    aria-label="Copy full API key"
+                    title="Copy full API key"
                     data-copied={copiedId === 'created' ? 'true' : 'false'}
                     onClick={() => handleCopy(createdKey, 'created')}
                   >
@@ -380,18 +378,18 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
               ) : !apiKeys || (apiKeys as ApiKey[]).length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                   <Key className="h-8 w-8" />
-                  <p>{t('apiKeys.noKeys')}</p>
+                  <p>No API keys</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{t('apiKeys.columnName')}</TableHead>
-                      <TableHead>{t('apiKeys.columnAccess')}</TableHead>
-                      <TableHead>{t('apiKeys.columnKeyPrefix')}</TableHead>
-                      <TableHead>{t('apiKeys.columnCreated')}</TableHead>
-                      <TableHead>{t('apiKeys.columnExpires')}</TableHead>
-                      <TableHead className="text-right">{t('apiKeys.columnActions')}</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Access</TableHead>
+                      <TableHead>Key prefix</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -410,7 +408,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                         <TableCell>
                           <span
                             className="text-xs text-muted-foreground select-none"
-                            title={t('apiKeys.keyPrefixTooltip')}
+                            title="API keys are shown once at creation time; if lost, create a new key."
                           >
                             ••••••••••
                           </span>
@@ -424,11 +422,11 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                               variant={isExpired(key.expires_at) ? 'destructive' : 'outline'}
                             >
                               {isExpired(key.expires_at)
-                                ? t('apiKeys.expired')
+                                ? 'Expired'
                                 : formatRelativeTime(key.expires_at)}
                             </Badge>
                           ) : (
-                            <Badge variant="secondary">{t('apiKeys.never')}</Badge>
+                            <Badge variant="secondary">Never</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -455,23 +453,23 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto border-border bg-card text-card-foreground">
           <DialogHeader>
-            <DialogTitle>{t('apiKeys.createTitle')}</DialogTitle>
+            <DialogTitle>Create API Key</DialogTitle>
             <DialogDescription>
-              {t('apiKeys.createDescription')}
+              Create a new API key for programmatic access.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="api-key-name">{t('apiKeys.nameLabel')}</Label>
+              <Label htmlFor="api-key-name">Name</Label>
               <Input
                 id="api-key-name"
-                placeholder={t('apiKeys.namePlaceholder')}
+                placeholder="My API Key"
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="key-expires">{t('apiKeys.expiresLabel')}</Label>
+              <Label htmlFor="key-expires">Expires (optional)</Label>
               <Input
                 id="key-expires"
                 type="datetime-local"
@@ -480,11 +478,11 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-foreground">{t('apiKeys.accessLabel')}</Label>
+              <Label className="text-foreground">Access</Label>
               <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
                 {isAdmin ? (
                   <div className="space-y-3">
-                    <p>{t('apiKeys.selectPermissions')}</p>
+                    <p>Select one or more permissions for this key:</p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {ADMIN_PERMISSION_OPTIONS.map((permission) => {
                         const checked = selectedPermissions.includes(permission)
@@ -509,7 +507,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                   </div>
                 ) : (
                   <>
-                    {t('apiKeys.viewerKeysInclude')}
+                    Viewer keys always include:
                     <div className="mt-2 flex flex-wrap gap-1">
                       <Badge variant="secondary">openai.inference</Badge>
                       <Badge variant="secondary">openai.models.read</Badge>
@@ -521,7 +519,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
-              {t('apiKeys.cancel')}
+              Cancel
             </Button>
             <Button
               onClick={handleCreate}
@@ -534,7 +532,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
               {createMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {t('apiKeys.create')}
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -544,13 +542,13 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
       <AlertDialog open={!!deleteKey} onOpenChange={() => setDeleteKey(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('apiKeys.deleteTitle')}</AlertDialogTitle>
+            <AlertDialogTitle>Delete API Key</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('apiKeys.deleteConfirm', { name: deleteKey?.name })}
+              {`Are you sure you want to delete "${deleteKey?.name}"? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('apiKeys.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteKey && deleteMutation.mutate(deleteKey.id)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -558,7 +556,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
               {deleteMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {t('apiKeys.delete')}
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

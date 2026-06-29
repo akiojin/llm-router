@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { Button } from '@/components/ui/button'
@@ -14,7 +13,6 @@ import {
 import { ApiKeyModal } from '@/components/api-keys/ApiKeyModal'
 import { UserModal } from '@/components/users/UserModal'
 import { InvitationModal } from '@/components/invitations/InvitationModal'
-import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import {
   Cpu,
   Key,
@@ -58,7 +56,6 @@ export function Header({
   updateLatest,
   minimalViewer = false,
 }: HeaderProps) {
-  const { t } = useTranslation()
   const { logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false)
@@ -133,25 +130,25 @@ export function Header({
                   isConnected ? 'bg-green-500' : 'bg-red-500'
                 }`}
               />
-              {t('header.connection', { status: isConnected ? t('header.online') : t('header.offline') })}
+              {`Connection: ${isConnected ? 'Online' : 'Offline'}`}
             </span>
 
             {/* Last Refreshed */}
             {lastRefreshed && (
               <span id="last-refreshed">
-                {t('header.lastUpdated', { time: lastRefreshed.toLocaleTimeString() })}
+                {`Last updated: ${lastRefreshed.toLocaleTimeString()}`}
               </span>
             )}
             {!lastRefreshed && (
-              <span id="last-refreshed">{t('header.lastUpdated', { time: '--:--:--' })}</span>
+              <span id="last-refreshed">{'Last updated: --:--:--'}</span>
             )}
 
             {/* Performance Metrics */}
             {fetchTimeMs !== null && fetchTimeMs !== undefined && (
-              <span id="refresh-metrics">{t('header.fetchTime', { value: `${fetchTimeMs}ms` })}</span>
+              <span id="refresh-metrics">{`Fetch time: ${fetchTimeMs}ms`}</span>
             )}
             {(fetchTimeMs === null || fetchTimeMs === undefined) && (
-              <span id="refresh-metrics">{t('header.fetchTime', { value: '--ms' })}</span>
+              <span id="refresh-metrics">{'Fetch time: --ms'}</span>
             )}
             </div>
           )}
@@ -167,7 +164,7 @@ export function Header({
               className="hidden sm:inline-flex"
             >
               <Key className="mr-2 h-4 w-4" />
-              {t('header.apiKeys')}
+              API Keys
             </Button>
 
             <Button
@@ -180,7 +177,7 @@ export function Header({
               }}
             >
               <Network className="mr-2 h-4 w-4" />
-              {t('header.lbPlayground')}
+              LB Playground
             </Button>
 
             {user?.role === 'admin' && (
@@ -194,7 +191,7 @@ export function Header({
                 }}
               >
                 <ShieldCheck className="mr-2 h-4 w-4" />
-                {t('header.auditLog')}
+                Audit Log
               </Button>
             )}
 
@@ -212,9 +209,6 @@ export function Header({
                 className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
               />
             </Button>
-
-            {/* Language Switcher */}
-            <LanguageSwitcher />
 
             {/* Theme Toggle */}
             <Button
@@ -256,7 +250,7 @@ export function Header({
                   className="sm:hidden"
                 >
                   <Key className="mr-2 h-4 w-4" />
-                  {t('header.apiKeys')}
+                  API Keys
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
@@ -265,7 +259,7 @@ export function Header({
                   className="lg:hidden"
                 >
                   <Network className="mr-2 h-4 w-4" />
-                  {t('header.lbPlayground')}
+                  LB Playground
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="sm:hidden" />
 
@@ -274,11 +268,11 @@ export function Header({
                   <>
                     <DropdownMenuItem onClick={() => setUserModalOpen(true)}>
                       <Users className="mr-2 h-4 w-4" />
-                      {t('header.manageUsers')}
+                      Manage Users
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setInvitationModalOpen(true)}>
                       <Ticket className="mr-2 h-4 w-4" />
-                      {t('header.invitationCodes')}
+                      Invitation Codes
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
@@ -286,7 +280,7 @@ export function Header({
                       }}
                     >
                       <ShieldCheck className="mr-2 h-4 w-4" />
-                      {t('header.auditLog')}
+                      Audit Log
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
@@ -294,7 +288,7 @@ export function Header({
 
                 <DropdownMenuItem onClick={logout} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
-                  {t('header.signOut')}
+                  Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

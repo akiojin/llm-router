@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import { PieChart, Pie, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 
 export interface ModelDistribution {
@@ -20,11 +19,10 @@ const COLORS = [
 ]
 
 export function ModelDistributionPie({ data }: ModelDistributionPieProps) {
-  const { t } = useTranslation()
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-        {t('analytics.noModelData')}
+        No model data available
       </div>
     )
   }

@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   clientsApi,
@@ -15,7 +14,6 @@ interface ClientDrilldownProps {
 }
 
 export function ClientDrilldown({ ip }: ClientDrilldownProps) {
-  const { t } = useTranslation()
   const { data, isLoading } = useQuery<ClientDetailResponse>({
     queryKey: ['client-detail', ip],
     queryFn: () => clientsApi.getClientDetail(ip),
@@ -37,7 +35,7 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
   if (!data || data.total_requests === 0) {
     return (
       <div className="py-4 text-center text-sm text-muted-foreground">
-        {t('analytics.noDataForThisIp')}
+        No data for this IP
       </div>
     )
   }
@@ -49,18 +47,18 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
       {/* Summary */}
       <div className="flex flex-wrap gap-4 text-sm">
         <div>
-          <span className="text-muted-foreground">{t('analytics.totalLabel')}</span>
-          <span className="font-medium">{t('analytics.requestsCount', { count: data.total_requests.toLocaleString() })}</span>
+          <span className="text-muted-foreground">{'Total: '}</span>
+          <span className="font-medium">{`${data.total_requests.toLocaleString()} requests`}</span>
         </div>
         {data.first_seen && (
           <div>
-            <span className="text-muted-foreground">{t('analytics.firstLabel')}</span>
+            <span className="text-muted-foreground">{'First: '}</span>
             <span>{formatDate(data.first_seen)}</span>
           </div>
         )}
         {data.last_seen && (
           <div>
-            <span className="text-muted-foreground">{t('analytics.lastLabel')}</span>
+            <span className="text-muted-foreground">{'Last: '}</span>
             <span>{formatDate(data.last_seen)}</span>
           </div>
         )}
@@ -70,7 +68,7 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
         {/* Recent requests */}
         <div className="rounded-md border">
           <div className="border-b bg-muted/50 px-3 py-2 text-xs font-medium">
-            {t('analytics.recentRequests')}
+            Recent Requests
           </div>
           <div className="max-h-48 overflow-y-auto">
             <table className="w-full text-xs">
@@ -94,7 +92,7 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
         {/* Model distribution mini pie */}
         <div className="rounded-md border">
           <div className="border-b bg-muted/50 px-3 py-2 text-xs font-medium">
-            {t('analytics.modelDistribution')}
+            Model Distribution
           </div>
           <div className="p-2">
             <ModelDistributionPie data={data.model_distribution as ModelDistribution[]} />
@@ -104,12 +102,12 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
         {/* Hourly pattern mini bar chart */}
         <div className="rounded-md border">
           <div className="border-b bg-muted/50 px-3 py-2 text-xs font-medium">
-            {t('analytics.hourlyPattern')}
+            Hourly Pattern
           </div>
           <div className="p-2">
             {data.hourly_pattern.every((p) => p.count === 0) ? (
               <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-                {t('analytics.noHourlyData')}
+                No hourly data
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
@@ -135,7 +133,7 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
                       borderRadius: '6px',
                       fontSize: '11px',
                     }}
-                    formatter={(value) => [Number(value ?? 0), t('analytics.requests')]}
+                    formatter={(value) => [Number(value ?? 0), 'Requests']}
                     labelFormatter={(label) => `${String(label ?? '')}:00`}
                   />
                   <Bar dataKey="count" fill="hsl(var(--chart-3))" radius={[2, 2, 0, 0]} />
@@ -148,12 +146,12 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
         {/* API Keys */}
         <div className="rounded-md border">
           <div className="border-b bg-muted/50 px-3 py-2 text-xs font-medium">
-            {t('analytics.apiKeys')}
+            API Keys
           </div>
           <div className="max-h-48 overflow-y-auto">
             {apiKeys.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-                {t('analytics.noApiKeyData')}
+                No API key data
               </div>
             ) : (
               <table className="w-full text-xs">
@@ -161,7 +159,7 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
                   {apiKeys.map((k) => (
                     <tr key={k.api_key_id} className="border-b last:border-0">
                       <td className="px-3 py-1.5">
-                        {k.name ?? <span className="text-muted-foreground italic">{t('analytics.deleted')}</span>}
+                        {k.name ?? <span className="text-muted-foreground italic">Deleted</span>}
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums">
                         {k.request_count.toLocaleString()}

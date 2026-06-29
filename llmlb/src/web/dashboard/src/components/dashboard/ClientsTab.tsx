@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   clientsApi,
@@ -19,7 +18,6 @@ import { Badge } from '@/components/ui/badge'
 import { Users, TrendingUp, PieChart, Grid3X3, Loader2, X } from 'lucide-react'
 
 export function ClientsTab() {
-  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const perPage = 20
 
@@ -60,7 +58,7 @@ export function ClientsTab() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-muted-foreground">{t('analytics.loadingClientData')}</span>
+        <span className="ml-2 text-muted-foreground">Loading client data...</span>
       </div>
     )
   }
@@ -74,7 +72,7 @@ export function ClientsTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Users className="h-4 w-4" />
-            {t('analytics.topClientsByRequestCount')}
+            Top Clients by Request Count
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -87,7 +85,7 @@ export function ClientsTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TrendingUp className="h-4 w-4" />
-              {t('analytics.uniqueIps24h')}
+              Unique IPs (24h)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -99,7 +97,7 @@ export function ClientsTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <PieChart className="h-4 w-4" />
-              {t('analytics.modelDistribution')}
+              Model Distribution
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -112,17 +110,17 @@ export function ClientsTab() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Grid3X3 className="h-4 w-4" />
-            {t('analytics.requestHeatmap')}
+            Request Heatmap (Hour x Day)
           </CardTitle>
           {ipFilter && (
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">
-                {t('analytics.filtered', { ip: ipFilter })}
+                {`Filtered: ${ipFilter}`}
               </Badge>
               <button
                 onClick={handleClearFilter}
                 className="text-muted-foreground hover:text-foreground transition-colors"
-                title={t('analytics.clearIpFilter')}
+                title="Clear IP filter"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -139,19 +137,19 @@ export function ClientsTab() {
           <div className="flex w-full items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
               <Users className="h-4 w-4" />
-              {t('analytics.clientIpRanking')}
+              Client IP Ranking
             </CardTitle>
             <AlertThresholdSettings />
           </div>
           {ipFilter && (
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">
-                {t('analytics.filtered', { ip: ipFilter })}
+                {`Filtered: ${ipFilter}`}
               </Badge>
               <button
                 onClick={handleClearFilter}
                 className="text-muted-foreground hover:text-foreground transition-colors"
-                title={t('analytics.clearIpFilter')}
+                title="Clear IP filter"
               >
                 <X className="h-4 w-4" />
               </button>

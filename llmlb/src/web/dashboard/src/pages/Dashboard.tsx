@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   dashboardApi,
@@ -92,7 +91,6 @@ function formatCountdown(targetIso: string): string | null {
 }
 
 export default function Dashboard() {
-  const { t } = useTranslation()
   const { user } = useAuth()
   const isViewer = user?.role === 'viewer'
   const isAdmin = user?.role === 'admin'
@@ -253,27 +251,27 @@ export default function Dashboard() {
     const isCooldown = cooldownRemaining > 0
     const canCheck = isAdmin && !applying && !isCooldown
     const forceUpdateTitle = !isAdmin
-      ? t('dashboardPage.adminRoleRequired')
+      ? 'Admin role is required'
       : applying
-        ? t('dashboardPage.updateInProgress')
+        ? 'Update is in progress'
         : !hasAvailableUpdate
-          ? t('dashboardPage.noUpdateAvailable')
+          ? 'No update is available'
         : isPayloadReady
           ? undefined
-          : t('dashboardPage.updatePayloadPreparing')
+          : 'Update payload is still preparing'
 
     const rollbackAvailable = systemInfo?.rollback_available === true
     const scheduleInfo = systemInfo?.schedule as ScheduleInfo | null | undefined
 
-    let title = t('dashboardPage.update')
-    let description = t('dashboardPage.updateStatusUnavailable')
+    let title = 'Update'
+    let description = 'Update status unavailable'
     let link: string | null = null
     let payloadHint: string | null = null
     let downloadProgress: { downloaded_bytes: number; total_bytes: number } | null = null
 
     if (updateState === 'available' && update) {
-      title = t('dashboardPage.updateAvailable', { version: update.latest })
-      description = t('dashboardPage.currentVersion', { version: update.current })
+      title = `Update available: v${update.latest}`
+      description = `Current: v${update.current}`
       link = update.release_url
       if (update.payload?.payload === 'downloading') {
         const dl = update.payload
@@ -283,40 +281,34 @@ export default function Dashboard() {
             total_bytes: dl.total_bytes,
           }
           const pct = Math.round((dl.downloaded_bytes / dl.total_bytes) * 100)
-          payloadHint = t('dashboardPage.downloadingProgress', {
-            downloaded: formatBytes(dl.downloaded_bytes),
-            total: formatBytes(dl.total_bytes),
-            pct,
-          })
+          payloadHint = `Downloading: ${formatBytes(dl.downloaded_bytes)} / ${formatBytes(dl.total_bytes)} (${pct}%)`
         } else {
-          payloadHint = t('dashboardPage.downloading')
+          payloadHint = 'Downloading...'
         }
       } else if (update.payload?.payload === 'ready') {
-        payloadHint = t('dashboardPage.ready')
+        payloadHint = 'Ready'
       } else if (update.payload?.payload === 'error') {
-        payloadHint = t('dashboardPage.downloadFailed')
+        payloadHint = 'Download failed'
       } else {
-        payloadHint = t('dashboardPage.preparing')
+        payloadHint = 'Preparing...'
       }
     } else if (updateState === 'up_to_date' && update) {
-      title = t('dashboardPage.upToDate')
+      title = 'Up to date'
       const checkedAt = update.checked_at ?? null
       if (checkedAt) {
         const asDate = new Date(checkedAt)
-        description = t('dashboardPage.lastChecked', {
-          time: Number.isNaN(asDate.valueOf()) ? checkedAt : asDate.toLocaleString(),
-        })
+        description = `Last checked: ${Number.isNaN(asDate.valueOf()) ? checkedAt : asDate.toLocaleString()}`
       } else {
-        description = t('dashboardPage.lastCheckedUnknown')
+        description = 'Last checked: unknown'
       }
     } else if (updateState === 'draining' && update) {
-      title = t('dashboardPage.updatingTo', { version: update.latest })
-      description = t('dashboardPage.waitingForInFlight', { count: update.in_flight })
+      title = `Updating to v${update.latest}`
+      description = `Waiting for in-flight requests: ${update.in_flight}`
     } else if (updateState === 'applying' && update) {
-      title = t('dashboardPage.applyingUpdateTo', { version: update.latest })
-      description = update.phase_message ?? t('dashboardPage.restarting')
+      title = `Applying update: v${update.latest}`
+      description = update.phase_message ?? 'Restarting...'
     } else if (updateState === 'failed' && update) {
-      title = t('dashboardPage.updateFailed')
+      title = 'Update failed'
       description = update.message
       link = update.release_url || null
     }
@@ -346,11 +338,11 @@ export default function Dashboard() {
           )
         }
         toast({
-          title: t('dashboardPage.checkedForUpdates'),
+          title: 'Checked for updates',
         })
       } catch (e) {
         toast({
-          title: t('dashboardPage.updateCheckFailed'),
+          title: 'Update check failed',
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         })
@@ -366,19 +358,19 @@ export default function Dashboard() {
         const result = await systemApi.applyUpdate()
         if (result.queued) {
           toast({
-            title: t('dashboardPage.updateQueued'),
-            description: t('dashboardPage.updateQueuedDescription'),
+            title: 'Update queued',
+            description: 'llmlb will restart after in-flight requests complete.',
           })
         } else {
           toast({
-            title: t('dashboardPage.applyingUpdate'),
-            description: t('dashboardPage.applyingUpdateDescription'),
+            title: 'Applying update',
+            description: 'llmlb is restarting now.',
           })
         }
         await queryClient.invalidateQueries({ queryKey: SYSTEM_INFO_QUERY_KEY })
       } catch (e) {
         toast({
-          title: t('dashboardPage.failedToApplyUpdate'),
+          title: 'Failed to apply update',
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         })
@@ -392,17 +384,17 @@ export default function Dashboard() {
       try {
         const result = await systemApi.applyForceUpdate()
         toast({
-          title: t('dashboardPage.forceUpdateStarted'),
+          title: 'Force update started',
           description:
             result.dropped_in_flight > 0
-              ? t('dashboardPage.inFlightTerminated', { count: result.dropped_in_flight })
-              : t('dashboardPage.noInFlightActive'),
+              ? `${result.dropped_in_flight} in-flight request(s) were terminated.`
+              : 'No in-flight requests were active.',
         })
         setIsForceUpdateDialogOpen(false)
         await queryClient.invalidateQueries({ queryKey: SYSTEM_INFO_QUERY_KEY })
       } catch (e) {
         toast({
-          title: t('dashboardPage.failedToForceUpdate'),
+          title: 'Failed to force update',
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         })
@@ -416,14 +408,14 @@ export default function Dashboard() {
       try {
         await systemApi.rollback()
         toast({
-          title: t('dashboardPage.rollingBack'),
-          description: t('dashboardPage.rollingBackDescription'),
+          title: 'Rolling back',
+          description: 'Restoring previous version and restarting...',
         })
         setIsRollbackDialogOpen(false)
         await queryClient.invalidateQueries({ queryKey: SYSTEM_INFO_QUERY_KEY })
       } catch (e) {
         toast({
-          title: t('dashboardPage.rollbackFailed'),
+          title: 'Rollback failed',
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         })
@@ -442,13 +434,13 @@ export default function Dashboard() {
             mode: scheduleMode,
             scheduled_at: scheduleMode === 'scheduled' ? scheduledAt : undefined,
           })
-          toast({ title: t('dashboardPage.scheduleCreated') })
+          toast({ title: 'Schedule created' })
         }
         setIsSettingsOpen(false)
         await queryClient.invalidateQueries({ queryKey: SYSTEM_INFO_QUERY_KEY })
       } catch (e) {
         toast({
-          title: t('dashboardPage.failedToCreateSchedule'),
+          title: 'Failed to create schedule',
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         })
@@ -460,11 +452,11 @@ export default function Dashboard() {
     const onCancelSchedule = async () => {
       try {
         await systemApi.cancelSchedule()
-        toast({ title: t('dashboardPage.scheduleCancelled') })
+        toast({ title: 'Schedule cancelled' })
         await queryClient.invalidateQueries({ queryKey: SYSTEM_INFO_QUERY_KEY })
       } catch (e) {
         toast({
-          title: t('dashboardPage.failedToCancelSchedule'),
+          title: 'Failed to cancel schedule',
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         })
@@ -508,31 +500,26 @@ export default function Dashboard() {
                 )}
                 {updateState === 'draining' && drainCountdown != null && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t('dashboardPage.drainTimeoutIn', { value: drainCountdown })}
+                    {`Drain timeout in ${drainCountdown}`}
                   </p>
                 )}
                 {updateState === 'applying' && applyTimeoutCountdown != null && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t('dashboardPage.applyTimeoutIn', { value: applyTimeoutCountdown })}
+                    {`Apply timeout in ${applyTimeoutCountdown}`}
                   </p>
                 )}
                 {scheduleInfo && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t('dashboardPage.scheduledBy', {
-                      by: scheduleInfo.scheduled_by,
-                      mode: scheduleInfo.mode,
-                    })}
+                    {`Scheduled by ${scheduleInfo.scheduled_by} (${scheduleInfo.mode})`}
                     {scheduleInfo.scheduled_at && (
-                      <>{t('dashboardPage.scheduledAtSuffix', {
-                        date: new Date(scheduleInfo.scheduled_at).toLocaleString(),
-                      })}</>
+                      <>{` at ${new Date(scheduleInfo.scheduled_at).toLocaleString()}`}</>
                     )}
                     <button
                       type="button"
                       className="ml-2 text-destructive hover:underline"
                       onClick={() => void onCancelSchedule()}
                     >
-                      {t('dashboardPage.cancel')}
+                      Cancel
                     </button>
                   </p>
                 )}
@@ -548,7 +535,7 @@ export default function Dashboard() {
                   className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-sm hover:bg-background"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  {t('dashboardPage.release')}
+                  Release
                 </a>
               )}
 
@@ -556,39 +543,39 @@ export default function Dashboard() {
               {isAdmin && (
                 <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="icon" title={t('dashboardPage.settings')}>
+                    <Button variant="outline" size="icon" title="Settings">
                       <Settings className="h-4 w-4" />
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                      <DialogTitle>{t('dashboardPage.settings')}</DialogTitle>
+                      <DialogTitle>Settings</DialogTitle>
                       <DialogDescription>
-                        {t('dashboardPage.settingsDescription')}
+                        Configure access control, update scheduling, and history.
                       </DialogDescription>
                     </DialogHeader>
                     <Tabs defaultValue="authentication">
                       <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="authentication">
                           <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                          {t('dashboardPage.auth')}
+                          Auth
                         </TabsTrigger>
                         <TabsTrigger value="schedule">
                           <Calendar className="mr-1.5 h-3.5 w-3.5" />
-                          {t('dashboardPage.schedule')}
+                          Schedule
                         </TabsTrigger>
                         <TabsTrigger value="history">
                           <History className="mr-1.5 h-3.5 w-3.5" />
-                          {t('dashboardPage.history')}
+                          History
                         </TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="authentication" className="space-y-4 pt-4">
                         <div className="rounded-lg border border-border p-4">
                           <div className="space-y-1">
-                            <Label className="text-sm font-medium">{t('dashboardPage.authenticationRequired')}</Label>
+                            <Label className="text-sm font-medium">Authentication required</Label>
                             <p className="text-sm text-muted-foreground">
-                              {t('dashboardPage.authenticationRequiredDescription')}
+                              All external and management APIs always require a valid API key or an authenticated dashboard session. Unauthenticated requests receive 401.
                             </p>
                           </div>
                         </div>
@@ -608,7 +595,7 @@ export default function Dashboard() {
                               className="accent-primary"
                             />
                             <Zap className="h-4 w-4" />
-                            <span>{t('dashboardPage.immediate')}</span>
+                            <span>Immediate</span>
                           </Label>
                           <Label
                             className={`flex items-center gap-2 cursor-pointer rounded-lg border p-3 ${scheduleMode === 'idle' ? 'border-primary bg-primary/5' : 'border-border'}`}
@@ -622,7 +609,7 @@ export default function Dashboard() {
                               className="accent-primary"
                             />
                             <Clock className="h-4 w-4" />
-                            <span>{t('dashboardPage.whenIdle')}</span>
+                            <span>When idle (in_flight = 0)</span>
                           </Label>
                           <Label
                             className={`flex items-center gap-2 cursor-pointer rounded-lg border p-3 ${scheduleMode === 'scheduled' ? 'border-primary bg-primary/5' : 'border-border'}`}
@@ -636,7 +623,7 @@ export default function Dashboard() {
                               className="accent-primary"
                             />
                             <Calendar className="h-4 w-4" />
-                            <span>{t('dashboardPage.scheduledTime')}</span>
+                            <span>Scheduled time</span>
                           </Label>
                           {scheduleMode === 'scheduled' && (
                             <Input
@@ -653,13 +640,13 @@ export default function Dashboard() {
                           disabled={isScheduling || (scheduleMode === 'scheduled' && !scheduledAt)}
                         >
                           {isScheduling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          {scheduleMode === 'immediate' ? t('dashboardPage.applyNow') : t('dashboardPage.schedule')}
+                          {scheduleMode === 'immediate' ? 'Apply now' : 'Schedule'}
                         </Button>
                       </TabsContent>
 
                       <TabsContent value="history" className="pt-4">
                         <p className="text-sm text-muted-foreground">
-                          {t('dashboardPage.updateHistoryUnavailable')}
+                          Update history will be available after the first update completes.
                         </p>
                       </TabsContent>
                     </Tabs>
@@ -673,11 +660,11 @@ export default function Dashboard() {
                 disabled={!canCheck || isCheckingUpdate || isApplyingUpdate || isApplyingForceUpdate}
                 title={
                   !isAdmin
-                    ? t('dashboardPage.adminRoleRequired')
+                    ? 'Admin role is required'
                     : applying
-                      ? t('dashboardPage.updateInProgress')
+                      ? 'Update is in progress'
                       : isCooldown
-                        ? t('dashboardPage.pleaseWaitBeforeChecking')
+                        ? 'Please wait before checking again'
                         : undefined
                 }
               >
@@ -686,7 +673,7 @@ export default function Dashboard() {
                 ) : (
                   <RefreshCcw className="h-4 w-4" />
                 )}
-                {t('dashboardPage.checkForUpdates')}
+                Check for updates
               </Button>
               {showRestartButton && (
                 <Button
@@ -694,9 +681,9 @@ export default function Dashboard() {
                   disabled={!canApply || isApplyingUpdate || isApplyingForceUpdate || applying}
                   title={
                     !isAdmin
-                      ? t('dashboardPage.adminRoleRequired')
+                      ? 'Admin role is required'
                       : applying
-                        ? t('dashboardPage.updateInProgress')
+                        ? 'Update is in progress'
                         : undefined
                   }
                 >
@@ -706,10 +693,10 @@ export default function Dashboard() {
                     <ArrowUpCircle className="h-4 w-4" />
                   )}
                   {update?.state === 'draining'
-                    ? t('dashboardPage.waitingToUpdate', { count: update.in_flight })
+                    ? `Waiting to update... (${update.in_flight})`
                     : update?.state === 'applying'
-                      ? t('dashboardPage.applyingUpdateEllipsis')
-                      : t('dashboardPage.restartToUpdate')}
+                      ? 'Applying update...'
+                      : 'Restart to update'}
                 </Button>
               )}
               {showForceButton && (
@@ -728,18 +715,18 @@ export default function Dashboard() {
                       ) : (
                         <AlertTriangle className="h-4 w-4" />
                       )}
-                      {t('dashboardPage.forceUpdateNow')}
+                      Force update now
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>{t('dashboardPage.forceUpdateNowConfirm')}</AlertDialogTitle>
+                      <AlertDialogTitle>Force update now?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {t('dashboardPage.forceUpdateNowDescription')}
+                        In-flight inference requests will be terminated immediately and llmlb will restart. Use this only for urgent maintenance.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isApplyingForceUpdate}>{t('dashboardPage.cancel')}</AlertDialogCancel>
+                      <AlertDialogCancel disabled={isApplyingForceUpdate}>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         disabled={isApplyingForceUpdate}
                         onClick={(event) => {
@@ -750,10 +737,10 @@ export default function Dashboard() {
                         {isApplyingForceUpdate ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            {t('dashboardPage.applyingEllipsis')}
+                            Applying...
                           </>
                         ) : (
-                          t('dashboardPage.forceUpdate')
+                          'Force update'
                         )}
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -773,25 +760,25 @@ export default function Dashboard() {
                       disabled={!rollbackAvailable || applying}
                       title={
                         !rollbackAvailable
-                          ? t('dashboardPage.noPreviousVersion')
+                          ? 'No previous version available'
                           : applying
-                            ? t('dashboardPage.updateInProgress')
+                            ? 'Update is in progress'
                             : undefined
                       }
                     >
                       <Undo2 className="h-4 w-4" />
-                      {t('dashboardPage.rollbackToPreviousVersion')}
+                      Rollback to previous version
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>{t('dashboardPage.rollbackToPreviousVersionConfirm')}</AlertDialogTitle>
+                      <AlertDialogTitle>Rollback to previous version?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {t('dashboardPage.rollbackToPreviousVersionDescription')}
+                        This will restore the previous binary and restart llmlb. In-flight requests will complete before the rollback is applied.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isRollingBack}>{t('dashboardPage.cancel')}</AlertDialogCancel>
+                      <AlertDialogCancel disabled={isRollingBack}>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         disabled={isRollingBack}
                         onClick={(event) => {
@@ -802,10 +789,10 @@ export default function Dashboard() {
                         {isRollingBack ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            {t('dashboardPage.rollingBackEllipsis')}
+                            Rolling back...
                           </>
                         ) : (
-                          t('dashboardPage.rollback')
+                          'Rollback'
                         )}
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -837,7 +824,6 @@ export default function Dashboard() {
     applyTimeoutCountdown,
     queryClient,
     isAdmin,
-    t,
   ])
 
   if (error) {
@@ -848,13 +834,13 @@ export default function Dashboard() {
             <AlertCircle className="h-8 w-8 text-destructive" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">{t('dashboardPage.failedToLoadDashboard')}</h2>
+            <h2 className="text-lg font-semibold">Failed to load dashboard</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : t('dashboardPage.anErrorOccurred')}
+              {error instanceof Error ? error.message : 'An error occurred'}
             </p>
           </div>
           <Button variant="link" onClick={() => refetch()}>
-            {t('dashboardPage.tryAgain')}
+            Try again
           </Button>
         </div>
       </div>
@@ -909,27 +895,27 @@ export default function Dashboard() {
             <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
               <TabsTrigger value="endpoints" className="gap-2">
                 <Globe className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboard.tabs.endpoints')}</span>
+                <span className="hidden sm:inline">Endpoints</span>
               </TabsTrigger>
               <TabsTrigger value="models" className="gap-2">
                 <Package className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboard.tabs.models')}</span>
+                <span className="hidden sm:inline">Models</span>
               </TabsTrigger>
               <TabsTrigger value="statistics" className="gap-2">
                 <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboard.tabs.usage')}</span>
+                <span className="hidden sm:inline">Usage</span>
               </TabsTrigger>
               <TabsTrigger value="history" className="gap-2">
                 <History className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboard.tabs.requests')}</span>
+                <span className="hidden sm:inline">Requests</span>
               </TabsTrigger>
               <TabsTrigger value="clients" className="gap-2">
                 <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboard.tabs.traffic')}</span>
+                <span className="hidden sm:inline">Traffic</span>
               </TabsTrigger>
               <TabsTrigger value="logs" className="gap-2">
                 <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('dashboard.tabs.system')}</span>
+                <span className="hidden sm:inline">System</span>
               </TabsTrigger>
             </TabsList>
 

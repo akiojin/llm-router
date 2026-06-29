@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import { AuditLogEntry } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import {
@@ -38,7 +37,6 @@ function statusColor(code: number): string {
 }
 
 export function AuditLogTable({ entries, loading }: AuditLogTableProps) {
-  const { t } = useTranslation()
   if (loading) {
     return (
       <div className="space-y-2 rounded-md border p-4">
@@ -53,8 +51,8 @@ export function AuditLogTable({ entries, loading }: AuditLogTableProps) {
     return (
       <EmptyState
         icon={<ScrollText className="h-10 w-10" />}
-        title={t('audit.emptyTitle')}
-        description={t('audit.emptyDescription')}
+        title="No audit log entries found"
+        description="Audit entries will appear here as API and dashboard activity is recorded."
       />
     )
   }
@@ -64,15 +62,15 @@ export function AuditLogTable({ entries, loading }: AuditLogTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[140px]">{t('audit.timestamp')}</TableHead>
-            <TableHead className="w-[80px]">{t('audit.method')}</TableHead>
-            <TableHead>{t('audit.path')}</TableHead>
-            <TableHead className="w-[60px]">{t('audit.status')}</TableHead>
-            <TableHead className="w-[80px]">{t('audit.actor')}</TableHead>
-            <TableHead className="w-[100px]">{t('audit.actorId')}</TableHead>
-            <TableHead className="w-[120px]">{t('audit.clientIp')}</TableHead>
-            <TableHead className="w-[80px]">{t('audit.duration')}</TableHead>
-            <TableHead className="w-[100px]">{t('audit.tokens')}</TableHead>
+            <TableHead className="w-[140px]">Timestamp</TableHead>
+            <TableHead className="w-[80px]">Method</TableHead>
+            <TableHead>Path</TableHead>
+            <TableHead className="w-[60px]">Status</TableHead>
+            <TableHead className="w-[80px]">Actor</TableHead>
+            <TableHead className="w-[100px]">Actor ID</TableHead>
+            <TableHead className="w-[120px]">Client IP</TableHead>
+            <TableHead className="w-[80px]">Duration</TableHead>
+            <TableHead className="w-[100px]">Tokens</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

@@ -3,25 +3,16 @@
 // This verifies source-level guarantees for the update banner:
 // - The "Check for updates" CTA remains present.
 // - The banner no longer disappears when update state is temporarily unavailable.
-//
-// Note (SPEC #678 i18n): user-facing English text now lives in the i18n
-// resource `locales/en.json` (referenced from Dashboard.tsx via `t('dashboardPage.*')`),
-// so text-presence guarantees are asserted against the English locale while
-// structural/logic guarantees stay on the component source.
 
 fn get_dashboard_source() -> String {
     include_str!("../../src/web/dashboard/src/pages/Dashboard.tsx").to_string()
 }
 
-fn get_en_locale() -> String {
-    include_str!("../../src/web/dashboard/src/locales/en.json").to_string()
-}
-
 #[test]
 fn check_for_updates_button_is_present() {
-    let locale = get_en_locale();
+    let source = get_dashboard_source();
     assert!(
-        locale.contains("Check for updates"),
+        source.contains("Check for updates"),
         "Dashboard should expose the manual update-check CTA"
     );
 }
@@ -34,7 +25,7 @@ fn update_banner_does_not_early_return_when_update_missing() {
         "Update banner should stay visible even when update state is temporarily unavailable"
     );
     assert!(
-        get_en_locale().contains("Update status unavailable"),
+        source.contains("Update status unavailable"),
         "Dashboard should show a fallback description while update state is unavailable"
     );
 }
@@ -55,8 +46,9 @@ fn restart_button_visibility_depends_on_update_state() {
 // FR-011: draining状態でボタンテキストが「Waiting to update...」に変化すること
 #[test]
 fn draining_state_shows_waiting_to_update_button_text() {
+    let source = get_dashboard_source();
     assert!(
-        get_en_locale().contains("Waiting to update..."),
+        source.contains("Waiting to update..."),
         "Dashboard should show 'Waiting to update...' button text during draining state"
     );
 }
@@ -75,8 +67,9 @@ fn draining_state_shows_in_flight_count_in_button() {
 // FR-012: applying状態でボタンテキストが「Applying update...」に変化すること
 #[test]
 fn applying_state_shows_applying_update_button_text() {
+    let source = get_dashboard_source();
     assert!(
-        get_en_locale().contains("Applying update..."),
+        source.contains("Applying update..."),
         "Dashboard should show 'Applying update...' button text during applying state"
     );
 }
@@ -102,8 +95,9 @@ fn check_for_updates_disabled_during_draining() {
 // FR-016: 強制更新ボタンが表示されること
 #[test]
 fn force_update_button_is_present() {
+    let source = get_dashboard_source();
     assert!(
-        get_en_locale().contains("Force update now"),
+        source.contains("Force update now"),
         "Dashboard should expose a dedicated force update button"
     );
 }
@@ -117,7 +111,7 @@ fn force_update_requires_ready_payload() {
         "Force update should require payload=ready state"
     );
     assert!(
-        get_en_locale().contains("Update payload is still preparing"),
+        source.contains("Update payload is still preparing"),
         "Dashboard should explain why force update is disabled when payload is not ready"
     );
 }
@@ -151,7 +145,7 @@ fn apply_update_handles_non_queued_response() {
         "Dashboard should branch on applyUpdate queued response"
     );
     assert!(
-        get_en_locale().contains("Applying update"),
+        source.contains("Applying update"),
         "Dashboard should announce immediate apply when queued=false"
     );
 }

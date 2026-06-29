@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -30,13 +29,12 @@ export function CurlDialog({
   copyDisabled = false,
   description,
 }: CurlDialogProps) {
-  const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t('playground.curlTitle')}</DialogTitle>
-          <DialogDescription>{description ?? t('playground.curlDescription')}</DialogDescription>
+          <DialogTitle>cURL Command</DialogTitle>
+          <DialogDescription>{description ?? 'Copy this command to replay the current request.'}</DialogDescription>
         </DialogHeader>
 
         <div className="relative">
@@ -56,7 +54,7 @@ export function CurlDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t('playground.close')}
+            Close
           </Button>
         </DialogFooter>
       </DialogContent>

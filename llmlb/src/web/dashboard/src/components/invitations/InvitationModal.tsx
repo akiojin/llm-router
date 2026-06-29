@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { invitationsApi, type Invitation, type CreateInvitationResponse } from '@/lib/api'
 import {
@@ -65,7 +64,6 @@ interface InvitationModalProps {
 }
 
 export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const [expiresInHours, setExpiresInHours] = useState<number>(72)
@@ -92,12 +90,12 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
       setCreatedCode(data)
-      toast({ title: t('invitations.createdToast') })
+      toast({ title: 'Invitation code created' })
     },
     onError: (error) => {
       toast({
-        title: t('invitations.createFailedTitle'),
-        description: error instanceof Error ? error.message : t('invitations.unknownError'),
+        title: 'Failed to create invitation code',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -109,12 +107,12 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
       setRevokeInvitation(null)
-      toast({ title: t('invitations.revokedToast') })
+      toast({ title: 'Invitation code revoked' })
     },
     onError: (error) => {
       toast({
-        title: t('invitations.revokeFailedTitle'),
-        description: error instanceof Error ? error.message : t('invitations.unknownError'),
+        title: 'Failed to revoke invitation code',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -131,18 +129,18 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
         if (method !== 'manual') {
           setCopied(true)
           setTimeout(() => setCopied(false), 2000)
-          toast({ title: t('invitations.copiedToast') })
+          toast({ title: 'Copied to clipboard' })
           return
         }
 
         setCopied(false)
         selectTextForManualCopy(createdCode.code)
         toast({
-          title: t('invitations.autoCopyUnavailableTitle'),
-          description: t('invitations.autoCopyUnavailableDescription'),
+          title: 'Auto copy unavailable',
+          description: 'Press Ctrl+C to copy the selected value.',
         })
       } catch {
-        toast({ title: t('invitations.copyFailedTitle'), variant: 'destructive' })
+        toast({ title: 'Failed to copy', variant: 'destructive' })
       }
     }
   }
@@ -160,21 +158,21 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
         return (
           <Badge variant="default" className="gap-1 bg-green-600">
             <Clock className="h-3 w-3" />
-            {t('invitations.statusActive')}
+            Active
           </Badge>
         )
       case 'used':
         return (
           <Badge variant="secondary" className="gap-1">
             <CheckCircle2 className="h-3 w-3" />
-            {t('invitations.statusUsed')}
+            Used
           </Badge>
         )
       case 'revoked':
         return (
           <Badge variant="destructive" className="gap-1">
             <XCircle className="h-3 w-3" />
-            {t('invitations.statusRevoked')}
+            Revoked
           </Badge>
         )
       default:
@@ -193,10 +191,10 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Ticket className="h-5 w-5" />
-              {t('invitations.title')}
+              Invitation Codes
             </DialogTitle>
             <DialogDescription>
-              {t('invitations.description')}
+              Create and manage invitation codes for user registration.
             </DialogDescription>
           </DialogHeader>
 
@@ -205,7 +203,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
             <div className="flex justify-between">
               <Button onClick={() => setCreateOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
-                {t('invitations.createCodeButton')}
+                Create Code
               </Button>
               <Button variant="outline" size="icon" onClick={() => refetch()}>
                 <RefreshCw className="h-4 w-4" />
@@ -221,18 +219,18 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
               ) : !invitations || invitations.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                   <Ticket className="h-8 w-8" />
-                  <p>{t('invitations.emptyState')}</p>
+                  <p>No invitation codes</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{t('invitations.columnId')}</TableHead>
-                      <TableHead>{t('invitations.columnStatus')}</TableHead>
-                      <TableHead>{t('invitations.columnCreated')}</TableHead>
-                      <TableHead>{t('invitations.columnExpires')}</TableHead>
-                      <TableHead>{t('invitations.columnUsedBy')}</TableHead>
-                      <TableHead className="text-right">{t('invitations.columnActions')}</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead>Used By</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -245,7 +243,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
                           {invitation.status === 'active' && isExpired(invitation.expires_at) ? (
                             <Badge variant="outline" className="gap-1">
                               <XCircle className="h-3 w-3" />
-                              {t('invitations.statusExpired')}
+                              Expired
                             </Badge>
                           ) : (
                             getStatusBadge(invitation.status)
@@ -286,14 +284,14 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
       <Dialog open={createOpen && !createdCode} onOpenChange={(open) => !open && setCreateOpen(false)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('invitations.createTitle')}</DialogTitle>
+            <DialogTitle>Create Invitation Code</DialogTitle>
             <DialogDescription>
-              {t('invitations.createDescription')}
+              Generate a new invitation code for user registration.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="expires-in">{t('invitations.expiresInLabel')}</Label>
+              <Label htmlFor="expires-in">Expires In</Label>
               <Select
                 value={String(expiresInHours)}
                 onValueChange={(v) => setExpiresInHours(Number(v))}
@@ -302,24 +300,24 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="24">{t('invitations.expires24')}</SelectItem>
-                  <SelectItem value="48">{t('invitations.expires48')}</SelectItem>
-                  <SelectItem value="72">{t('invitations.expires72')}</SelectItem>
-                  <SelectItem value="168">{t('invitations.expires168')}</SelectItem>
-                  <SelectItem value="720">{t('invitations.expires720')}</SelectItem>
+                  <SelectItem value="24">24 hours (1 day)</SelectItem>
+                  <SelectItem value="48">48 hours (2 days)</SelectItem>
+                  <SelectItem value="72">72 hours (3 days)</SelectItem>
+                  <SelectItem value="168">168 hours (1 week)</SelectItem>
+                  <SelectItem value="720">720 hours (30 days)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              {t('invitations.cancel')}
+              Cancel
             </Button>
             <Button onClick={handleCreate} disabled={createMutation.isPending}>
               {createMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {t('invitations.create')}
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -331,15 +329,15 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle2 className="h-5 w-5" />
-              {t('invitations.createdTitle')}
+              Invitation Code Created
             </DialogTitle>
             <DialogDescription>
-              {t('invitations.createdDescription')}
+              Copy this code and share it with the user. This code will only be shown once.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>{t('invitations.codeLabel')}</Label>
+              <Label>Invitation Code</Label>
               <div className="flex gap-2">
                 <code className="flex-1 rounded-md bg-muted px-4 py-3 font-mono text-sm break-all">
                   {createdCode?.code}
@@ -359,11 +357,11 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              <p>{t('invitations.createdExpires', { value: createdCode ? new Date(createdCode.expires_at).toLocaleString() : '' })}</p>
+              <p>{`Expires: ${createdCode ? new Date(createdCode.expires_at).toLocaleString() : ''}`}</p>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleCloseCreatedDialog}>{t('invitations.done')}</Button>
+            <Button onClick={handleCloseCreatedDialog}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -372,13 +370,13 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
       <AlertDialog open={!!revokeInvitation} onOpenChange={() => setRevokeInvitation(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('invitations.revokeTitle')}</AlertDialogTitle>
+            <AlertDialogTitle>Revoke Invitation Code</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('invitations.revokeDescription')}
+              Are you sure you want to revoke this invitation code? It will no longer be usable for registration.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('invitations.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => revokeInvitation && revokeMutation.mutate(revokeInvitation.id)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -386,7 +384,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
               {revokeMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {t('invitations.revoke')}
+              Revoke
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

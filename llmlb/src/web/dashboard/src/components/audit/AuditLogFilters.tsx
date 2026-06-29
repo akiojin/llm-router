@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -16,7 +15,6 @@ interface AuditLogFiltersProps {
 }
 
 export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersProps) {
-  const { t } = useTranslation()
   const [searchText, setSearchText] = useState(filters.search || '')
   const [debounceTimer, setDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
@@ -40,7 +38,7 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
   return (
     <div className="flex flex-wrap gap-3">
       <Input
-        placeholder={t('audit.searchPlaceholder')}
+        placeholder="Search..."
         value={searchText}
         onChange={(e) => handleSearchChange(e.target.value)}
         className="w-[200px]"
@@ -50,13 +48,13 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
         onValueChange={(v) => handleSelectChange('actor_type', v)}
       >
         <SelectTrigger className="w-[130px]">
-          <SelectValue placeholder={t('audit.actorType')} />
+          <SelectValue placeholder="Actor Type" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">{t('audit.allActors')}</SelectItem>
-          <SelectItem value="user">{t('audit.actorUser')}</SelectItem>
-          <SelectItem value="api_key">{t('audit.actorApiKey')}</SelectItem>
-          <SelectItem value="anonymous">{t('audit.actorAnonymous')}</SelectItem>
+          <SelectItem value="all">All Actors</SelectItem>
+          <SelectItem value="user">User</SelectItem>
+          <SelectItem value="api_key">API Key</SelectItem>
+          <SelectItem value="anonymous">Anonymous</SelectItem>
         </SelectContent>
       </Select>
       <Select
@@ -64,10 +62,10 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
         onValueChange={(v) => handleSelectChange('http_method', v)}
       >
         <SelectTrigger className="w-[110px]">
-          <SelectValue placeholder={t('audit.method')} />
+          <SelectValue placeholder="Method" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">{t('audit.allMethods')}</SelectItem>
+          <SelectItem value="all">All Methods</SelectItem>
           <SelectItem value="GET">GET</SelectItem>
           <SelectItem value="POST">POST</SelectItem>
           <SelectItem value="PUT">PUT</SelectItem>
@@ -80,17 +78,17 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
         onValueChange={(v) => handleSelectChange('status_code', v)}
       >
         <SelectTrigger className="w-[130px]">
-          <SelectValue placeholder={t('audit.status')} />
+          <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">{t('audit.allStatus')}</SelectItem>
-          <SelectItem value="200">{t('audit.status200')}</SelectItem>
-          <SelectItem value="201">{t('audit.status201')}</SelectItem>
-          <SelectItem value="400">{t('audit.status400')}</SelectItem>
-          <SelectItem value="401">{t('audit.status401')}</SelectItem>
-          <SelectItem value="403">{t('audit.status403')}</SelectItem>
-          <SelectItem value="404">{t('audit.status404')}</SelectItem>
-          <SelectItem value="500">{t('audit.status500')}</SelectItem>
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="200">200 OK</SelectItem>
+          <SelectItem value="201">201 Created</SelectItem>
+          <SelectItem value="400">400 Bad Request</SelectItem>
+          <SelectItem value="401">401 Unauthorized</SelectItem>
+          <SelectItem value="403">403 Forbidden</SelectItem>
+          <SelectItem value="404">404 Not Found</SelectItem>
+          <SelectItem value="500">500 Server Error</SelectItem>
         </SelectContent>
       </Select>
     </div>

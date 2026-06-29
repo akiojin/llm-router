@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,8 +52,7 @@ export function SettingsDialog({
   description,
   maxContextCheckboxId = 'use-max-context',
 }: SettingsDialogProps) {
-  const { t } = useTranslation()
-  const effectiveDescription = description ?? t('playground.settingsDescription')
+  const effectiveDescription = description ?? 'Configure chat behavior and generation parameters.'
   // プリセット/リセットは温度と最大トークンをまとめて設定する。プリセット適用時は
   // モデル最大コンテキスト指定を解除して、指定したトークン数が反映されるようにする。
   const applyPreset = (temp: number, tokens: number) => {
@@ -67,22 +65,22 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('playground.settingsTitle')}</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
           <DialogDescription>{effectiveDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>{t('playground.presets')}</Label>
+            <Label>Presets</Label>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(0.2, 2048)}>
-                {t('playground.presetPrecise')}
+                Precise
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(0.7, 4096)}>
-                {t('playground.presetBalanced')}
+                Balanced
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(1.2, 8192)}>
-                {t('playground.presetCreative')}
+                Creative
               </Button>
             </div>
           </div>
@@ -90,9 +88,9 @@ export function SettingsDialog({
           <Separator />
 
           <div className="space-y-2">
-            <Label>{t('playground.systemPrompt')}</Label>
+            <Label>System Prompt</Label>
             <Textarea
-              placeholder={t('playground.systemPromptPlaceholder')}
+              placeholder="You are a helpful assistant..."
               value={systemPrompt}
               onChange={(e) => onSystemPromptChange(e.target.value)}
               rows={3}
@@ -103,9 +101,9 @@ export function SettingsDialog({
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>{t('playground.streaming')}</Label>
+              <Label>Streaming</Label>
               <p className="text-xs text-muted-foreground">
-                {t('playground.streamingHint')}
+                Stream responses while tokens are generated
               </p>
             </div>
             <Switch
@@ -118,7 +116,7 @@ export function SettingsDialog({
           <Separator />
 
           <div className="space-y-2">
-            <Label>{t('playground.temperature', { value: temperature })}</Label>
+            <Label>{`Temperature: ${temperature}`}</Label>
             <input
               type="range"
               min="0"
@@ -131,7 +129,7 @@ export function SettingsDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>{t('playground.maxTokens')}</Label>
+            <Label>Max Tokens</Label>
             <div className="flex items-center space-x-2 mb-2">
               <Checkbox
                 id={maxContextCheckboxId}
@@ -143,12 +141,11 @@ export function SettingsDialog({
                 htmlFor={maxContextCheckboxId}
                 className={cn("text-sm font-normal", selectedModelMaxTokens == null && "text-muted-foreground")}
               >
-                {t('playground.useModelMaxContext', {
-                  value:
-                    selectedModelMaxTokens != null
-                      ? selectedModelMaxTokens.toLocaleString()
-                      : t('playground.unknown'),
-                })}
+                {`Use model max context (${
+                  selectedModelMaxTokens != null
+                    ? selectedModelMaxTokens.toLocaleString()
+                    : 'unknown'
+                })`}
               </Label>
             </div>
             <Input
@@ -169,9 +166,9 @@ export function SettingsDialog({
             size="sm"
             onClick={() => applyPreset(0.7, 16384)}
           >
-            {t('playground.resetParameters')}
+            Reset parameters
           </Button>
-          <Button onClick={() => onOpenChange(false)}>{t('playground.done')}</Button>
+          <Button onClick={() => onOpenChange(false)}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

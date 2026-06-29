@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { endpointsApi, ApiError, type DashboardEndpoint } from '@/lib/api'
 import { cn, isAbortError } from '@/lib/utils'
@@ -56,25 +55,23 @@ function getStatusIndicatorColor(status: DashboardEndpoint['status'] | undefined
 }
 
 function getStatusLabel(
-  status: DashboardEndpoint['status'] | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string
+  status: DashboardEndpoint['status'] | undefined
 ): string {
   switch (status) {
     case 'online':
-      return t('endpointPlayground.statusOnline')
+      return 'Online'
     case 'pending':
-      return t('endpointPlayground.statusPending')
+      return 'Pending'
     case 'offline':
-      return t('endpointPlayground.statusOffline')
+      return 'Offline'
     case 'error':
-      return t('endpointPlayground.statusError')
+      return 'Error'
     default:
-      return t('endpointPlayground.statusUnknown')
+      return 'Unknown'
   }
 }
 
 export default function EndpointPlayground({ endpointId, onBack }: EndpointPlaygroundProps) {
-  const { t } = useTranslation()
   const pg = usePlayground()
   const isMountedRef = useRef(true)
 
@@ -98,13 +95,13 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
 
   useEffect(() => {
     if (modelsError) {
-      let description = t('endpointPlayground.fetchModelsError')
+      let description = 'Failed to fetch model list'
       if (modelsError instanceof ApiError) {
         description = getErrorMessage(modelsError)
       }
-      toast({ title: t('endpointPlayground.errorTitle'), description, variant: 'destructive' })
+      toast({ title: 'Error', description, variant: 'destructive' })
     }
-  }, [modelsError, t])
+  }, [modelsError])
 
   useEffect(() => {
     if (endpointModels?.models && !pg.selectedModel && endpointModels.models.length > 0) {
@@ -123,10 +120,8 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
 
     if (pg.input.length > MAX_INPUT_CHARS) {
       toast({
-        title: t('endpointPlayground.messageTooLongTitle'),
-        description: t('endpointPlayground.messageTooLongDescription', {
-          max: MAX_INPUT_CHARS.toLocaleString(),
-        }),
+        title: 'Message too long',
+        description: `Keep your message under ${MAX_INPUT_CHARS.toLocaleString()} characters.`,
         variant: 'destructive',
       })
       return
@@ -203,13 +198,13 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
     } catch (error) {
       if (!isAbortError(error)) {
         toast({
-          title: t('endpointPlayground.sendMessageError'),
+          title: 'Failed to send message',
           description:
             error instanceof ApiError
               ? getErrorMessage(error)
               : error instanceof Error
                 ? error.message
-                : t('endpointPlayground.unknownError'),
+                : 'Unknown error',
           variant: 'destructive',
         })
         // Drop only the optimistic empty assistant placeholder (streaming),
@@ -240,7 +235,7 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
       : pg.messages
 
     if (!hasBaseUrl) {
-      return t('endpointPlayground.curlBaseUrlError')
+      return '# Error: endpoint base_url is not configured. Please set it in the dashboard.'
     }
 
     return `curl -X POST '${baseUrl}/v1/chat/completions' \\
@@ -263,7 +258,7 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">{t('endpointPlayground.loadingEndpoint')}</p>
+          <p className="text-sm text-muted-foreground">Loading endpoint...</p>
         </div>
       </div>
     )
@@ -280,33 +275,33 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
           </div>
           <div>
             <h1 className="font-semibold text-sm truncate" title={endpoint?.name}>
-              {endpoint?.name || t('endpointPlayground.endpointFallback')}
+              {endpoint?.name || 'Endpoint'}
             </h1>
-            <p className="text-xs text-muted-foreground">{t('endpointPlayground.playgroundLabel')}</p>
+            <p className="text-xs text-muted-foreground">Playground</p>
           </div>
         </div>
       }
       sidebarInfo={
         <div className="p-3 space-y-2">
           <div className="text-xs text-muted-foreground">
-            <span className="font-medium">{t('endpointPlayground.urlLabel')}</span>{' '}
+            <span className="font-medium">URL:</span>{' '}
             <span className="truncate block" title={endpoint?.base_url}>
-              {hasBaseUrl ? endpoint?.base_url : t('endpointPlayground.urlNotSet')}
+              {hasBaseUrl ? endpoint?.base_url : 'Not set'}
             </span>
           </div>
           {!hasBaseUrl && (
             <div className="text-xs text-destructive">
-              {t('endpointPlayground.baseUrlNotConfigured')}
+              Base URL is not configured. Please check the endpoint settings.
             </div>
           )}
           <div className="text-xs text-muted-foreground">
-            <span className="font-medium">{t('endpointPlayground.statusLabel')}</span>{' '}
+            <span className="font-medium">Status:</span>{' '}
             <Badge variant={getStatusBadgeVariant(endpoint?.status)} className="text-xs">
-              {getStatusLabel(endpoint?.status, t)}
+              {getStatusLabel(endpoint?.status)}
             </Badge>
           </div>
           <div className="text-xs text-muted-foreground">
-            <span className="font-medium">{t('endpointPlayground.modelsLabel')}</span> {models.length}
+            <span className="font-medium">Models:</span> {models.length}
           </div>
         </div>
       }
@@ -314,13 +309,13 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
         <div className="flex items-center gap-3">
           <Select value={pg.selectedModel} onValueChange={pg.setSelectedModel}>
             <SelectTrigger className="w-64">
-              <SelectValue placeholder={t('endpointPlayground.selectModelPlaceholder')} />
+              <SelectValue placeholder="Select a model" />
             </SelectTrigger>
             <SelectContent>
               {isLoadingModels ? (
-                <SelectItem value="__loading__" disabled>{t('endpointPlayground.loadingModels')}</SelectItem>
+                <SelectItem value="__loading__" disabled>Loading models...</SelectItem>
               ) : models.length === 0 ? (
-                <SelectItem value="__no_models__" disabled>{t('endpointPlayground.noModelsAvailable')}</SelectItem>
+                <SelectItem value="__no_models__" disabled>No models available</SelectItem>
               ) : (
                 models.map((model) => (
                   <SelectItem key={model.model_id} value={model.model_id}>{model.model_id}</SelectItem>
@@ -331,24 +326,24 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
 
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CircleDot className={cn("h-3 w-3", getStatusIndicatorColor(endpoint?.status))} />
-            {getStatusLabel(endpoint?.status, t)}
+            {getStatusLabel(endpoint?.status)}
           </span>
 
           {pg.streamEnabled && (
-            <Badge variant="secondary" className="text-xs">{t('endpointPlayground.streamingBadge')}</Badge>
+            <Badge variant="secondary" className="text-xs">Streaming</Badge>
           )}
         </div>
       }
       headerRight={
         <Button variant="outline" size="sm" onClick={() => pg.setCurlOpen(true)}>
           <Code className="mr-2 h-4 w-4" />
-          {t('endpointPlayground.curlButton')}
+          cURL
         </Button>
       }
       messages={pg.messages}
       messagesEndRef={pg.messagesEndRef}
-      emptyTitle={t('endpointPlayground.emptyTitle')}
-      emptyDescription={t('endpointPlayground.emptyDescription')}
+      emptyTitle="Start a conversation"
+      emptyDescription="Select a model and send a message to get started."
       messageMaxWidth="max-w-3xl"
       input={pg.input}
       onInputChange={pg.setInput}
@@ -378,14 +373,14 @@ export default function EndpointPlayground({ endpointId, onBack }: EndpointPlayg
       useMaxContext={pg.useMaxContext}
       onUseMaxContextChange={pg.setUseMaxContext}
       selectedModelMaxTokens={selectedModelMaxTokens}
-      settingsDescription={t('endpointPlayground.settingsDescription')}
+      settingsDescription="Configure your chat preferences."
       curlOpen={pg.curlOpen}
       onCurlOpenChange={pg.setCurlOpen}
       curlCommand={generateCurl()}
       copied={pg.copied}
       onCopyCurl={pg.handleCopyCurl}
       curlCopyDisabled={!hasBaseUrl}
-      curlDescription={t('endpointPlayground.curlDescription')}
+      curlDescription="Copy this command to replicate the API call."
       resetChat={pg.resetChat}
     />
   )

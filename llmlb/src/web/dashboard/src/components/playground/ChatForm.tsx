@@ -1,5 +1,4 @@
 import { useEffect, type RefObject } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Image as ImageIcon, Mic, X, Volume2, Send, Loader2 } from 'lucide-react'
@@ -52,8 +51,7 @@ export function ChatForm({
   sendButton,
   inputId,
 }: ChatFormProps) {
-  const { t } = useTranslation()
-  const effectivePlaceholder = placeholder ?? t('playground.inputPlaceholder')
+  const effectivePlaceholder = placeholder ?? 'Type a message or attach files...'
   // テキストエリアの高さを内容に応じて自動調整（最大 200px）
   useEffect(() => {
     const el = inputRef.current
@@ -125,7 +123,7 @@ export function ChatForm({
                 variant="outline"
                 size="icon"
                 onClick={() => imageInputRef.current?.click()}
-                title={t('playground.attachImage')}
+                title="Attach image"
                 className="shrink-0"
               >
                 <ImageIcon className="h-4 w-4" />
@@ -134,7 +132,7 @@ export function ChatForm({
                 variant="outline"
                 size="icon"
                 onClick={() => audioInputRef.current?.click()}
-                title={t('playground.attachAudio')}
+                title="Attach audio"
                 className="shrink-0"
               >
                 <Mic className="h-4 w-4" />
@@ -169,11 +167,11 @@ export function ChatForm({
             <Button
               variant="destructive"
               onClick={onStop}
-              title={t('playground.stopHint')}
+              title="Stop generating (Esc)"
               className="shrink-0 animate-pulse ring-2 ring-destructive/40"
             >
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {t('playground.stop')}
+              Stop
             </Button>
           ) : (
             <Button
@@ -182,7 +180,7 @@ export function ChatForm({
               className="shrink-0"
             >
               <Send className="mr-2 h-4 w-4" />
-              {t('playground.send')}
+              Send
             </Button>
           )}
         </div>

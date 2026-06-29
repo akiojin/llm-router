@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import {
   Activity,
   AlertTriangle,
@@ -45,11 +44,11 @@ function tpsValue(value: number | null | undefined): string {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} tok/s`
 }
 
-function healthLabel(health: string | undefined, t: (key: string) => string): string {
-  if (health === 'healthy') return t('dashboard.overview.healthy')
-  if (health === 'attention') return t('dashboard.overview.attention')
-  if (health === 'empty') return t('dashboard.overview.noEndpoints')
-  return t('dashboard.overview.unknown')
+function healthLabel(health: string | undefined): string {
+  if (health === 'healthy') return 'Healthy'
+  if (health === 'attention') return 'Attention'
+  if (health === 'empty') return 'No endpoints'
+  return 'Unknown'
 }
 
 function healthIcon(health: string | undefined) {
@@ -76,7 +75,6 @@ function MetricCell({ dataStat, label, value, detail, icon }: MetricCellProps) {
 }
 
 export function OperationsOverview({ overview, isLoading }: OperationsOverviewProps) {
-  const { t } = useTranslation()
   const operations = overview?.operations
   const capacity = overview?.capacity
   const actionItems = overview?.action_items ?? []
@@ -87,7 +85,7 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
     (operations?.queued_requests ?? 0)
 
   return (
-    <section className="space-y-4" aria-label={t('dashboard.overview.regionLabel')}>
+    <section className="space-y-4" aria-label="Operations overview">
       <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div
           data-stat="operational-health"
@@ -100,28 +98,25 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
               </div>
               <div>
                 <p className="text-xs font-medium uppercase text-muted-foreground">
-                  {t('dashboard.overview.operations')}
+                  Operations
                 </p>
                 <p className="mt-1 text-3xl font-semibold tracking-tight">
-                  {loadingValue ?? healthLabel(operations?.health, t)}
+                  {loadingValue ?? healthLabel(operations?.health)}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {t('dashboard.overview.summary', {
-                    online: metricValue(operations?.online_endpoints),
-                    review: metricValue(failedAndImpaired),
-                  })}
+                  {`${metricValue(operations?.online_endpoints)} online, ${metricValue(failedAndImpaired)} requiring review`}
                 </p>
               </div>
             </div>
             <div className="grid min-w-48 grid-cols-2 gap-2 text-sm">
               <div className="rounded-md bg-muted/50 px-3 py-2">
-                <p className="text-xs text-muted-foreground">{t('dashboard.overview.active')}</p>
+                <p className="text-xs text-muted-foreground">Active</p>
                 <p className="font-semibold tabular-nums">
                   {metricValue(operations?.active_requests)}
                 </p>
               </div>
               <div className="rounded-md bg-muted/50 px-3 py-2">
-                <p className="text-xs text-muted-foreground">{t('dashboard.overview.queued')}</p>
+                <p className="text-xs text-muted-foreground">Queued</p>
                 <p className="font-semibold tabular-nums">
                   {metricValue(operations?.queued_requests)}
                 </p>
@@ -136,7 +131,7 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
         >
           <div className="mb-3 flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm font-medium">{t('dashboard.overview.actionItems')}</p>
+            <p className="text-sm font-medium">Action Items</p>
           </div>
           <div className="space-y-2">
             {(isLoading ? [] : actionItems).map((item, index) => (
@@ -163,70 +158,58 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <MetricCell
           dataStat="total-endpoints"
-          label={t('dashboard.overview.endpoints')}
+          label="Endpoints"
           value={loadingValue ?? metricValue(operations?.total_endpoints)}
-          detail={t('dashboard.overview.detailOnline', {
-            value: metricValue(operations?.online_endpoints),
-          })}
+          detail={`${metricValue(operations?.online_endpoints)} online`}
           icon={<Server className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="total-requests"
-          label={t('dashboard.overview.requests')}
+          label="Requests"
           value={loadingValue ?? metricValue(operations?.total_requests)}
-          detail={t('dashboard.overview.detailSuccessful', {
-            value: metricValue(operations?.successful_requests),
-          })}
+          detail={`${metricValue(operations?.successful_requests)} successful`}
           icon={<Activity className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="active-requests"
-          label={t('dashboard.overview.active')}
+          label="Active"
           value={loadingValue ?? metricValue(operations?.active_requests)}
-          detail={t('dashboard.overview.detailInFlight')}
+          detail="in flight"
           icon={<Cpu className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="queued-requests"
-          label={t('dashboard.overview.queued')}
+          label="Queued"
           value={loadingValue ?? metricValue(operations?.queued_requests)}
-          detail={t('dashboard.overview.detailWaiting')}
+          detail="waiting"
           icon={<Clock className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="success-rate"
-          label={t('dashboard.overview.success')}
+          label="Success"
           value={loadingValue ?? formatPercentage(operations?.success_rate)}
-          detail={t('dashboard.overview.detailFailed', {
-            value: metricValue(operations?.failed_requests),
-          })}
+          detail={`${metricValue(operations?.failed_requests)} failed`}
           icon={<CheckCircle2 className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="output-tps"
-          label={t('dashboard.overview.outputTps')}
+          label="Output TPS"
           value={loadingValue ?? tpsValue(operations?.output_tps)}
-          detail={t('dashboard.overview.detailOutputTokens', {
-            value: metricValue(operations?.total_output_tokens),
-          })}
+          detail={`${metricValue(operations?.total_output_tokens)} output tokens`}
           icon={<Gauge className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="total-tokens"
-          label={t('dashboard.overview.tokens')}
+          label="Tokens"
           value={loadingValue ?? metricValue(operations?.total_tokens)}
-          detail={t('dashboard.overview.detailOut', {
-            value: metricValue(operations?.total_output_tokens),
-          })}
+          detail={`${metricValue(operations?.total_output_tokens)} out`}
           icon={<MessageSquare className="h-4 w-4" />}
         />
         <MetricCell
           dataStat="gpu-capacity"
-          label={t('dashboard.overview.gpuEndpoints')}
+          label="GPU endpoints"
           value={loadingValue ?? metricValue(capacity?.gpu_capable_endpoints)}
-          detail={t('dashboard.overview.detailReporting', {
-            value: metricValue(capacity?.gpu_telemetry_endpoints),
-          })}
+          detail={`${metricValue(capacity?.gpu_telemetry_endpoints)} reporting`}
           icon={<HardDrive className="h-4 w-4" />}
         />
       </div>
@@ -234,7 +217,7 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">
           <p className="text-xs font-medium uppercase text-muted-foreground">
-            {t('dashboard.overview.modelCapacity')}
+            Model capacity
           </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? metricValue(capacity?.total_models)}
@@ -242,22 +225,20 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
         </div>
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">
           <p className="text-xs font-medium uppercase text-muted-foreground">
-            {t('dashboard.overview.gpuMemory')}
+            GPU memory
           </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? byteValue(capacity?.used_gpu_memory_bytes)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t('dashboard.overview.detailTotal', {
-              value: byteValue(capacity?.total_gpu_memory_bytes),
-            })}
+            {`${byteValue(capacity?.total_gpu_memory_bytes)} total`}
             {', '}
             {formatPercentage(capacity?.gpu_memory_usage_percent)}
           </p>
         </div>
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">
           <p className="text-xs font-medium uppercase text-muted-foreground">
-            {t('dashboard.overview.telemetry')}
+            Telemetry
           </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? capacity?.telemetry_status ?? '-'}
