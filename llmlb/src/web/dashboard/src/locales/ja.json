@@ -4,6 +4,19 @@
     "language": "言語",
     "footer": "LLM Load Balancer ダッシュボード v1.0"
   },
+  "header": {
+    "connection": "接続: {{status}}",
+    "online": "オンライン",
+    "offline": "オフライン",
+    "lastUpdated": "最終更新: {{time}}",
+    "fetchTime": "取得時間: {{value}}",
+    "apiKeys": "APIキー",
+    "lbPlayground": "LBプレイグラウンド",
+    "auditLog": "監査ログ",
+    "manageUsers": "ユーザー管理",
+    "invitationCodes": "招待コード",
+    "signOut": "サインアウト"
+  },
   "login": {
     "subtitle": "ミッションコントロール ダッシュボード",
     "title": "サインイン",

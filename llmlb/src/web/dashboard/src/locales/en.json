@@ -4,6 +4,19 @@
     "language": "Language",
     "footer": "LLM Load Balancer Dashboard v1.0"
   },
+  "header": {
+    "connection": "Connection: {{status}}",
+    "online": "Online",
+    "offline": "Offline",
+    "lastUpdated": "Last updated: {{time}}",
+    "fetchTime": "Fetch time: {{value}}",
+    "apiKeys": "API Keys",
+    "lbPlayground": "LB Playground",
+    "auditLog": "Audit Log",
+    "manageUsers": "Manage Users",
+    "invitationCodes": "Invitation Codes",
+    "signOut": "Sign out"
+  },
   "login": {
     "subtitle": "Mission Control Dashboard",
     "title": "Sign in",
