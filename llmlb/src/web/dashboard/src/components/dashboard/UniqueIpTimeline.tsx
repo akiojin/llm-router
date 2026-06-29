@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export interface UniqueIpTimelinePoint {
@@ -19,10 +20,11 @@ function formatHour(isoTimestamp: string): string {
 }
 
 export function UniqueIpTimeline({ data }: UniqueIpTimelineProps) {
+  const { t } = useTranslation()
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-        No timeline data available
+        {t('analytics.noTimelineData')}
       </div>
     )
   }
@@ -54,7 +56,7 @@ export function UniqueIpTimeline({ data }: UniqueIpTimelineProps) {
             fontSize: '12px',
           }}
           labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
-          formatter={(value) => [Number(value ?? 0), 'Unique IPs']}
+          formatter={(value) => [Number(value ?? 0), t('analytics.uniqueIps')]}
           labelFormatter={(label) => formatHour(String(label ?? ''))}
         />
         <Line

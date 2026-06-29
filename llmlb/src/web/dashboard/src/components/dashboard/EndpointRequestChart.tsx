@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { endpointsApi, type EndpointDailyStatEntry } from '@/lib/api'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -29,6 +30,7 @@ function formatDateLabel(dateStr: string): string {
 }
 
 export function EndpointRequestChart({ endpointId }: EndpointRequestChartProps) {
+  const { t } = useTranslation()
   const [days, setDays] = useState<DaysPeriod>('7')
 
   const { data, isLoading } = useQuery<EndpointDailyStatEntry[]>({
@@ -48,18 +50,18 @@ export function EndpointRequestChart({ endpointId }: EndpointRequestChartProps) 
       <div className="flex items-center justify-between">
         <Label className="flex items-center gap-2">
           <BarChart3 className="h-4 w-4" />
-          Daily Requests
+          {t('endpointDetail.dailyRequests')}
         </Label>
         <Tabs value={days} onValueChange={(v) => setDays(v as DaysPeriod)}>
           <TabsList className="h-8">
             <TabsTrigger value="7" className="px-2.5 py-1 text-xs">
-              7D
+              {t('endpointDetail.period7d')}
             </TabsTrigger>
             <TabsTrigger value="30" className="px-2.5 py-1 text-xs">
-              30D
+              {t('endpointDetail.period30d')}
             </TabsTrigger>
             <TabsTrigger value="90" className="px-2.5 py-1 text-xs">
-              90D
+              {t('endpointDetail.period90d')}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -68,11 +70,11 @@ export function EndpointRequestChart({ endpointId }: EndpointRequestChartProps) 
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">Loading chart...</span>
+          <span className="ml-2 text-sm text-muted-foreground">{t('endpointDetail.loadingChart')}</span>
         </div>
       ) : chartData.length === 0 ? (
         <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-          No request data available
+          {t('endpointDetail.noRequestData')}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
@@ -106,14 +108,14 @@ export function EndpointRequestChart({ endpointId }: EndpointRequestChartProps) 
             />
             <Bar
               dataKey="successful"
-              name="Successful"
+              name={t('endpointDetail.legend.successful')}
               stackId="requests"
               fill="#22c55e"
               radius={[0, 0, 0, 0]}
             />
             <Bar
               dataKey="failed"
-              name="Failed"
+              name={t('endpointDetail.legend.failed')}
               stackId="requests"
               fill="#ef4444"
               radius={[2, 2, 0, 0]}

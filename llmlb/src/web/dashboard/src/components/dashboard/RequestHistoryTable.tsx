@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { type RequestHistoryItem } from '@/lib/api'
 import {
   copyToClipboard,
@@ -55,6 +56,7 @@ interface RequestHistoryTableProps {
 const PAGE_SIZES = [25, 50, 100]
 
 export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableProps) {
+  const { t } = useTranslation()
   const [pageSize, setPageSize] = useState(25)
   const [currentPage, setCurrentPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'error'>('all')
@@ -83,30 +85,32 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
       if (method !== 'manual') {
         setCopiedField(field)
         setTimeout(() => setCopiedField(null), 2000)
-        toast({ title: 'Copied to clipboard' })
+        toast({ title: t('requests.copiedToClipboard') })
         return
       }
 
       setCopiedField(null)
       selectTextForManualCopy(text)
       toast({
-        title: 'Auto copy unavailable',
-        description: 'Press Ctrl+C to copy the selected value.',
+        title: t('requests.autoCopyUnavailable'),
+        description: t('requests.pressCtrlCToCopy'),
       })
     } catch {
-      toast({ title: 'Failed to copy', variant: 'destructive' })
+      toast({ title: t('requests.failedToCopy'), variant: 'destructive' })
     }
   }
 
   const serializeBody = (body: unknown, kind: 'request' | 'response') => {
+    const kindLabel =
+      kind === 'request' ? t('requests.bodyKindRequest') : t('requests.bodyKindResponse')
     try {
       const value = JSON.stringify(body, null, 2)
       if (value === undefined) {
-        return `No ${kind} body`
+        return t('requests.noBody', { kind: kindLabel })
       }
       return value
     } catch {
-      return `Unable to display ${kind} body`
+      return t('requests.unableToDisplayBody', { kind: kindLabel })
     }
   }
 
@@ -116,7 +120,7 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="h-5 w-5" />
-            Request History
+            {t('requests.requestHistory')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -137,7 +141,7 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <History className="h-5 w-5" />
-              Request History
+              {t('requests.requestHistory')}
               <Badge variant="secondary" className="ml-2">
                 {history.length}
               </Badge>
@@ -151,16 +155,20 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                   setCurrentPage(1)
                 }}
               >
-                <SelectTrigger id="history-status-filter" className="w-32" aria-label="Filter by status">
+                <SelectTrigger
+                  id="history-status-filter"
+                  className="w-32"
+                  aria-label={t('requests.filterByStatus')}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All status</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="all">{t('requests.allStatus')}</SelectItem>
+                  <SelectItem value="success">{t('requests.success')}</SelectItem>
+                  <SelectItem value="error">{t('requests.error')}</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="text-sm text-muted-foreground">Show</span>
+              <span className="text-sm text-muted-foreground">{t('requests.show')}</span>
               <Select
                 value={pageSize.toString()}
                 onValueChange={(value) => {
@@ -179,7 +187,7 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-sm text-muted-foreground">entries</span>
+              <span className="text-sm text-muted-foreground">{t('requests.entries')}</span>
             </div>
           </div>
         </CardHeader>
@@ -189,13 +197,13 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead>Node</TableHead>
-                  <TableHead>Client IP</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Tokens</TableHead>
+                  <TableHead>{t('requests.time')}</TableHead>
+                  <TableHead>{t('requests.model')}</TableHead>
+                  <TableHead>{t('requests.node')}</TableHead>
+                  <TableHead>{t('requests.clientIp')}</TableHead>
+                  <TableHead>{t('requests.status')}</TableHead>
+                  <TableHead>{t('requests.duration')}</TableHead>
+                  <TableHead>{t('requests.tokens')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody id="request-history-tbody">
@@ -206,12 +214,12 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                         icon={<History className="h-8 w-8" />}
                         title={
                           statusFilter === 'all'
-                            ? 'No request history'
-                            : 'No requests match the filter'
+                            ? t('requests.noRequestHistory')
+                            : t('requests.noRequestsMatchFilter')
                         }
                         description={
                           statusFilter === 'all'
-                            ? 'Requests will appear here once traffic is routed through the balancer.'
+                            ? t('requests.requestsWillAppearHere')
                             : undefined
                         }
                       />
@@ -269,8 +277,11 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t px-6 py-4">
               <p className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                {Math.min(currentPage * pageSize, history.length)} of {history.length}
+                {t('requests.showingRange', {
+                  from: (currentPage - 1) * pageSize + 1,
+                  to: Math.min(currentPage * pageSize, history.length),
+                  total: history.length,
+                })}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -283,7 +294,7 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span id="history-page-info" className="text-sm">
-                  Page {currentPage} of {totalPages}
+                  {t('requests.pageInfo', { current: currentPage, total: totalPages })}
                 </span>
                 <Button
                   id="history-page-next"
@@ -314,29 +325,30 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="h-5 w-5" />
-              Request Details
+              {t('requests.requestDetails')}
             </DialogTitle>
             <DialogDescription>
-              Request ID: <code className="text-xs">{selectedRequest?.request_id}</code>
+              {t('requests.requestIdLabel')}{' '}
+              <code className="text-xs">{selectedRequest?.request_id}</code>
             </DialogDescription>
           </DialogHeader>
 
           {selectedRequest && (
             <Tabs defaultValue="overview" className="mt-4 min-w-0">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="request">Request</TabsTrigger>
-                <TabsTrigger value="response">Response</TabsTrigger>
+                <TabsTrigger value="overview">{t('requests.overview')}</TabsTrigger>
+                <TabsTrigger value="request">{t('requests.request')}</TabsTrigger>
+                <TabsTrigger value="response">{t('requests.response')}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Model</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.model')}</p>
                     <Badge variant="secondary">{selectedRequest.model}</Badge>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Status</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.status')}</p>
                     <Badge
                       variant={
                         selectedRequest.status === 'success' ? 'online' : 'destructive'
@@ -346,29 +358,29 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                     </Badge>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Node</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.node')}</p>
                     <p className="text-sm">
                       {selectedRequest.node_name || selectedRequest.node_id || '—'}
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Client IP</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.clientIp')}</p>
                     <p className="font-mono text-sm">
                       {selectedRequest.client_ip || '—'}
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Duration</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.duration')}</p>
                     <p className="text-sm">{formatDuration(selectedRequest.duration_ms)}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Timestamp</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.timestamp')}</p>
                     <p className="text-sm">
                       {new Date(selectedRequest.timestamp).toLocaleString()}
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Total Tokens</p>
+                    <p className="text-sm text-muted-foreground">{t('requests.totalTokens')}</p>
                     <p className="text-sm">
                       {selectedRequest.total_tokens?.toLocaleString() || '—'}
                     </p>
@@ -377,7 +389,7 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
 
                 {selectedRequest.error && (
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-                    <p className="text-sm font-medium text-destructive">Error</p>
+                    <p className="text-sm font-medium text-destructive">{t('requests.error')}</p>
                     <p className="mt-1 text-sm">{selectedRequest.error}</p>
                   </div>
                 )}

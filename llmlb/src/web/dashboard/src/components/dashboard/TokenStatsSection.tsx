@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardApi, type DailyTokenStats, type MonthlyTokenStats } from '@/lib/api'
 import { formatNumber } from '@/lib/utils'
@@ -6,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MessageSquare, TrendingUp, Calendar } from 'lucide-react'
 
 export function TokenStatsSection() {
+  const { t } = useTranslation()
   const { data: dailyStats, isLoading: loadingDaily } = useQuery<DailyTokenStats[]>({
     queryKey: ['token-stats-daily'],
     queryFn: () => dashboardApi.getDailyTokenStats(7),
@@ -21,7 +23,7 @@ export function TokenStatsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5" />
-          Token Statistics
+          {t('analytics.tokenStatistics')}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -29,11 +31,11 @@ export function TokenStatsSection() {
           <TabsList>
             <TabsTrigger value="daily" className="gap-2">
               <TrendingUp className="h-4 w-4" />
-              Daily
+              {t('analytics.daily')}
             </TabsTrigger>
             <TabsTrigger value="monthly" className="gap-2">
               <Calendar className="h-4 w-4" />
-              Monthly
+              {t('analytics.monthly')}
             </TabsTrigger>
           </TabsList>
 
@@ -47,11 +49,11 @@ export function TokenStatsSection() {
             ) : dailyStats && dailyStats.length > 0 ? (
               <div className="space-y-2">
                 <div className="grid grid-cols-5 gap-2 text-sm font-medium text-muted-foreground border-b pb-2">
-                  <div>Date</div>
-                  <div className="text-right">Requests</div>
-                  <div className="text-right">Input</div>
-                  <div className="text-right">Output</div>
-                  <div className="text-right">Total</div>
+                  <div>{t('analytics.date')}</div>
+                  <div className="text-right">{t('analytics.requests')}</div>
+                  <div className="text-right">{t('analytics.input')}</div>
+                  <div className="text-right">{t('analytics.output')}</div>
+                  <div className="text-right">{t('analytics.total')}</div>
                 </div>
                 {dailyStats.map((stat) => (
                   <div key={stat.date} className="grid grid-cols-5 gap-2 text-sm py-2 border-b border-border/50">
@@ -64,7 +66,7 @@ export function TokenStatsSection() {
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground text-center py-8">No daily statistics available</p>
+              <p className="text-muted-foreground text-center py-8">{t('analytics.noDailyStatistics')}</p>
             )}
           </TabsContent>
 
@@ -78,11 +80,11 @@ export function TokenStatsSection() {
             ) : monthlyStats && monthlyStats.length > 0 ? (
               <div className="space-y-2">
                 <div className="grid grid-cols-5 gap-2 text-sm font-medium text-muted-foreground border-b pb-2">
-                  <div>Month</div>
-                  <div className="text-right">Requests</div>
-                  <div className="text-right">Input</div>
-                  <div className="text-right">Output</div>
-                  <div className="text-right">Total</div>
+                  <div>{t('analytics.month')}</div>
+                  <div className="text-right">{t('analytics.requests')}</div>
+                  <div className="text-right">{t('analytics.input')}</div>
+                  <div className="text-right">{t('analytics.output')}</div>
+                  <div className="text-right">{t('analytics.total')}</div>
                 </div>
                 {monthlyStats.map((stat) => (
                   <div key={stat.month} className="grid grid-cols-5 gap-2 text-sm py-2 border-b border-border/50">
@@ -95,7 +97,7 @@ export function TokenStatsSection() {
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground text-center py-8">No monthly statistics available</p>
+              <p className="text-muted-foreground text-center py-8">{t('analytics.noMonthlyStatistics')}</p>
             )}
           </TabsContent>
         </Tabs>

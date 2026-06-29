@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { type ClientIpRanking } from '@/lib/api'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -13,6 +14,7 @@ function truncateIp(ip: string): string {
 }
 
 export function ClientBarChart({ rankings }: ClientBarChartProps) {
+  const { t } = useTranslation()
   const chartData = rankings.slice(0, 10).map((r) => ({
     ip: truncateIp(r.ip),
     fullIp: r.ip,
@@ -22,7 +24,7 @@ export function ClientBarChart({ rankings }: ClientBarChartProps) {
   if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-        No client data available
+        {t('analytics.noClientData')}
       </div>
     )
   }
@@ -56,7 +58,7 @@ export function ClientBarChart({ rankings }: ClientBarChartProps) {
             fontSize: '12px',
           }}
           labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
-          formatter={(value) => [Number(value ?? 0), 'Requests']}
+          formatter={(value) => [Number(value ?? 0), t('analytics.requests')]}
           labelFormatter={(label, payload) =>
             payload?.[0]?.payload?.fullIp ?? String(label ?? '')
           }

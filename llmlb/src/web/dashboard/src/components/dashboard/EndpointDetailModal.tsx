@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
@@ -68,22 +69,28 @@ function getStatusBadgeVariant(
   }
 }
 
-function getStatusLabel(status: DashboardEndpoint['status']): string {
+function getStatusLabel(
+  status: DashboardEndpoint['status'],
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string {
   switch (status) {
     case 'online':
-      return 'Online'
+      return t('endpointDetail.status.online')
     case 'pending':
-      return 'Pending'
+      return t('endpointDetail.status.pending')
     case 'offline':
-      return 'Offline'
+      return t('endpointDetail.status.offline')
     case 'error':
-      return 'Error'
+      return t('endpointDetail.status.error')
     default:
       return status
   }
 }
 
-function getTypeLabel(type: EndpointType | undefined): string {
+function getTypeLabel(
+  type: EndpointType | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string {
   switch (type) {
     case 'xllm':
       return 'xLLM'
@@ -96,9 +103,9 @@ function getTypeLabel(type: EndpointType | undefined): string {
     case 'llamacpp':
       return 'llama.cpp'
     case 'openai_compatible':
-      return 'OpenAI Compatible'
+      return t('endpointDetail.type.openaiCompatible')
     case 'unknown':
-      return 'Unknown'
+      return t('endpointDetail.type.unknown')
     default:
       return '-'
   }
@@ -144,6 +151,7 @@ function EndpointDetailModalContent({
   open,
   onOpenChange,
 }: EndpointDetailModalContentProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const errorDisplay = classifyEndpointLastError(endpoint?.last_error)
   const [name, setName] = useState(endpoint?.name || '')
@@ -182,13 +190,13 @@ function EndpointDetailModalContent({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
-        title: 'Update Complete',
-        description: 'Endpoint settings updated',
+        title: t('endpointDetail.toast.updateComplete'),
+        description: t('endpointDetail.toast.updateCompleteDescription'),
       })
     },
     onError: (error) => {
       toast({
-        title: 'Update Failed',
+        title: t('endpointDetail.toast.updateFailed'),
         description: String(error),
         variant: 'destructive',
       })
@@ -201,14 +209,20 @@ function EndpointDetailModalContent({
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
-        title: result.success ? 'Connection Successful' : 'Connection Failed',
-        description: result.message || (result.latency_ms ? `Latency: ${result.latency_ms}ms` : ''),
+        title: result.success
+          ? t('endpointDetail.toast.connectionSuccessful')
+          : t('endpointDetail.toast.connectionFailed'),
+        description:
+          result.message
+          || (result.latency_ms
+            ? t('endpointDetail.toast.latency', { value: result.latency_ms })
+            : ''),
         variant: result.success ? 'default' : 'destructive',
       })
     },
     onError: (error) => {
       toast({
-        title: 'Connection Test Failed',
+        title: t('endpointDetail.toast.connectionTestFailed'),
         description: String(error),
         variant: 'destructive',
       })
@@ -221,13 +235,13 @@ function EndpointDetailModalContent({
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
-        title: 'Sync Complete',
-        description: `Synced ${result.synced_models} models`,
+        title: t('endpointDetail.toast.syncComplete'),
+        description: t('endpointDetail.toast.syncedModels', { value: result.synced_models }),
       })
     },
     onError: (error) => {
       toast({
-        title: 'Sync Failed',
+        title: t('endpointDetail.toast.syncFailed'),
         description: String(error),
         variant: 'destructive',
       })
@@ -266,16 +280,16 @@ function EndpointDetailModalContent({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Badge variant={getStatusBadgeVariant(endpoint.status)}>
-                {getStatusLabel(endpoint.status)}
+                {getStatusLabel(endpoint.status, t)}
               </Badge>
               <Badge variant={getTypeBadgeVariant(endpoint.endpoint_type)}>
-                {getTypeLabel(endpoint.endpoint_type)}
+                {getTypeLabel(endpoint.endpoint_type, t)}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                Type is auto-detected
+                {t('endpointDetail.typeAutoDetected')}
               </span>
               <span className="text-sm text-muted-foreground">
-                Models: {endpoint.model_count}
+                {t('endpointDetail.modelsCount', { value: endpoint.model_count })}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -286,7 +300,7 @@ function EndpointDetailModalContent({
                 disabled={testMutation.isPending}
               >
                 <Play className="h-4 w-4 mr-1" />
-                Test Connection
+                {t('endpointDetail.testConnection')}
               </Button>
               <Button
                 variant="outline"
@@ -295,7 +309,7 @@ function EndpointDetailModalContent({
                 disabled={syncMutation.isPending || endpoint.status !== 'online'}
               >
                 <RefreshCw className={`h-4 w-4 mr-1 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-                Sync Models
+                {t('endpointDetail.syncModels')}
               </Button>
             </div>
           </div>
@@ -308,7 +322,7 @@ function EndpointDetailModalContent({
             <div className="rounded-lg border p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Total Requests</span>
+                <span className="text-xs text-muted-foreground">{t('endpointDetail.stats.totalRequests')}</span>
               </div>
               <span className="text-xl font-bold">
                 {endpoint.total_requests > 0
@@ -321,7 +335,7 @@ function EndpointDetailModalContent({
             <div className="rounded-lg border p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Today</span>
+                <span className="text-xs text-muted-foreground">{t('endpointDetail.stats.today')}</span>
               </div>
               {isLoadingTodayStats ? (
                 <div className="h-7 w-16 rounded bg-muted animate-pulse" />
@@ -338,7 +352,7 @@ function EndpointDetailModalContent({
             <div className="rounded-lg border p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Success Rate</span>
+                <span className="text-xs text-muted-foreground">{t('endpointDetail.stats.successRate')}</span>
               </div>
               {(() => {
                 const total = endpoint.total_requests
@@ -365,7 +379,7 @@ function EndpointDetailModalContent({
             <div className="rounded-lg border p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Avg Response</span>
+                <span className="text-xs text-muted-foreground">{t('endpointDetail.stats.avgResponse')}</span>
               </div>
               <span className="text-xl font-bold">
                 {endpoint.latency_ms != null ? `${endpoint.latency_ms}ms` : '-'}
@@ -383,21 +397,21 @@ function EndpointDetailModalContent({
           {/* Info Section */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">Latency:</span>
+              <span className="text-muted-foreground">{t('endpointDetail.info.latency')}</span>
               <span className="ml-2">{endpoint.latency_ms != null ? `${endpoint.latency_ms}ms` : '-'}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Registered:</span>
+              <span className="text-muted-foreground">{t('endpointDetail.info.registered')}</span>
               <span className="ml-2">{formatRelativeTime(endpoint.registered_at)}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Last Seen:</span>
+              <span className="text-muted-foreground">{t('endpointDetail.info.lastSeen')}</span>
               <span className="ml-2">
                 {endpoint.last_seen ? formatRelativeTime(endpoint.last_seen) : '-'}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground">Error Count:</span>
+              <span className="text-muted-foreground">{t('endpointDetail.info.errorCount')}</span>
               <span className="ml-2">{endpoint.error_count}</span>
             </div>
           </div>
@@ -407,7 +421,7 @@ function EndpointDetailModalContent({
             <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4" />
-                <span className="font-medium">Last Error</span>
+                <span className="font-medium">{t('endpointDetail.lastError')}</span>
                 {errorDisplay && (
                   <Badge variant="outline" className="border-destructive/40 text-destructive">
                     {errorDisplay.label}
@@ -434,7 +448,7 @@ function EndpointDetailModalContent({
                     disabled={endpoint.status !== 'online'}
                   >
                     <Download className="h-4 w-4 mr-1" />
-                    Download Model
+                    {t('endpointDetail.downloadModel')}
                   </Button>
                 )}
                 <Button
@@ -444,7 +458,7 @@ function EndpointDetailModalContent({
                   disabled={endpoint.status !== 'online'}
                 >
                   <MessageSquare className="h-4 w-4 mr-1" />
-                  Open Playground
+                  {t('endpointDetail.openPlayground')}
                 </Button>
               </div>
             }
@@ -455,12 +469,12 @@ function EndpointDetailModalContent({
           {/* Edit Section */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Display Name</Label>
+              <Label htmlFor="name">{t('endpointDetail.displayName')}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Endpoint name"
+                placeholder={t('endpointDetail.endpointNamePlaceholder')}
               />
             </div>
 
@@ -468,7 +482,7 @@ function EndpointDetailModalContent({
               <div className="space-y-2">
                 <Label htmlFor="healthCheckInterval">
                   <Clock className="h-4 w-4 inline mr-1" />
-                  Health Check Interval (sec)
+                  {t('endpointDetail.healthCheckInterval')}
                 </Label>
                 <Input
                   id="healthCheckInterval"
@@ -482,7 +496,7 @@ function EndpointDetailModalContent({
               <div className="space-y-2">
                 <Label htmlFor="inferenceTimeout">
                   <Clock className="h-4 w-4 inline mr-1" />
-                  Inference Timeout (sec)
+                  {t('endpointDetail.inferenceTimeout')}
                 </Label>
                 <Input
                   id="inferenceTimeout"
@@ -497,19 +511,19 @@ function EndpointDetailModalContent({
                 </p>
                 {inferenceTimeout !== recommendedInferenceTimeout.toString() && (
                   <p className="text-xs text-muted-foreground">
-                    Current value differs from the recommended default for this endpoint type.
+                    {t('endpointDetail.inferenceTimeoutDiffers')}
                   </p>
                 )}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
+              <Label htmlFor="notes">{t('endpointDetail.notes')}</Label>
               <Textarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notes about this endpoint..."
+                placeholder={t('endpointDetail.notesPlaceholder')}
                 rows={3}
               />
             </div>
@@ -519,11 +533,11 @@ function EndpointDetailModalContent({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {t('endpointDetail.close')}
           </Button>
           <Button onClick={handleSave} disabled={updateMutation.isPending}>
             <Save className="h-4 w-4 mr-1" />
-            {updateMutation.isPending ? 'Saving...' : 'Save'}
+            {updateMutation.isPending ? t('endpointDetail.saving') : t('endpointDetail.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   type RegisteredModelView,
@@ -255,25 +256,37 @@ function getLifecycleBadgeVariant(
   }
 }
 
-function getLifecycleLabel(status: LifecycleStatus): string {
-  return status.charAt(0).toUpperCase() + status.slice(1)
+function getLifecycleLabel(
+  status: LifecycleStatus,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string {
+  switch (status) {
+    case 'registered':
+      return t('models.statusRegistered')
+    case 'caching':
+      return t('models.statusCaching')
+    case 'pending':
+      return t('models.statusPending')
+    case 'error':
+      return t('models.statusError')
+  }
 }
 
 const SUPPORTED_API_BADGES: {
   key: SupportedApi
   icon: typeof MessageSquare
-  label: string
+  labelKey: string
 }[] = [
-  { key: 'chat_completions', icon: MessageSquare, label: 'Chat' },
-  { key: 'completions', icon: FileText, label: 'Completion' },
-  { key: 'responses', icon: MessageSquare, label: 'Responses' },
-  { key: 'embeddings', icon: Layers, label: 'Embed' },
-  { key: 'fine_tune', icon: Settings, label: 'Tune' },
-  { key: 'inference', icon: Cpu, label: 'Infer' },
-  { key: 'audio_speech', icon: Volume2, label: 'TTS' },
-  { key: 'audio_transcription', icon: Mic, label: 'STT' },
-  { key: 'image_input', icon: Image, label: 'Image' },
-  { key: 'image_generation', icon: Image, label: 'Image Gen' },
+  { key: 'chat_completions', icon: MessageSquare, labelKey: 'apiChat' },
+  { key: 'completions', icon: FileText, labelKey: 'apiCompletion' },
+  { key: 'responses', icon: MessageSquare, labelKey: 'apiResponses' },
+  { key: 'embeddings', icon: Layers, labelKey: 'apiEmbed' },
+  { key: 'fine_tune', icon: Settings, labelKey: 'apiTune' },
+  { key: 'inference', icon: Cpu, labelKey: 'apiInfer' },
+  { key: 'audio_speech', icon: Volume2, labelKey: 'apiTts' },
+  { key: 'audio_transcription', icon: Mic, labelKey: 'apiStt' },
+  { key: 'image_input', icon: Image, labelKey: 'apiImage' },
+  { key: 'image_generation', icon: Image, labelKey: 'apiImageGen' },
 ]
 
 interface ColumnDef {
@@ -284,22 +297,23 @@ interface ColumnDef {
 }
 
 function SupportedApiBadges({ apis }: { apis: SupportedApi[] }) {
+  const { t } = useTranslation()
   const active = SUPPORTED_API_BADGES.filter((api) => apis.includes(api.key))
   if (active.length === 0) {
-    return <span className="text-xs text-muted-foreground">Not reported</span>
+    return <span className="text-xs text-muted-foreground">{t('models.notReported')}</span>
   }
   return (
     <TooltipProvider>
       <div className="flex gap-1 flex-wrap">
-        {active.map(({ key, icon: Icon, label }) => (
+        {active.map(({ key, icon: Icon, labelKey }) => (
           <Tooltip key={key}>
             <TooltipTrigger asChild>
               <Badge variant="outline" className="gap-1 px-2 py-0.5">
                 <Icon className="h-3 w-3" />
-                <span>{label}</span>
+                <span>{t(`models.${labelKey}`)}</span>
               </Badge>
             </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
+            <TooltipContent>{t(`models.${labelKey}`)}</TooltipContent>
           </Tooltip>
         ))}
       </div>
@@ -308,6 +322,7 @@ function SupportedApiBadges({ apis }: { apis: SupportedApi[] }) {
 }
 
 function TrafficCell({ stat }: { stat?: ModelStatEntry }) {
+  const { t } = useTranslation()
   const total = stat?.total_requests ?? 0
   const successful = stat?.successful_requests ?? 0
   const failed = stat?.failed_requests ?? 0
@@ -322,8 +337,8 @@ function TrafficCell({ stat }: { stat?: ModelStatEntry }) {
         </TooltipTrigger>
         <TooltipContent>
           <div className="text-xs space-y-0.5">
-            <div className="text-green-400">OK: {successful.toLocaleString()}</div>
-            <div className="text-red-400">Fail: {failed.toLocaleString()}</div>
+            <div className="text-green-400">{t('models.trafficOk', { value: successful.toLocaleString() })}</div>
+            <div className="text-red-400">{t('models.trafficFail', { value: failed.toLocaleString() })}</div>
           </div>
         </TooltipContent>
       </Tooltip>
@@ -369,6 +384,7 @@ function EndpointStatsRow({
   modelId: string
   onDelete?: () => void
 }) {
+  const { t } = useTranslation()
   const { data: stats } = useQuery({
     queryKey: ['endpoint-model-stats', endpoint.id],
     queryFn: () => endpointsApi.getModelStats(endpoint.id),
@@ -404,14 +420,14 @@ function EndpointStatsRow({
         <span className="truncate font-medium">{endpoint.name}</span>
       </div>
       <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-        <span>Total: {totalRequests.toLocaleString()}</span>
+        <span>{t('models.trafficTotal', { value: totalRequests.toLocaleString() })}</span>
         <span className="text-green-600">
-          OK: {successfulRequests.toLocaleString()}
+          {t('models.trafficOk', { value: successfulRequests.toLocaleString() })}
         </span>
         <span className="text-red-600">
-          Fail: {failedRequests.toLocaleString()}
+          {t('models.trafficFail', { value: failedRequests.toLocaleString() })}
         </span>
-        <span>TPS: {modelTpsSummary}</span>
+        <span>{t('models.trafficTps', { value: modelTpsSummary })}</span>
         <a
           href={`#playground/${endpoint.id}`}
           className="text-primary hover:underline"
@@ -425,7 +441,7 @@ function EndpointStatsRow({
               onDelete()
             }}
             className="text-muted-foreground hover:text-destructive transition-colors"
-            title="Delete model from endpoint"
+            title={t('models.deleteModelFromEndpoint')}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -444,10 +460,11 @@ export function ModelsTable({
   view,
   onViewChange,
 }: ModelsTableProps) {
+  const { t } = useTranslation()
   // US-029: Canonical 表示 ⇔ 詳細表示のトグル（view/onViewChange 両指定時のみ表示）
   const viewToggle =
     view && onViewChange ? (
-      <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label="Model view mode">
+      <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label={t('models.viewModeLabel')}>
         <Button
           variant={view === 'canonical' ? 'secondary' : 'ghost'}
           size="sm"
@@ -455,7 +472,7 @@ export function ModelsTable({
           aria-pressed={view === 'canonical'}
           onClick={() => onViewChange('canonical')}
         >
-          Canonical
+          {t('models.canonical')}
         </Button>
         <Button
           variant={view === 'detail' ? 'secondary' : 'ghost'}
@@ -464,7 +481,7 @@ export function ModelsTable({
           aria-pressed={view === 'detail'}
           onClick={() => onViewChange('detail')}
         >
-          Detail
+          {t('models.detail')}
         </Button>
       </div>
     ) : null
@@ -540,7 +557,7 @@ export function ModelsTable({
     () => [
       {
         key: 'id',
-        label: 'Model ID',
+        label: t('models.colId'),
         defaultVisible: true,
         render: (m) => (
           <span className="font-mono text-sm truncate" title={m.id}>
@@ -550,41 +567,41 @@ export function ModelsTable({
       },
       {
         key: 'bestStatus',
-        label: 'Status',
+        label: t('models.colStatus'),
         defaultVisible: true,
         render: (m) => (
           <div className="flex items-center gap-1.5">
             <span
               className={`inline-block h-2 w-2 rounded-full shrink-0 ${m.ready ? 'bg-green-500' : 'bg-gray-300'}`}
-              title={m.ready ? 'Ready' : 'Not Ready'}
+              title={m.ready ? t('models.ready') : t('models.notReady')}
             />
             <Badge variant={getLifecycleBadgeVariant(m.bestStatus)}>
-              {getLifecycleLabel(m.bestStatus)}
+              {getLifecycleLabel(m.bestStatus, t)}
             </Badge>
           </div>
         ),
       },
       {
         key: 'endpointCount',
-        label: 'Endpoints',
+        label: t('models.colEndpoints'),
         defaultVisible: true,
         render: (m) => <EndpointCountCell count={m.endpointCount} />,
       },
       {
         key: 'totalRequests',
-        label: 'Routed Requests',
+        label: t('models.colRoutedRequests'),
         defaultVisible: true,
         render: (m) => <TrafficCell stat={modelStatsMap.get(m.id)} />,
       },
       {
         key: 'supportedApis',
-        label: 'APIs',
+        label: t('models.colApis'),
         defaultVisible: true,
         render: (m) => <SupportedApiBadges apis={m.supportedApis} />,
       },
       {
         key: 'maxTokens',
-        label: 'Max Tokens',
+        label: t('models.colMaxTokens'),
         defaultVisible: false,
         render: (m) => (
           <span className="text-sm">
@@ -594,13 +611,13 @@ export function ModelsTable({
       },
       {
         key: 'source',
-        label: 'Source',
+        label: t('models.colSource'),
         defaultVisible: false,
         render: (m) => <span className="text-sm">{m.source ?? '-'}</span>,
       },
       {
         key: 'tags',
-        label: 'Tags',
+        label: t('models.colTags'),
         defaultVisible: false,
         render: (m) =>
           m.tags.length > 0 ? (
@@ -617,7 +634,7 @@ export function ModelsTable({
       },
       {
         key: 'description',
-        label: 'Description',
+        label: t('models.colDescription'),
         defaultVisible: false,
         render: (m) => (
           <span className="text-sm truncate max-w-[200px] inline-block" title={m.description}>
@@ -627,13 +644,13 @@ export function ModelsTable({
       },
       {
         key: 'repo',
-        label: 'Repo',
+        label: t('models.colRepo'),
         defaultVisible: false,
         render: (m) => <span className="text-sm">{m.repo ?? '-'}</span>,
       },
       {
         key: 'filename',
-        label: 'Filename',
+        label: t('models.colFilename'),
         defaultVisible: false,
         render: (m) => (
           <span className="text-sm font-mono">{m.filename ?? '-'}</span>
@@ -641,7 +658,7 @@ export function ModelsTable({
       },
       {
         key: 'requiredMemoryBytes',
-        label: 'Required Memory',
+        label: t('models.colRequiredMemory'),
         defaultVisible: false,
         render: (m) => (
           <span className="text-sm">
@@ -651,7 +668,7 @@ export function ModelsTable({
       },
       {
         key: 'chatTemplate',
-        label: 'Chat Template',
+        label: t('models.colChatTemplate'),
         defaultVisible: false,
         render: (m) => (
           <span className="text-sm truncate max-w-[200px] inline-block" title={m.chatTemplate}>
@@ -660,7 +677,7 @@ export function ModelsTable({
         ),
       },
     ],
-    [modelStatsMap]
+    [modelStatsMap, t]
   )
 
   const visibleColumns = useMemo(
@@ -743,7 +760,7 @@ export function ModelsTable({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Models
+            {t('models.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -765,7 +782,7 @@ export function ModelsTable({
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              Models
+              {t('models.title')}
               <Badge variant="secondary" className="ml-2">
                 {aggregatedWithStatsFallback.length}
               </Badge>
@@ -775,7 +792,7 @@ export function ModelsTable({
               {onRefresh && (
                 <Button variant="outline" size="sm" onClick={onRefresh}>
                   <RefreshCw className="h-4 w-4 mr-1" />
-                  Refresh
+                  {t('models.refresh')}
                 </Button>
               )}
             </div>
@@ -785,7 +802,7 @@ export function ModelsTable({
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search by model ID..."
+              placeholder={t('models.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -795,9 +812,9 @@ export function ModelsTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Model ID</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>{t('models.colId')}</TableHead>
+                  <TableHead>{t('models.colStatus')}</TableHead>
+                  <TableHead>{t('models.colDescription')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -806,7 +823,7 @@ export function ModelsTable({
                     <TableCell colSpan={3} className="p-0">
                       <EmptyState
                         icon={<Package className="h-10 w-10" />}
-                        title={search ? 'No models match your search' : 'No models registered'}
+                        title={search ? t('models.noModelsMatchSearch') : t('models.noModelsRegistered')}
                       />
                     </TableCell>
                   </TableRow>
@@ -824,10 +841,10 @@ export function ModelsTable({
                             className={`inline-block h-2 w-2 rounded-full shrink-0 ${
                               model.ready ? 'bg-green-500' : 'bg-gray-300'
                             }`}
-                            title={model.ready ? 'Ready' : 'Not Ready'}
+                            title={model.ready ? t('models.ready') : t('models.notReady')}
                           />
                           <Badge variant={getLifecycleBadgeVariant(model.bestStatus)}>
-                            {getLifecycleLabel(model.bestStatus)}
+                            {getLifecycleLabel(model.bestStatus, t)}
                           </Badge>
                         </div>
                       </TableCell>
@@ -856,7 +873,7 @@ export function ModelsTable({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Models
+            {t('models.title')}
             <Badge variant="secondary" className="ml-2">
               {aggregatedWithStatsFallback.length}
             </Badge>
@@ -865,12 +882,12 @@ export function ModelsTable({
             {viewToggle}
             <Button variant="outline" size="sm" onClick={() => setAddWizardOpen(true)}>
               <Plus className="h-4 w-4 mr-1" />
-              Add Model
+              {t('models.addModel')}
             </Button>
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>
                 <RefreshCw className="h-4 w-4 mr-1" />
-                Refresh
+                {t('models.refresh')}
               </Button>
             )}
           </div>
@@ -882,7 +899,7 @@ export function ModelsTable({
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search by model ID..."
+              placeholder={t('models.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -893,21 +910,21 @@ export function ModelsTable({
             onValueChange={(v) => setStatusFilter(v as LifecycleStatus | 'all')}
           >
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder={t('models.colStatus')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="registered">Registered</SelectItem>
-              <SelectItem value="caching">Caching</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
+              <SelectItem value="all">{t('models.statusAll')}</SelectItem>
+              <SelectItem value="registered">{t('models.statusRegistered')}</SelectItem>
+              <SelectItem value="caching">{t('models.statusCaching')}</SelectItem>
+              <SelectItem value="pending">{t('models.statusPending')}</SelectItem>
+              <SelectItem value="error">{t('models.statusError')}</SelectItem>
             </SelectContent>
           </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
                 <Filter className="h-4 w-4 mr-1" />
-                APIs
+                {t('models.colApis')}
                 {activeApiFilters.length > 0 && (
                   <Badge variant="secondary" className="ml-1 text-xs">
                     {activeApiFilters.length}
@@ -916,7 +933,7 @@ export function ModelsTable({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {SUPPORTED_API_BADGES.map(({ key, label }) => (
+              {SUPPORTED_API_BADGES.map(({ key, labelKey }) => (
                 <DropdownMenuCheckboxItem
                   key={key}
                   checked={!!capabilityFilters[key]}
@@ -924,7 +941,7 @@ export function ModelsTable({
                     setCapabilityFilters((prev) => ({ ...prev, [key]: !!checked }))
                   }
                 >
-                  {label}
+                  {t(`models.${labelKey}`)}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -933,7 +950,7 @@ export function ModelsTable({
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
                 <Settings2 className="h-4 w-4 mr-1" />
-                Columns
+                {t('models.columns')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -989,13 +1006,13 @@ export function ModelsTable({
                       icon={<Package className="h-10 w-10" />}
                       title={
                         search || statusFilter !== 'all' || activeApiFilters.length > 0
-                          ? 'No models match the filter criteria'
-                          : 'No models registered'
+                          ? t('models.noModelsMatchFilter')
+                          : t('models.noModelsRegistered')
                       }
                       description={
                         search || statusFilter !== 'all' || activeApiFilters.length > 0
                           ? undefined
-                          : 'Register a model or connect an endpoint that serves models.'
+                          : t('models.registerOrConnectHint')
                       }
                     />
                   </TableCell>
@@ -1059,6 +1076,7 @@ function ModelRow({
   endpoints: DashboardEndpoint[]
   onDeleteModel: (endpointId: string, endpointName: string, endpointType: string) => void
 }) {
+  const { t } = useTranslation()
   const modelEndpointIdSet = new Set(model.endpointIds)
   const modelEndpoints = endpoints.filter((ep) => modelEndpointIdSet.has(ep.id))
 
@@ -1069,7 +1087,7 @@ function ModelRow({
           <Button
             variant="secondary"
             size="icon"
-            aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+            aria-label={isExpanded ? t('models.collapseRow') : t('models.expandRow')}
             aria-expanded={isExpanded}
             className="h-6 w-6 bg-transparent shadow-none hover:bg-muted/70"
           >
@@ -1090,7 +1108,7 @@ function ModelRow({
                 <Button
                   variant="secondary"
                   size="icon"
-                  aria-label="Open in playground"
+                  aria-label={t('models.openInPlaygroundAria')}
                   className="h-7 w-7 bg-transparent shadow-none hover:bg-muted/70"
                   disabled={!model.ready}
                   onClick={(e) => {
@@ -1101,7 +1119,7 @@ function ModelRow({
                   <Play className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open in Playground</TooltipContent>
+              <TooltipContent>{t('models.openInPlayground')}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </TableCell>
@@ -1111,7 +1129,7 @@ function ModelRow({
           <TableCell colSpan={visibleColumns.length + 2} className="bg-muted/30 p-0">
             <div className="py-2 px-4">
               <div className="text-xs font-medium text-muted-foreground mb-2">
-                Endpoints ({model.endpointCount} source{model.endpointCount !== 1 ? 's' : ''})
+                {t('models.endpointsCount', { count: model.endpointCount })}
               </div>
               <div className="space-y-1 rounded-md border bg-background">
                 {modelEndpoints.length > 0 ? (
@@ -1129,7 +1147,7 @@ function ModelRow({
                   ))
                 ) : (
                   <div className="py-2 px-3 text-xs text-muted-foreground">
-                    No endpoints currently serve this model
+                    {t('models.noEndpointsServe')}
                   </div>
                 )}
               </div>

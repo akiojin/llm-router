@@ -1,3 +1,4 @@
+import { Trans, useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { endpointsApi } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
@@ -34,6 +35,7 @@ export function ModelDeleteDialog({
   endpointType,
   onDeleted,
 }: ModelDeleteDialogProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const supportsDelete = DELETABLE_TYPES.has(endpointType)
 
@@ -41,8 +43,8 @@ export function ModelDeleteDialog({
     mutationFn: () => endpointsApi.deleteModel(endpointId, modelId),
     onSuccess: () => {
       toast({
-        title: 'Model deleted',
-        description: `${modelId} has been removed from ${endpointName}`,
+        title: t('modelDialogs.modelDeletedTitle'),
+        description: t('modelDialogs.modelDeletedDesc', { model: modelId, endpoint: endpointName }),
       })
       queryClient.invalidateQueries({ queryKey: ['endpoint-models', endpointId] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
@@ -52,8 +54,8 @@ export function ModelDeleteDialog({
     },
     onError: (error) => {
       toast({
-        title: 'Delete failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('modelDialogs.deleteFailedTitle'),
+        description: error instanceof Error ? error.message : t('modelDialogs.unknownError'),
         variant: 'destructive',
       })
     },
@@ -65,21 +67,21 @@ export function ModelDeleteDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trash2 className="h-5 w-5 text-destructive" />
-            Delete Model
+            {t('modelDialogs.deleteModelTitle')}
           </DialogTitle>
           <DialogDescription>
-            Remove a model from an endpoint
+            {t('modelDialogs.deleteModelDesc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Model:</span>
+              <span className="text-sm text-muted-foreground">{t('modelDialogs.modelColon')}</span>
               <span className="font-mono text-sm font-medium">{modelId}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Endpoint:</span>
+              <span className="text-sm text-muted-foreground">{t('modelDialogs.endpointColon')}</span>
               <span className="text-sm font-medium">{endpointName}</span>
               <Badge variant="outline" className="text-xs">
                 {endpointType}
@@ -91,8 +93,7 @@ export function ModelDeleteDialog({
             <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="text-sm">
-                This endpoint type ({endpointType}) does not support model deletion
-                from the dashboard. Please remove the model directly from the endpoint.
+                {t('modelDialogs.deleteUnsupported', { type: endpointType })}
               </div>
             </div>
           )}
@@ -101,8 +102,11 @@ export function ModelDeleteDialog({
             <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="text-sm">
-                This action will permanently remove <strong>{modelId}</strong> from{' '}
-                <strong>{endpointName}</strong>. This cannot be undone.
+                <Trans
+                  i18nKey="modelDialogs.deleteConfirm"
+                  values={{ model: modelId, endpoint: endpointName }}
+                  components={{ strong: <strong /> }}
+                />
               </div>
             </div>
           )}
@@ -110,7 +114,7 @@ export function ModelDeleteDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('modelDialogs.cancel')}
           </Button>
           {supportsDelete && (
             <Button
@@ -121,7 +125,7 @@ export function ModelDeleteDialog({
               {deleteMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Delete
+              {t('modelDialogs.delete')}
             </Button>
           )}
         </DialogFooter>

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { type ModelTpsEntry, endpointsApi } from '@/lib/api'
 import {
   Table,
@@ -72,6 +73,7 @@ export function EndpointModelsTable({
   enabled = true,
   headerActions,
 }: EndpointModelsTableProps) {
+  const { t } = useTranslation()
   const { data: modelsData, isLoading: modelsLoading } = useQuery({
     queryKey: ['endpoint-models', endpointId],
     queryFn: () => endpointsApi.getModels(endpointId),
@@ -168,7 +170,7 @@ export function EndpointModelsTable({
       <div className="flex items-center justify-between">
         <Label className="flex items-center gap-2">
           <Grid3X3 className="h-4 w-4" />
-          Models ({consolidatedRows.length})
+          {t('endpointDetail.modelsTableTitle', { value: consolidatedRows.length })}
         </Label>
         {headerActions && <div className="flex gap-2">{headerActions}</div>}
       </div>
@@ -176,23 +178,23 @@ export function EndpointModelsTable({
       {isLoading ? (
         <div className="flex items-center justify-center py-4">
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">Loading models...</span>
+          <span className="ml-2 text-sm text-muted-foreground">{t('endpointDetail.loadingModels')}</span>
         </div>
       ) : consolidatedRows.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-4">
-          No models available
+          {t('endpointDetail.noModelsAvailable')}
         </p>
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Model</TableHead>
-                <TableHead className="text-right">ctx</TableHead>
-                <TableHead className="text-right">TPS</TableHead>
-                <TableHead className="text-right">Requests</TableHead>
-                <TableHead className="text-right">Success%</TableHead>
-                <TableHead className="text-right">Avg Duration</TableHead>
+                <TableHead>{t('endpointDetail.columns.model')}</TableHead>
+                <TableHead className="text-right">{t('endpointDetail.columns.ctx')}</TableHead>
+                <TableHead className="text-right">{t('endpointDetail.columns.tps')}</TableHead>
+                <TableHead className="text-right">{t('endpointDetail.columns.requests')}</TableHead>
+                <TableHead className="text-right">{t('endpointDetail.columns.successRate')}</TableHead>
+                <TableHead className="text-right">{t('endpointDetail.columns.avgDuration')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

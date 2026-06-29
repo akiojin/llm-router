@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export interface HeatmapCell {
   day_of_week: number
@@ -10,7 +11,7 @@ interface RequestHeatmapProps {
   data: HeatmapCell[]
 }
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+const DAY_KEYS = ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat', 'daySun'] as const
 
 /** Map day_of_week (0=Sun) to row index (Mon=0 .. Sun=6) */
 function dayToRow(dayOfWeek: number): number {
@@ -18,6 +19,7 @@ function dayToRow(dayOfWeek: number): number {
 }
 
 export function RequestHeatmap({ data }: RequestHeatmapProps) {
+  const { t } = useTranslation()
   const maxCount = data.reduce((max, cell) => Math.max(max, cell.count), 0)
 
   // Build a lookup: grid[row][hour] = count
@@ -65,7 +67,9 @@ export function RequestHeatmap({ data }: RequestHeatmapProps) {
       ))}
 
       {/* Rows: one per day */}
-      {DAY_LABELS.map((label, row) => (
+      {DAY_KEYS.map((dayKey, row) => {
+        const label = t(`requests.${dayKey}`)
+        return (
         <Fragment key={`row-${row}`}>
           {/* Row label */}
           <div
@@ -85,7 +89,11 @@ export function RequestHeatmap({ data }: RequestHeatmapProps) {
           {grid[row].map((count, hour) => (
             <div
               key={`cell-${row}-${hour}`}
-              title={`${label} ${String(hour).padStart(2, '0')}:00 - ${count} requests`}
+              title={t('requests.heatmapCellTitle', {
+                day: label,
+                time: `${String(hour).padStart(2, '0')}:00`,
+                count,
+              })}
               style={{
                 width: '100%',
                 aspectRatio: '1',
@@ -98,7 +106,8 @@ export function RequestHeatmap({ data }: RequestHeatmapProps) {
             />
           ))}
         </Fragment>
-      ))}
+        )
+      })}
     </div>
   )
 }

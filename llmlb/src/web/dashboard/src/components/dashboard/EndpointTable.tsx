@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
@@ -96,23 +97,29 @@ function getStatusBadgeVariant(
   }
 }
 
-function getStatusLabel(status: DashboardEndpoint['status']): string {
+function getStatusLabel(
+  status: DashboardEndpoint['status'],
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string {
   switch (status) {
     case 'online':
-      return 'Online'
+      return t('endpoints.status.online')
     case 'pending':
-      return 'Pending'
+      return t('endpoints.status.pending')
     case 'offline':
-      return 'Offline'
+      return t('endpoints.status.offline')
     case 'error':
-      return 'Error'
+      return t('endpoints.status.error')
     default:
       return status
   }
 }
 
 /** SPEC-e8e9326e: Get display label for endpoint type */
-function getTypeLabel(type: EndpointType): string {
+function getTypeLabel(
+  type: EndpointType,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string {
   switch (type) {
     case 'xllm':
       return 'xLLM'
@@ -125,9 +132,9 @@ function getTypeLabel(type: EndpointType): string {
     case 'llamacpp':
       return 'llama.cpp'
     case 'openai_compatible':
-      return 'OpenAI Compatible'
+      return t('endpoints.type.openaiCompatible')
     case 'unknown':
-      return 'Unknown'
+      return t('endpoints.type.unknown')
     default:
       return type
   }
@@ -159,6 +166,7 @@ function getTypeBadgeVariant(
 }
 
 export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<
@@ -200,7 +208,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
       setCreateForm({ name: '', base_url: '', api_key: '', notes: '' })
     } catch (error) {
       console.error('Failed to create endpoint:', error)
-      setCreateError(error instanceof Error ? error.message : 'Failed to create endpoint')
+      setCreateError(error instanceof Error ? error.message : t('endpoints.create.error'))
     } finally {
       setIsCreating(false)
     }
@@ -294,7 +302,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            Endpoints
+            {t('endpoints.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -313,14 +321,14 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Server className="h-5 w-5" />
-              Endpoints
+              {t('endpoints.title')}
               <Badge variant="secondary" className="ml-2">
                 {filteredEndpoints.length}
               </Badge>
             </CardTitle>
             <Button onClick={() => setIsCreateDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Endpoint
+              {t('endpoints.addEndpoint')}
             </Button>
           </div>
         </CardHeader>
@@ -330,7 +338,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="Search by name or URL..."
+                placeholder={t('endpoints.searchPlaceholder')}
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value)
@@ -347,14 +355,14 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               }}
             >
               <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Status" />
+                <SelectValue placeholder={t('endpoints.statusPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="online">Online</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
+                <SelectItem value="all">{t('endpoints.allStatus')}</SelectItem>
+                <SelectItem value="online">{t('endpoints.status.online')}</SelectItem>
+                <SelectItem value="pending">{t('endpoints.status.pending')}</SelectItem>
+                <SelectItem value="offline">{t('endpoints.status.offline')}</SelectItem>
+                <SelectItem value="error">{t('endpoints.status.error')}</SelectItem>
               </SelectContent>
             </Select>
             {/* SPEC-e8e9326e: Type filter */}
@@ -366,17 +374,17 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               }}
             >
               <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Type" />
+                <SelectValue placeholder={t('endpoints.typePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="all">{t('endpoints.allTypes')}</SelectItem>
                 <SelectItem value="xllm">xLLM</SelectItem>
                 <SelectItem value="ollama">Ollama</SelectItem>
                 <SelectItem value="vllm">vLLM</SelectItem>
                 <SelectItem value="lm_studio">LM Studio</SelectItem>
                 <SelectItem value="llamacpp">llama.cpp</SelectItem>
-                <SelectItem value="openai_compatible">OpenAI Compatible</SelectItem>
-                <SelectItem value="unknown">Unknown</SelectItem>
+                <SelectItem value="openai_compatible">{t('endpoints.type.openaiCompatible')}</SelectItem>
+                <SelectItem value="unknown">{t('endpoints.type.unknown')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -390,41 +398,41 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => handleSort('name')}
                   >
-                    Name
+                    {t('endpoints.columns.name')}
                     <SortIcon field="name" />
                   </TableHead>
-                  <TableHead>URL</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>{t('endpoints.columns.url')}</TableHead>
+                  <TableHead>{t('endpoints.columns.type')}</TableHead>
                   <TableHead
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => handleSort('status')}
                   >
-                    Status
+                    {t('endpoints.columns.status')}
                     <SortIcon field="status" />
                   </TableHead>
                   <TableHead
                     className="cursor-pointer hover:bg-muted/50 text-right"
                     onClick={() => handleSort('total_requests')}
                   >
-                    Requests
+                    {t('endpoints.columns.requests')}
                     <SortIcon field="total_requests" />
                   </TableHead>
                   <TableHead
                     className="cursor-pointer hover:bg-muted/50 text-right"
                     onClick={() => handleSort('latency_ms')}
                   >
-                    Latency
+                    {t('endpoints.columns.latency')}
                     <SortIcon field="latency_ms" />
                   </TableHead>
                   <TableHead
                     className="cursor-pointer hover:bg-muted/50 text-right"
                     onClick={() => handleSort('model_count')}
                   >
-                    Models
+                    {t('endpoints.columns.models')}
                     <SortIcon field="model_count" />
                   </TableHead>
-                  <TableHead>Last Seen</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t('endpoints.columns.lastSeen')}</TableHead>
+                  <TableHead className="text-right">{t('endpoints.columns.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -435,13 +443,13 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                         icon={<Server className="h-10 w-10" />}
                         title={
                           search || statusFilter !== 'all'
-                            ? 'No endpoints match the filter criteria'
-                            : 'No endpoints registered'
+                            ? t('endpoints.empty.noMatch')
+                            : t('endpoints.empty.none')
                         }
                         description={
                           search || statusFilter !== 'all'
                             ? undefined
-                            : 'Add an endpoint to start routing inference requests.'
+                            : t('endpoints.empty.description')
                         }
                       />
                     </TableCell>
@@ -465,17 +473,17 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                           <Badge
                             variant={getTypeBadgeVariant(endpoint.endpoint_type)}
                           >
-                            {getTypeLabel(endpoint.endpoint_type)}
+                            {getTypeLabel(endpoint.endpoint_type, t)}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant={getStatusBadgeVariant(endpoint.status)}>
-                            {getStatusLabel(endpoint.status)}
+                            {getStatusLabel(endpoint.status, t)}
                           </Badge>
                           {endpoint.last_error && (
                             <>
                               <span className="ml-2 text-xs text-destructive">
-                                ({endpoint.error_count} errors)
+                                {t('endpoints.errorCount', { errorCount: endpoint.error_count })}
                               </span>
                               {errorDisplay && (
                                 <Badge
@@ -525,7 +533,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                             variant="outline"
                             size="icon"
                             onClick={() => setSelectedEndpoint(endpoint)}
-                            title="Details"
+                            title={t('endpoints.actions.details')}
                           >
                             <Info className="h-4 w-4" />
                           </Button>
@@ -534,7 +542,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                             size="icon"
                             onClick={() => handleTest(endpoint)}
                             disabled={isTesting === endpoint.id}
-                            title="Test Connection"
+                            title={t('endpoints.actions.testConnection')}
                           >
                             <Play
                               className={cn('h-4 w-4', isTesting === endpoint.id && 'animate-pulse')}
@@ -545,7 +553,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                             size="icon"
                             onClick={() => handleSync(endpoint)}
                             disabled={isSyncing === endpoint.id || endpoint.status !== 'online'}
-                            title="Sync Models"
+                            title={t('endpoints.actions.syncModels')}
                           >
                             <RefreshCw
                               className={cn('h-4 w-4', isSyncing === endpoint.id && 'animate-spin')}
@@ -555,7 +563,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                             variant="outline"
                             size="icon"
                             onClick={() => setDeletingEndpoint(endpoint)}
-                            title="Delete"
+                            title={t('endpoints.actions.delete')}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -573,8 +581,11 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * PAGE_SIZE + 1} -{' '}
-                {Math.min(currentPage * PAGE_SIZE, sortedEndpoints.length)} of {sortedEndpoints.length}
+                {t('endpoints.pagination.showing', {
+                  from: (currentPage - 1) * PAGE_SIZE + 1,
+                  to: Math.min(currentPage * PAGE_SIZE, sortedEndpoints.length),
+                  total: sortedEndpoints.length,
+                })}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -615,20 +626,19 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
       <AlertDialog open={!!deletingEndpoint} onOpenChange={(open) => !open && setDeletingEndpoint(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Endpoint?</AlertDialogTitle>
+            <AlertDialogTitle>{t('endpoints.delete.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete &quot;{deletingEndpoint?.name}&quot;. This action cannot be undone.
-              Models associated with this endpoint will no longer be available.
+              {t('endpoints.delete.description', { name: deletingEndpoint?.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t('endpoints.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              {isDeleting ? t('endpoints.delete.deleting') : t('endpoints.delete.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -644,34 +654,34 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
       }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Add New Endpoint</DialogTitle>
+            <DialogTitle>{t('endpoints.create.title')}</DialogTitle>
             <DialogDescription>
-              Register a new inference service endpoint (Ollama, vLLM, etc.)
+              {t('endpoints.create.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="endpoint-name">Name *</Label>
+              <Label htmlFor="endpoint-name">{t('endpoints.create.nameLabel')}</Label>
               <Input
                 id="endpoint-name"
-                placeholder="e.g., Production Ollama"
+                placeholder={t('endpoints.create.namePlaceholder')}
                 value={createForm.name}
                 onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="endpoint-url">Base URL *</Label>
+              <Label htmlFor="endpoint-url">{t('endpoints.create.urlLabel')}</Label>
               <Input
                 id="endpoint-url"
-                placeholder="e.g., http://localhost:11434"
+                placeholder={t('endpoints.create.urlPlaceholder')}
                 value={createForm.base_url}
                 onChange={(e) => setCreateForm({ ...createForm, base_url: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                The base URL of the OpenAI-compatible API endpoint
+                {t('endpoints.create.urlHelp')}
               </p>
               <p className="text-xs text-muted-foreground">
-                Type is auto-detected
+                {t('endpoints.create.typeAutoDetected')}
               </p>
               {CREATE_ENDPOINT_TIMEOUT_GUIDANCE.map((line) => (
                 <p key={line} className="text-xs text-muted-foreground">
@@ -680,7 +690,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               ))}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="endpoint-api-key">API Key (optional)</Label>
+              <Label htmlFor="endpoint-api-key">{t('endpoints.create.apiKeyLabel')}</Label>
               <Input
                 id="endpoint-api-key"
                 type="password"
@@ -690,10 +700,10 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="endpoint-notes">Notes (optional)</Label>
+              <Label htmlFor="endpoint-notes">{t('endpoints.create.notesLabel')}</Label>
               <Input
                 id="endpoint-notes"
-                placeholder="Description or notes about this endpoint"
+                placeholder={t('endpoints.create.notesPlaceholder')}
                 value={createForm.notes}
                 onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
               />
@@ -708,13 +718,13 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               onClick={() => setIsCreateDialogOpen(false)}
               disabled={isCreating}
             >
-              Cancel
+              {t('endpoints.cancel')}
             </Button>
             <Button
               onClick={handleCreate}
               disabled={isCreating || !createForm.name || !createForm.base_url}
             >
-              {isCreating ? 'Creating...' : 'Create Endpoint'}
+              {isCreating ? t('endpoints.create.creating') : t('endpoints.create.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
