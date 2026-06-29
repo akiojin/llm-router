@@ -98,7 +98,7 @@ export function MessageList({
                   >
                     <summary className="flex cursor-pointer select-none items-center gap-1 px-2 py-1 text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
                       <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
-                      思考過程を表示
+                      Show reasoning
                     </summary>
                     <div className="whitespace-pre-wrap border-t border-border/50 px-2 py-1.5 text-muted-foreground">
                       {message.reasoning}

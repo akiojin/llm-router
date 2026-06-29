@@ -10,11 +10,15 @@ interface Criterion {
 }
 
 const CRITERIA: Criterion[] = [
-  { label: '8文字以上', test: (pw) => pw.length >= 8, required: true },
-  { label: '大文字を含む', test: (pw) => /[A-Z]/.test(pw), required: true },
-  { label: '数字を含む', test: (pw) => /[0-9]/.test(pw), required: true },
-  { label: '12文字以上（推奨）', test: (pw) => pw.length >= 12, required: false },
-  { label: '記号を含む（推奨）', test: (pw) => /[^A-Za-z0-9]/.test(pw), required: false },
+  { label: 'At least 8 characters', test: (pw) => pw.length >= 8, required: true },
+  { label: 'Contains an uppercase letter', test: (pw) => /[A-Z]/.test(pw), required: true },
+  { label: 'Contains a number', test: (pw) => /[0-9]/.test(pw), required: true },
+  { label: 'At least 12 characters (recommended)', test: (pw) => pw.length >= 12, required: false },
+  {
+    label: 'Contains a symbol (recommended)',
+    test: (pw) => /[^A-Za-z0-9]/.test(pw),
+    required: false,
+  },
 ]
 
 /** 必須条件（8文字以上・大文字・数字）をすべて満たすか。送信ゲートに使う。 */
@@ -23,10 +27,10 @@ export function isPasswordValid(password: string): boolean {
 }
 
 function strengthLabel(score: number): { label: string; barClass: string; textClass: string } {
-  if (score <= 2) return { label: '弱い', barClass: 'bg-destructive', textClass: 'text-destructive' }
-  if (score <= 3) return { label: '普通', barClass: 'bg-warning', textClass: 'text-warning' }
-  if (score <= 4) return { label: '強い', barClass: 'bg-success', textClass: 'text-success' }
-  return { label: '非常に強い', barClass: 'bg-success', textClass: 'text-success' }
+  if (score <= 2) return { label: 'Weak', barClass: 'bg-destructive', textClass: 'text-destructive' }
+  if (score <= 3) return { label: 'Fair', barClass: 'bg-warning', textClass: 'text-warning' }
+  if (score <= 4) return { label: 'Strong', barClass: 'bg-success', textClass: 'text-success' }
+  return { label: 'Very strong', barClass: 'bg-success', textClass: 'text-success' }
 }
 
 interface PasswordStrengthMeterProps {
