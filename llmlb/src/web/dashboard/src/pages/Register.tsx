@@ -209,9 +209,10 @@ export default function RegisterPage() {
                       className="pl-10"
                       required
                       autoComplete="new-password"
+                      aria-describedby={password ? 'password-strength' : undefined}
                     />
                   </div>
-                  <PasswordStrengthMeter password={password} />
+                  <PasswordStrengthMeter id="password-strength" password={password} />
                 </div>
 
                 <div className="space-y-2">

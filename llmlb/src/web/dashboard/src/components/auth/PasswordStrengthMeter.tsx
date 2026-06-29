@@ -41,9 +41,10 @@ function strengthLabel(
 interface PasswordStrengthMeterProps {
   password: string
   className?: string
+  id?: string
 }
 
-export function PasswordStrengthMeter({ password, className }: PasswordStrengthMeterProps) {
+export function PasswordStrengthMeter({ password, className, id }: PasswordStrengthMeterProps) {
   const { t } = useTranslation()
   if (!password) return null
 
@@ -52,7 +53,7 @@ export function PasswordStrengthMeter({ password, className }: PasswordStrengthM
   const segments = CRITERIA.length
 
   return (
-    <div className={cn('space-y-2', className)} role="status" aria-live="polite">
+    <div id={id} className={cn('space-y-2', className)} role="status" aria-live="polite">
       <div className="flex items-center gap-2">
         <div className="flex h-1.5 flex-1 gap-1" aria-hidden="true">
           {Array.from({ length: segments }).map((_, i) => (

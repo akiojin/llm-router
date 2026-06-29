@@ -141,9 +141,10 @@ export default function ChangePasswordPage() {
                       required
                       autoComplete="new-password"
                       autoFocus
+                      aria-describedby={newPassword ? 'new-password-strength' : undefined}
                     />
                   </div>
-                  <PasswordStrengthMeter password={newPassword} />
+                  <PasswordStrengthMeter id="new-password-strength" password={newPassword} />
                 </div>
 
                 <div className="space-y-2">
