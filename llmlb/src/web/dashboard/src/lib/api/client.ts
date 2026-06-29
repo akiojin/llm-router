@@ -79,6 +79,10 @@ export async function createApiErrorFromResponse(response: Response): Promise<Ap
   return new ApiError(response.status, response.statusText, parseApiErrorBody(bodyText))
 }
 
+// 401 を複数の並行リクエストが同時に受け取っても、ログインへのリダイレクトは一度だけ
+// 行う（多重 navigation によるちらつきを防ぐ）。
+let redirectingToLogin = false
+
 export async function fetchWithAuth<T>(
   endpoint: string,
   options: FetchOptions = {}
@@ -119,7 +123,10 @@ export async function fetchWithAuth<T>(
   })
 
   if (response.status === 401) {
-    window.location.href = '/dashboard/login.html'
+    if (!redirectingToLogin) {
+      redirectingToLogin = true
+      window.location.href = '/dashboard/login.html'
+    }
     throw new ApiError(401, 'Unauthorized')
   }
 
