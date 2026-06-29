@@ -57,6 +57,7 @@ const PAGE_SIZES = [25, 50, 100]
 export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableProps) {
   const [pageSize, setPageSize] = useState(25)
   const [currentPage, setCurrentPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'error'>('all')
   const [selectedRequest, setSelectedRequest] = useState<RequestHistoryItem | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
@@ -64,8 +65,14 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
     return () => cleanupManualCopyBuffer()
   }, [])
 
-  const totalPages = Math.ceil(history.length / pageSize)
-  const paginatedHistory = history.slice(
+  const filteredHistory =
+    statusFilter === 'all'
+      ? history
+      : history.filter((item) =>
+          statusFilter === 'success' ? item.status === 'success' : item.status !== 'success'
+        )
+  const totalPages = Math.ceil(filteredHistory.length / pageSize)
+  const paginatedHistory = filteredHistory.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   )
@@ -136,7 +143,23 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
               </Badge>
             </CardTitle>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value as 'all' | 'success' | 'error')
+                  setCurrentPage(1)
+                }}
+              >
+                <SelectTrigger id="history-status-filter" className="w-32" aria-label="Filter by status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All status</SelectItem>
+                  <SelectItem value="success">Success</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                </SelectContent>
+              </Select>
               <span className="text-sm text-muted-foreground">Show</span>
               <Select
                 value={pageSize.toString()}
@@ -181,8 +204,16 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                     <TableCell colSpan={7} className="p-0">
                       <EmptyState
                         icon={<History className="h-8 w-8" />}
-                        title="No request history"
-                        description="Requests will appear here once traffic is routed through the balancer."
+                        title={
+                          statusFilter === 'all'
+                            ? 'No request history'
+                            : 'No requests match the filter'
+                        }
+                        description={
+                          statusFilter === 'all'
+                            ? 'Requests will appear here once traffic is routed through the balancer.'
+                            : undefined
+                        }
                       />
                     </TableCell>
                   </TableRow>

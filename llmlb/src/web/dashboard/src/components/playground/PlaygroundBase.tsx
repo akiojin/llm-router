@@ -159,9 +159,11 @@ export function PlaygroundBase({
       <div
         id={sidebarId}
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-background shrink-0 transition-transform md:static md:z-auto',
+          // デスクトップ(md+)は static で従来どおり常時表示。モバイル(max-md)のみ
+          // 固定オーバーレイのドロワーになる（fixed と md:static の優先順位問題を回避）。
+          'flex flex-col border-r bg-background shrink-0 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform',
           sidebarWidth,
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          sidebarOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'
         )}
       >
         <div className="p-4 border-b">{sidebarHeader}</div>
