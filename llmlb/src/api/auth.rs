@@ -435,15 +435,31 @@ pub async fn register(
         AppError(LbError::Database(format!("Failed to create user: {}", e))).into_response()
     })?;
 
-    // 招待コードを使用済みにする
-    crate::db::invitations::mark_as_used(&app_state.db_pool, invitation.id, user.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to mark invitation as used: {}", e);
-            // ユーザーは既に作成されているため、エラーでもロールバックしない
-            // ここでのエラーはログに記録するが、ユーザー作成は成功として扱う
-        })
-        .ok();
+    // 招待コードを使用済みにする（atomic conditional update: WHERE status = 'active'）。
+    // 失敗（並行登録で既に消費済み＝rows_affected 0、または DB エラー）の場合は、
+    // 作成済みユーザーを補償削除して登録を拒否する。これにより招待コードの再利用や
+    // 「招待が消費されたのにユーザーだけ残る」孤立を防ぐ。
+    if let Err(e) =
+        crate::db::invitations::mark_as_used(&app_state.db_pool, invitation.id, user.id).await
+    {
+        tracing::warn!(
+            "Failed to consume invitation {} for user {}: {}; rolling back user creation",
+            invitation.id,
+            user.id,
+            e
+        );
+        if let Err(del) = crate::db::users::delete(&app_state.db_pool, user.id).await {
+            tracing::error!(
+                "Failed to roll back user {} after invitation consume failure: {}",
+                user.id,
+                del
+            );
+        }
+        return Err(AppError(LbError::Conflict(
+            "Invitation code is no longer valid".to_string(),
+        ))
+        .into_response());
+    }
 
     tracing::info!(
         "User registered via invitation: {} (id={})",
