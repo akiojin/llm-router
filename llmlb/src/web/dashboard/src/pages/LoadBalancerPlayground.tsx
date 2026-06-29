@@ -112,7 +112,7 @@ function buildDistributionRows(records: RequestResponseRecord[]): DistributionRo
   >()
 
   records.forEach((record) => {
-    const endpoint = record.node_machine_name || record.node_id || 'unknown'
+    const endpoint = record.endpoint_name || record.endpoint_id || 'unknown'
     const current = map.get(endpoint) ?? { count: 0, success: 0, error: 0, totalDuration: 0 }
     current.count += 1
     current.totalDuration += record.duration_ms ?? 0

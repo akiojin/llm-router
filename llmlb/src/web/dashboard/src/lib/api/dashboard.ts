@@ -62,14 +62,16 @@ export interface RequestHistoryItem {
 }
 
 // /api/dashboard/request-responses APIのレスポンス型
+// フィールド名はバックエンド（common::protocol::RequestResponseRecord）の
+// シリアライズ結果に一致させる。endpoint_id/endpoint_name/endpoint_ip で返る。
 export interface RequestResponseRecord {
   id: string
   timestamp: string
   request_type: string
   model: string
-  node_id?: string
-  node_machine_name?: string
-  node_ip?: string
+  endpoint_id?: string
+  endpoint_name?: string
+  endpoint_ip?: string
   request_body?: unknown
   response_body?: unknown
   duration_ms: number
