@@ -60,6 +60,17 @@ pub async fn dashboard_ws_handler(
         return Err((StatusCode::FORBIDDEN, "Admin access required".to_string()));
     }
 
+    // HTTP ダッシュボードAPIと同様に、パスワード変更/リセット後の旧トークンを無効化する。
+    // WebSocket は HTTP の require_jwt_auth ミドルウェアを通らないため、ここで明示的に検査する。
+    crate::auth::middleware::enforce_session_not_revoked(&state.db_pool, &claims)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Session revoked: please sign in again".to_string(),
+            )
+        })?;
+
     debug!("WebSocket authenticated for user: {}", claims.sub);
 
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, state.event_bus.clone())))

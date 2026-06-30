@@ -368,7 +368,7 @@ fn extract_bearer_or_cookie_token(headers: &HeaderMap) -> Result<String, Respons
 /// グレースフルデグレード（キャッシュ応答）を壊し自己 DoS となるため。
 /// JWT 自体は 24h で失効するので、障害中の無効化遅延は限定的。
 #[allow(clippy::result_large_err)]
-async fn enforce_session_not_revoked(
+pub(crate) async fn enforce_session_not_revoked(
     pool: &sqlx::SqlitePool,
     claims: &Claims,
 ) -> Result<(), Response> {
