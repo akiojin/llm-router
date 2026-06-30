@@ -134,5 +134,9 @@ mod settings_test;
 #[path = "integration/playground_load_test_access_test.rs"]
 mod playground_load_test_access_test;
 
+// dashboard WebSocket のセッション無効化を強制する（PR #679 Codex review）
+#[path = "integration/dashboard_ws_revocation_test.rs"]
+mod dashboard_ws_revocation_test;
+
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.
