@@ -10,8 +10,6 @@ mod ollama;
 mod vllm;
 mod xllm;
 
-use std::time::Duration;
-
 use reqwest::Client;
 use tracing::{debug, warn};
 
@@ -22,9 +20,6 @@ pub use lm_studio::detect_lm_studio;
 pub use ollama::detect_ollama;
 pub use vllm::detect_vllm;
 pub use xllm::detect_xllm;
-
-/// Default timeout for detection requests
-const DETECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 検出エラー
 #[derive(Debug, Clone)]
@@ -53,32 +48,6 @@ pub struct DetectionResult {
     pub endpoint_type: EndpointType,
     /// 判定理由
     pub reason: String,
-}
-
-/// Detect endpoint type automatically
-///
-/// Tries detection in priority order:
-/// 1. xLLM (GET /api/system - xllm_version field)
-/// 2. LM Studio (GET /api/v1/models, Server header, owned_by)
-/// 3. Ollama (GET /api/tags)
-/// 4. vLLM (Server header check)
-/// 5. llama.cpp (Server header, GET /v1/version)
-/// 6. OpenAI-compatible (GET /v1/models)
-///
-/// Returns:
-/// - `Ok(DetectionResult)` if a supported type is detected
-/// - `Err(DetectionError::Unreachable)` if no HTTP response was received
-/// - `Err(DetectionError::UnsupportedType)` if responses were received but no type matched
-pub async fn detect_endpoint_type(
-    base_url: &str,
-    api_key: Option<&str>,
-) -> Result<DetectionResult, DetectionError> {
-    let client = Client::builder()
-        .timeout(DETECTION_TIMEOUT)
-        .build()
-        .unwrap_or_default();
-
-    detect_endpoint_type_with_client(&client, base_url, api_key).await
 }
 
 /// Detect endpoint type with a provided HTTP client
@@ -244,12 +213,6 @@ mod tests {
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
     };
-
-    #[test]
-    fn test_detection_timeout_is_reasonable() {
-        assert!(DETECTION_TIMEOUT.as_secs() >= 3);
-        assert!(DETECTION_TIMEOUT.as_secs() <= 10);
-    }
 
     #[test]
     fn test_detection_error_display() {

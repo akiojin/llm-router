@@ -33,11 +33,6 @@ struct OllamaShowResponse {
     /// Some servers expose context length here with keys like `*.context_length`.
     #[serde(default)]
     model_info: Option<Value>,
-
-    /// Model source/origin information (HF repo etc.)
-    #[serde(default)]
-    #[allow(dead_code)]
-    modelfile: Option<String>,
 }
 
 /// Ollama model details

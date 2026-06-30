@@ -248,9 +248,16 @@ struct EndpointSampleAccumulator {
 
 /// POST /api/benchmarks/tps
 pub async fn start_tps_benchmark(
+    axum::Extension(claims): axum::Extension<crate::common::auth::Claims>,
     State(state): State<AppState>,
     Json(payload): Json<StartTpsBenchmarkRequest>,
 ) -> Result<(StatusCode, Json<TpsBenchmarkAccepted>), AppError> {
+    // ベンチマーク起動は admin のみ（Viewer の権限昇格を防ぐ）
+    if claims.role != crate::common::auth::UserRole::Admin {
+        return Err(AppError::from(LbError::Authorization(
+            "Only admin can start benchmarks".to_string(),
+        )));
+    }
     let request = TpsBenchmarkRequest::try_from(payload)?;
     let run_id = Uuid::new_v4();
 

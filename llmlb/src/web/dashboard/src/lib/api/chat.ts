@@ -2,19 +2,11 @@
 
 import { API_BASE, createApiErrorFromResponse, getCsrfToken } from './client'
 import type { OpenAIModelsResponse } from './models'
+import { splitAssistantDelta, type AssistantTextParts } from '../reasoning'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string | Array<unknown>
-}
-
-export interface ChatSession {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  model?: string
-  created_at: string
-  updated_at: string
 }
 
 export interface ChatCompletionRequest {
@@ -26,47 +18,35 @@ export interface ChatCompletionRequest {
   user?: string
 }
 
-function extractAssistantDeltaText(parsed: {
-  choices?: Array<{
-    delta?: {
-      content?: string
-      reasoning?: string
-      reasoning_content?: string
-    }
-  }>
-}): string {
-  const delta = parsed.choices?.[0]?.delta
-  return delta?.content || delta?.reasoning_content || delta?.reasoning || ''
-}
+// チャット補完 POST の共通実装。path で通常 Chat と Load Test 用エンドポイントを切り替える。
+const postChatCompletion = async (
+  path: string,
+  request: ChatCompletionRequest,
+  onDelta?: (delta: AssistantTextParts) => void,
+  signal?: AbortSignal
+) => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  }
 
-export const chatApi = {
-  complete: async (
-    request: ChatCompletionRequest,
-    onChunk?: (chunk: string) => void,
-    signal?: AbortSignal
-  ) => {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken
+  }
 
-    const csrfToken = getCsrfToken()
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken
-    }
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(request),
+    credentials: 'include',
+    signal,
+  })
 
-    const response = await fetch(`${API_BASE}/api/dashboard/playground/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(request),
-      credentials: 'include',
-      signal,
-    })
+  if (!response.ok) {
+    throw await createApiErrorFromResponse(response)
+  }
 
-    if (!response.ok) {
-      throw await createApiErrorFromResponse(response)
-    }
-
-    if (request.stream && onChunk) {
+    if (request.stream && onDelta) {
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No response body')
 
@@ -87,9 +67,9 @@ export const chatApi = {
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data)
-              const content = extractAssistantDeltaText(parsed)
-              if (content) {
-                onChunk(content)
+              const delta = splitAssistantDelta(parsed)
+              if (delta.content || delta.reasoning) {
+                onDelta(delta)
               }
             } catch {
               // Ignore parse errors
@@ -102,7 +82,19 @@ export const chatApi = {
     }
 
     return response.json()
-  },
+}
+
+export const chatApi = {
+  // 通常の Chat プレイグラウンド（全認証ユーザー）
+  complete: (
+    request: ChatCompletionRequest,
+    onDelta?: (delta: AssistantTextParts) => void,
+    signal?: AbortSignal
+  ) => postChatCompletion('/api/dashboard/playground/chat/completions', request, onDelta, signal),
+
+  // Load Test 用（admin ロール限定エンドポイント）。非ストリーミングのみ使用。
+  completeLoadTest: (request: ChatCompletionRequest, signal?: AbortSignal) =>
+    postChatCompletion('/api/dashboard/playground/load-test/chat/completions', request, undefined, signal),
 
   getModels: async (): Promise<OpenAIModelsResponse> => {
     const response = await fetch(`${API_BASE}/api/dashboard/playground/models`, {
@@ -112,15 +104,5 @@ export const chatApi = {
       throw await createApiErrorFromResponse(response)
     }
     return response.json()
-  },
-
-  // Session management (local storage based for now)
-  getSessions: async (): Promise<ChatSession[]> => {
-    const sessions = localStorage.getItem('chat_sessions')
-    return sessions ? JSON.parse(sessions) : []
-  },
-
-  saveSessions: async (sessions: ChatSession[]): Promise<void> => {
-    localStorage.setItem('chat_sessions', JSON.stringify(sessions))
   },
 }

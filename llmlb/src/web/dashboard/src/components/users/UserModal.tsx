@@ -97,7 +97,8 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     onError: (error) => {
       toast({
         title: 'Failed to create user',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description:
+          error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -121,7 +122,8 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     onError: (error) => {
       toast({
         title: 'Failed to update user',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description:
+          error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -138,7 +140,8 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     onError: (error) => {
       toast({
         title: 'Failed to delete user',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description:
+          error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     },
@@ -394,8 +397,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
           <DialogHeader>
             <DialogTitle>User Created Successfully</DialogTitle>
             <DialogDescription>
-              Please save this password. It will only be shown once.
-              The user will be required to change it on first login.
+              Please save this password. It will only be shown once. The user will be required to change it on first login.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -443,7 +445,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
-              Update user "{editUser?.username}".
+              {`Update user "${editUser?.username}".`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -501,8 +503,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteUser?.username}"? This
-              action cannot be undone.
+              {`Are you sure you want to delete "${deleteUser?.username}"? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

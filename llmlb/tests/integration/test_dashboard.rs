@@ -55,7 +55,6 @@ async fn build_test_app() -> (AppState, Router) {
         db_pool: db_pool.clone(),
         jwt_secret,
         http_client,
-        queue_config: llmlb::config::QueueConfig::from_env(),
         event_bus: llmlb::events::create_shared_event_bus(),
         endpoint_registry,
         inference_gate,
@@ -73,9 +72,27 @@ async fn build_test_app() -> (AppState, Router) {
     (state, app)
 }
 
-fn ws_url_with_token(addr: std::net::SocketAddr, secret: &str) -> String {
-    let token = create_jwt("test-admin", UserRole::Admin, secret, false).expect("create test jwt");
-    format!("ws://{}/ws/dashboard?token={}", addr, token)
+/// WebSocket 接続リクエストを Authorization ヘッダー付きで生成する。
+///
+/// クエリパラメータ経由のトークン受理は廃止されたため、ダッシュボード WS は
+/// `Authorization: Bearer` ヘッダー（または Cookie）で認証する。
+fn ws_request_with_token(
+    addr: std::net::SocketAddr,
+    secret: &str,
+) -> tokio_tungstenite::tungstenite::http::Request<()> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let token =
+        create_jwt("test-admin", UserRole::Admin, secret, false, 0).expect("create test jwt");
+    let mut request = format!("ws://{}/ws/dashboard", addr)
+        .into_client_request()
+        .expect("build ws client request");
+    request.headers_mut().insert(
+        "Authorization",
+        format!("Bearer {}", token)
+            .parse()
+            .expect("valid authorization header"),
+    );
+    request
 }
 
 #[tokio::test]
@@ -93,8 +110,8 @@ async fn test_dashboard_websocket_connection() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Act: WebSocket connection
-    let ws_url = ws_url_with_token(addr, &state.jwt_secret);
-    let (ws_stream, _) = connect_async(&ws_url)
+    let request = ws_request_with_token(addr, &state.jwt_secret);
+    let (ws_stream, _) = connect_async(request)
         .await
         .expect("Failed to connect to WebSocket");
 
@@ -130,8 +147,8 @@ async fn test_dashboard_receives_node_registration_event() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Connect WebSocket
-    let ws_url = ws_url_with_token(addr, &state.jwt_secret);
-    let (ws_stream, _) = connect_async(&ws_url)
+    let request = ws_request_with_token(addr, &state.jwt_secret);
+    let (ws_stream, _) = connect_async(request)
         .await
         .expect("Failed to connect to WebSocket");
 
@@ -183,8 +200,8 @@ async fn test_dashboard_receives_node_status_change() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Connect WebSocket
-    let ws_url = ws_url_with_token(addr, &state.jwt_secret);
-    let (ws_stream, _) = connect_async(&ws_url)
+    let request = ws_request_with_token(addr, &state.jwt_secret);
+    let (ws_stream, _) = connect_async(request)
         .await
         .expect("Failed to connect to WebSocket");
 

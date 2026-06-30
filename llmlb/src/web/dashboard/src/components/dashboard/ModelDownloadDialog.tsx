@@ -189,7 +189,7 @@ function ModelDownloadDialogContent({
             Download Model
           </DialogTitle>
           <DialogDescription>
-            Download a model to {endpoint.name}
+            {`Download a model to ${endpoint.name}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -214,7 +214,7 @@ function ModelDownloadDialogContent({
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm font-medium">Downloading {modelName}</span>
+                <span className="text-sm font-medium">{`Downloading ${modelName}`}</span>
               </div>
               <Progress value={progress} className="h-2" />
               <p className="text-xs text-muted-foreground">{progressMessage}</p>
@@ -226,7 +226,7 @@ function ModelDownloadDialogContent({
               <CheckCircle className="h-12 w-12 text-green-500" />
               <p className="text-sm font-medium">Download Completed</p>
               <p className="text-xs text-muted-foreground">
-                {modelName} is now available
+                {`${modelName} is now available`}
               </p>
             </div>
           )}
@@ -271,10 +271,13 @@ function ModelDownloadDialogContent({
   )
 }
 
-function buildProgressMessage(task: { speed_mbps?: number; eta_seconds?: number }): string {
+function buildProgressMessage(
+  task: { speed_mbps?: number; eta_seconds?: number }
+): string {
   const parts: string[] = []
   if (task.speed_mbps != null) parts.push(`${task.speed_mbps.toFixed(1)} Mbps`)
-  if (task.eta_seconds != null) parts.push(`ETA ${formatEta(task.eta_seconds)}`)
+  if (task.eta_seconds != null)
+    parts.push(`ETA ${formatEta(task.eta_seconds)}`)
   return parts.join(' / ') || 'Downloading...'
 }
 

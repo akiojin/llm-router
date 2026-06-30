@@ -232,7 +232,6 @@ mod tests {
             db_pool: pool,
             jwt_secret: "test-secret".to_string(),
             http_client,
-            queue_config: crate::config::QueueConfig::from_env(),
             event_bus: crate::events::create_shared_event_bus(),
             endpoint_registry,
             inference_gate,
@@ -565,6 +564,7 @@ mod tests {
             crate::common::auth::UserRole::Admin,
             &jwt_secret,
             false,
+            0,
         )
         .expect("create jwt");
 
@@ -876,6 +876,7 @@ mod tests {
             role: crate::common::auth::UserRole::Admin,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         });
         let (actor_type, actor_id, _actor_username, api_key_owner_id) =
             extract_actor_info(&response);
@@ -912,6 +913,7 @@ mod tests {
             role: crate::common::auth::UserRole::Admin,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         });
         response.extensions_mut().insert(ApiKeyAuthContext {
             id: key_id,

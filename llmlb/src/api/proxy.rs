@@ -11,7 +11,6 @@ use crate::common::{
 };
 use crate::token::StreamingTokenAccumulator;
 use crate::{
-    config::QueueConfig,
     types::endpoint::{Endpoint, SupportedAPI},
     AppState,
 };
@@ -23,34 +22,18 @@ use axum::{
 use futures::{Stream, StreamExt, TryStreamExt};
 use std::{io, pin::Pin, sync::Arc, time::Instant};
 
-/// TPS優先でエンドポイントを選択
-///
-/// llmlbはゲートウェイとしてエンドポイントをブラックボックスとして扱い、
-/// TPS（Tokens Per Second）のEMA値が最も高いエンドポイントを優先選択する。
-/// TPS未計測のエンドポイントはTPS=0.0として最低優先で扱う。
-/// 同一TPS時はラウンドロビンでタイブレークする。
-pub(crate) async fn select_available_endpoint(state: &AppState) -> Result<Endpoint, LbError> {
-    state.load_manager.select_endpoint_by_tps_direct(None).await
-}
-
 /// キュー付きエンドポイント選択の結果
-#[allow(dead_code)]
 pub(crate) enum QueueSelection {
     /// エンドポイントが見つかった
     Ready {
         endpoint: Box<Endpoint>,
         queued_wait_ms: Option<u128>,
     },
-    /// キャパシティ超過
-    CapacityExceeded,
-    /// タイムアウト
-    Timeout { waited_ms: u128 },
 }
 
 /// モデル対応のエンドポイントをTPS優先・キュー付きで選択
 pub(crate) async fn select_available_endpoint_with_queue_for_model(
     state: &AppState,
-    _queue_config: QueueConfig,
     model_id: &str,
     api_kind: Option<TpsApiKind>,
 ) -> Result<QueueSelection, LbError> {
@@ -76,7 +59,6 @@ pub(crate) async fn select_available_endpoint_with_queue_for_model(
 /// モデルと必須APIに対応するエンドポイントをTPS優先・キュー付きで選択
 pub(crate) async fn select_available_endpoint_with_queue_for_model_and_api(
     state: &AppState,
-    _queue_config: QueueConfig,
     model_id: &str,
     required_api: SupportedAPI,
     api_kind: Option<TpsApiKind>,
@@ -168,6 +150,7 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
     endpoint_registry: crate::registry::endpoints::EndpointRegistry,
     load_manager: crate::balancer::LoadManager,
     event_bus: crate::events::SharedEventBus,
+    request_lease: Option<crate::balancer::RequestLease>,
 ) -> Result<Response, LbError> {
     struct TpsTrackingState {
         upstream: Pin<Box<dyn Stream<Item = Result<axum::body::Bytes, reqwest::Error>> + Send>>,
@@ -182,6 +165,10 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
         load_manager: crate::balancer::LoadManager,
         event_bus: crate::events::SharedEventBus,
         stats_recorded: bool,
+        // ストリーム完走時に実時間で完了する RequestLease。
+        // ヘッダー受信時点で早期解放すると、ストリーミング中の assigned_active が
+        // 過小になり、レイテンシも過小評価され、idle 通知も早まる（lease-ttfb）。
+        request_lease: Option<crate::balancer::RequestLease>,
     }
 
     impl TpsTrackingState {
@@ -222,6 +209,38 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
                 self.event_bus.clone(),
             );
         }
+
+        /// ストリーム終端で RequestLease を実時間で完了する。
+        ///
+        /// 成功時はストリーム完走までの実時間で推論レイテンシも更新する
+        /// （ヘッダー受信時点の過小なレイテンシではなく）。
+        /// 明示的に完了しなかった場合（クライアント切断等）は lease の Drop が
+        /// Error 扱いで自動完了するため、カウンタ残留は起きない。
+        async fn finish_lease(&mut self, outcome: crate::balancer::RequestOutcome) {
+            let full = self.request_started_at.elapsed();
+            if matches!(outcome, crate::balancer::RequestOutcome::Success) {
+                if let Err(err) = self
+                    .endpoint_registry
+                    .update_inference_latency(self.endpoint_id, full.as_millis() as f64)
+                    .await
+                {
+                    tracing::debug!(
+                        endpoint_id = %self.endpoint_id,
+                        error = %err,
+                        "Failed to update inference latency at stream end"
+                    );
+                }
+            }
+            if let Some(lease) = self.request_lease.take() {
+                if let Err(err) = lease.complete(outcome, full).await {
+                    tracing::warn!(
+                        endpoint_id = %self.endpoint_id,
+                        error = %err,
+                        "Failed to complete streaming request lease"
+                    );
+                }
+            }
+        }
     }
 
     impl Drop for TpsTrackingState {
@@ -260,6 +279,7 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
         load_manager,
         event_bus,
         stats_recorded: false,
+        request_lease,
     };
 
     let tracked_stream = futures::stream::try_unfold(state, |mut state| async move {
@@ -271,11 +291,17 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
             }
             Some(Err(err)) => {
                 state.record_stats_once(false, 0, 0);
+                state
+                    .finish_lease(crate::balancer::RequestOutcome::Error)
+                    .await;
                 Err(io::Error::other(err))
             }
             None => {
                 let (output_tokens, duration_ms) = state.finalize_output_tokens_and_duration();
                 state.record_stats_once(true, output_tokens, duration_ms);
+                state
+                    .finish_lease(crate::balancer::RequestOutcome::Success)
+                    .await;
                 Ok(None)
             }
         }
@@ -415,7 +441,6 @@ pub(crate) async fn forward_to_endpoint(
     endpoint: &Endpoint,
     path: &str,
     body: Vec<u8>,
-    stream: bool,
 ) -> Result<reqwest::Response, LbError> {
     let url = format!("{}{}", endpoint.base_url.trim_end_matches('/'), path);
 
@@ -432,7 +457,9 @@ pub(crate) async fn forward_to_endpoint(
         request_builder = request_builder.bearer_auth(api_key);
     }
 
-    let response = request_builder.send().await.map_err(|e| {
+    // 上流のレスポンスは非2xxでもそのまま返し、ステータス処理は呼び出し側に委ねる。
+    // （全呼び出し元が上流のステータス/本文を保持して扱うため、ここでの非2xx→Err化は不要）
+    request_builder.send().await.map_err(|e| {
         tracing::error!(
             "Failed to forward request to endpoint {}: {}",
             endpoint.name,
@@ -445,36 +472,7 @@ pub(crate) async fn forward_to_endpoint(
         } else {
             LbError::Http(classified.record_message)
         }
-    })?;
-
-    // エラーステータスをチェック
-    let status = response.status();
-    if !status.is_success() && !stream {
-        // 非ストリーミングの場合はエラー内容を取得してログ
-        let error_body = match response.text().await {
-            Ok(body) => body,
-            Err(e) => {
-                tracing::debug!(
-                    "Failed to read error body from endpoint {}: {}",
-                    endpoint.name,
-                    e
-                );
-                String::new()
-            }
-        };
-        tracing::warn!(
-            "Endpoint {} returned error {}: {}",
-            endpoint.name,
-            status,
-            error_body
-        );
-        return Err(LbError::Http(format!(
-            "Endpoint returned {}: {}",
-            status, error_body
-        )));
-    }
-
-    Ok(response)
+    })
 }
 
 // NOTE: テストはNodeRegistry廃止に伴い削除されました。
@@ -498,16 +496,12 @@ mod tests {
             endpoint: Box::new(ep),
             queued_wait_ms: Some(42),
         };
-        if let QueueSelection::Ready {
+        let QueueSelection::Ready {
             endpoint,
             queued_wait_ms,
-        } = qs
-        {
-            assert_eq!(endpoint.name, "ep1");
-            assert_eq!(queued_wait_ms, Some(42));
-        } else {
-            panic!("Expected QueueSelection::Ready");
-        }
+        } = qs;
+        assert_eq!(endpoint.name, "ep1");
+        assert_eq!(queued_wait_ms, Some(42));
     }
 
     #[test]
@@ -521,37 +515,8 @@ mod tests {
             endpoint: Box::new(ep),
             queued_wait_ms: None,
         };
-        if let QueueSelection::Ready { queued_wait_ms, .. } = qs {
-            assert!(queued_wait_ms.is_none());
-        } else {
-            panic!("Expected QueueSelection::Ready");
-        }
-    }
-
-    #[test]
-    fn queue_selection_capacity_exceeded_variant() {
-        let qs = QueueSelection::CapacityExceeded;
-        assert!(matches!(qs, QueueSelection::CapacityExceeded));
-    }
-
-    #[test]
-    fn queue_selection_timeout_variant() {
-        let qs = QueueSelection::Timeout { waited_ms: 5000 };
-        if let QueueSelection::Timeout { waited_ms } = qs {
-            assert_eq!(waited_ms, 5000);
-        } else {
-            panic!("Expected QueueSelection::Timeout");
-        }
-    }
-
-    #[test]
-    fn queue_selection_timeout_zero() {
-        let qs = QueueSelection::Timeout { waited_ms: 0 };
-        if let QueueSelection::Timeout { waited_ms } = qs {
-            assert_eq!(waited_ms, 0);
-        } else {
-            panic!("Expected QueueSelection::Timeout");
-        }
+        let QueueSelection::Ready { queued_wait_ms, .. } = qs;
+        assert!(queued_wait_ms.is_none());
     }
 
     // --- process_sse_lines ---
@@ -723,12 +688,6 @@ mod tests {
         assert!(err.to_string().contains("Endpoint request failed"));
     }
 
-    #[test]
-    fn lb_error_http_endpoint_returned_error() {
-        let err = LbError::Http("Endpoint returned 500: Internal Server Error".to_string());
-        assert!(err.to_string().contains("500"));
-    }
-
     // --- forward_streaming_response content-type behavior ---
 
     #[tokio::test]
@@ -842,6 +801,93 @@ mod tests {
 
         let axum_response = forward_streaming_response(reqwest_response).unwrap();
         assert_eq!(axum_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    // --- lease-ttfb: ストリーミング forwarder は配信完了まで lease を保持する ---
+
+    #[tokio::test]
+    async fn streaming_forwarder_holds_lease_until_stream_consumed() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("create test db");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        let registry = crate::registry::endpoints::EndpointRegistry::new(pool)
+            .await
+            .expect("create registry");
+        let endpoint = Endpoint::new(
+            "lease-stream-ep".to_string(),
+            "http://localhost:1".to_string(),
+            crate::types::endpoint::EndpointType::OpenaiCompatible,
+        );
+        let endpoint_id = endpoint.id;
+        registry.add(endpoint).await.expect("add endpoint");
+        let load_manager = crate::balancer::LoadManager::new(Arc::new(registry.clone()));
+        let event_bus = crate::events::create_shared_event_bus();
+
+        let lease = load_manager
+            .begin_request(endpoint_id)
+            .await
+            .expect("begin request");
+        assert_eq!(
+            load_manager
+                .snapshot(endpoint_id)
+                .await
+                .unwrap()
+                .active_requests,
+            1,
+            "begin_request must mark one active request"
+        );
+
+        let response = reqwest::Response::from(
+            axum::http::Response::builder()
+                .status(200)
+                .header("content-type", "text/event-stream")
+                .body("data: {\"choices\":[]}\n\ndata: [DONE]\n\n")
+                .unwrap(),
+        );
+
+        let axum_response = forward_streaming_response_with_tps_tracking(
+            response,
+            endpoint_id,
+            "m".to_string(),
+            None,
+            crate::types::endpoint::EndpointType::OpenaiCompatible,
+            Instant::now(),
+            registry,
+            load_manager.clone(),
+            event_bus,
+            Some(lease),
+        )
+        .expect("forward streaming");
+
+        // ストリーム未消費の段階では lease は保持されたまま（早期解放しない）
+        assert_eq!(
+            load_manager
+                .snapshot(endpoint_id)
+                .await
+                .unwrap()
+                .active_requests,
+            1,
+            "lease must be held until the stream is consumed"
+        );
+
+        // ボディを完全に消費するとストリーム終端で lease が完了する
+        let _ = axum::body::to_bytes(axum_response.into_body(), usize::MAX)
+            .await
+            .expect("consume body");
+
+        assert_eq!(
+            load_manager
+                .snapshot(endpoint_id)
+                .await
+                .unwrap()
+                .active_requests,
+            0,
+            "lease must be completed after the stream is fully consumed"
+        );
     }
 
     // --- Timeout configuration in forward_to_endpoint ---

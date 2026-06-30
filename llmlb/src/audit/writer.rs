@@ -202,12 +202,12 @@ impl AuditLogWriter {
             hash: batch_hash,
             previous_hash,
         };
-        let batch_id = storage.insert_batch_hash(&batch).await?;
-
-        // エントリのbatch_idを更新
+        // バッチ行の挿入とエントリの batch_id 更新を単一トランザクションで実行する。
+        // 途中失敗でバッチ行だけが残ると、未割当エントリが次回再取得されて別バッチへ
+        // 二重組み込みされ、ハッシュチェーン検証が恒久的に不整合となるため原子的に行う。
         let entry_ids: Vec<i64> = unbatched.iter().filter_map(|e| e.id).collect();
         storage
-            .update_entries_batch_id(&entry_ids, batch_id)
+            .insert_batch_hash_with_entries(&batch, &entry_ids)
             .await?;
 
         info!(

@@ -60,4 +60,5 @@ test.describe('Login Page', () => {
     await page.waitForURL(/register/, { timeout: 10000 });
     expect(page.url()).toContain('register');
   });
+
 });

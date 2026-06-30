@@ -109,6 +109,13 @@ export async function startMockOpenAIEndpointServer(options?: {
       const lastUser = extractLastUserText(parsed?.messages)
       const reply = `MOCK_OK model=${model} user=${lastUser}`
 
+      // Opt-in: when the user message contains the `[[REASON]]` sentinel, emit a
+      // separate `reasoning_content` channel (mimics reasoning models like
+      // gemma via LM Studio). Existing specs don't send the sentinel, so they
+      // are unaffected.
+      const wantsReasoning = lastUser.includes('[[REASON]]')
+      const reasoningText = 'MOCK_REASONING internal-thought-step'
+
       const stream = parsed?.stream === true
       if (responseDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, responseDelayMs))
@@ -123,7 +130,11 @@ export async function startMockOpenAIEndpointServer(options?: {
           choices: [
             {
               index: 0,
-              message: { role: 'assistant', content: reply },
+              message: {
+                role: 'assistant',
+                content: reply,
+                ...(wantsReasoning ? { reasoning_content: reasoningText } : {}),
+              },
               finish_reason: 'stop',
             },
           ],
@@ -135,6 +146,15 @@ export async function startMockOpenAIEndpointServer(options?: {
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       })
+
+      // Reasoning phase first (content empty, reasoning_content populated), then
+      // the final answer in the content channel.
+      if (wantsReasoning) {
+        const rparts = [reasoningText.slice(0, 14), reasoningText.slice(14)]
+        for (const rpart of rparts) {
+          sseWrite(res, { choices: [{ delta: { reasoning_content: rpart } }] })
+        }
+      }
 
       // A few chunks so the UI streaming path is exercised.
       const parts = [reply.slice(0, 12), reply.slice(12, 24), reply.slice(24)]

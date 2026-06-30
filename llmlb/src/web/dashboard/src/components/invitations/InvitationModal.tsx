@@ -357,7 +357,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              <p>Expires: {createdCode && new Date(createdCode.expires_at).toLocaleString()}</p>
+              <p>{`Expires: ${createdCode ? new Date(createdCode.expires_at).toLocaleString() : ''}`}</p>
             </div>
           </div>
           <DialogFooter>

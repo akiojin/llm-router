@@ -91,8 +91,7 @@ export function ModelDeleteDialog({
             <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="text-sm">
-                This endpoint type ({endpointType}) does not support model deletion
-                from the dashboard. Please remove the model directly from the endpoint.
+                {`This endpoint type (${endpointType}) does not support model deletion from the dashboard. Please remove the model directly from the endpoint.`}
               </div>
             </div>
           )}

@@ -13,11 +13,9 @@ pub mod types;
 
 // Re-export all public types for backward compatibility
 pub use lease::RequestLease;
-#[allow(deprecated)]
-pub use types::NodeLoadSnapshot;
 pub use types::{
-    AdmissionDecision, EndpointLoadSnapshot, EndpointTpsSummary, MetricsUpdate, ModelTpsInfo,
-    ModelTpsState, RequestHistoryPoint, RequestOutcome, SystemSummary, WaitResult,
+    EndpointLoadSnapshot, EndpointTpsSummary, MetricsUpdate, ModelTpsInfo, ModelTpsState,
+    RequestHistoryPoint, RequestOutcome, SystemSummary, WaitResult,
 };
 
 use types::{EndpointLoadState, QueueWaiterGuard, TpsTrackerMap, REQUEST_HISTORY_WINDOW_MINUTES};
@@ -148,30 +146,6 @@ mod tests {
 
         let (another, _) = setup_test_load_manager().await;
         assert_ne!(load_manager.cache_key(), another.cache_key());
-    }
-
-    // T004: AdmissionDecision enum テスト
-    #[test]
-    fn admission_decision_enum_variants_exist() {
-        // AdmissionDecisionの3つのバリアントが存在することを確認
-        let accept = AdmissionDecision::Accept;
-        let accept_with_delay = AdmissionDecision::AcceptWithDelay(StdDuration::from_millis(100));
-        let reject = AdmissionDecision::Reject;
-
-        // PartialEq実装の確認
-        assert_eq!(accept, AdmissionDecision::Accept);
-        assert_eq!(reject, AdmissionDecision::Reject);
-        assert_ne!(accept, reject);
-
-        // AcceptWithDelayのDuration値を確認
-        if let AdmissionDecision::AcceptWithDelay(duration) = accept_with_delay {
-            assert_eq!(duration, StdDuration::from_millis(100));
-        } else {
-            panic!("Expected AcceptWithDelay variant");
-        }
-
-        // Debug実装の確認
-        assert!(!format!("{:?}", accept).is_empty());
     }
 
     // SPEC-f8e3a1b7: wait_for_ready_with_timeout / admission_control テストは削除されました
@@ -621,6 +595,47 @@ mod tests {
             .expect("other存在");
         assert_eq!(ep2.model_count, 1);
         assert_eq!(ep2.total_output_tokens, 50);
+    }
+
+    #[tokio::test]
+    async fn test_forget_endpoint_clears_state_and_tps() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+
+        // 負荷状態（state）を生成
+        load_manager
+            .upsert_initial_state(endpoint_id, false, Some((1, 1)))
+            .await;
+        // TPS状態（tps_tracker）を生成
+        load_manager
+            .update_tps(
+                endpoint_id,
+                "model-a".to_string(),
+                TpsApiKind::ChatCompletions,
+                100,
+                1_000,
+            )
+            .await;
+
+        assert!(
+            load_manager.state.read().await.contains_key(&endpoint_id),
+            "前提: 負荷状態が登録されている"
+        );
+        assert!(
+            !load_manager.get_model_tps(endpoint_id).await.is_empty(),
+            "前提: TPS状態が登録されている"
+        );
+
+        load_manager.forget_endpoint(endpoint_id).await;
+
+        assert!(
+            !load_manager.state.read().await.contains_key(&endpoint_id),
+            "forget_endpoint は負荷状態を除去する"
+        );
+        assert!(
+            load_manager.get_model_tps(endpoint_id).await.is_empty(),
+            "forget_endpoint はTPS状態を除去する"
+        );
     }
 
     /// T013 [US5]: seed_history_from_db が MinuteHistoryPoint を VecDeque に
@@ -1131,16 +1146,6 @@ mod tests {
         }
     }
 
-    // ===== admission_control テスト =====
-
-    #[tokio::test]
-    async fn admission_control_accept_when_low_load() {
-        let _lock = TEST_LOCK.lock().await;
-        let (load_manager, _) = setup_test_load_manager().await;
-        let decision = load_manager.admission_control(100);
-        assert_eq!(decision, AdmissionDecision::Accept);
-    }
-
     // ===== has_ready_nodes / all_initializing テスト =====
 
     #[tokio::test]
@@ -1284,6 +1289,54 @@ mod tests {
         let (load_manager, _) = setup_test_load_manager().await;
         let result = load_manager.begin_request(Uuid::new_v4()).await;
         assert!(result.is_err());
+    }
+
+    // 選択(Online)→割当(begin_request)の間にエンドポイントが Offline/Error へ
+    // 遷移する TOCTOU を塞ぐ。begin_request は dead 状態への割当を拒否する。
+    #[tokio::test]
+    async fn begin_request_offline_endpoint_returns_error() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+        load_manager
+            .endpoint_registry()
+            .update_status(endpoint_id, EndpointStatus::Offline, None, Some("down"))
+            .await
+            .expect("update status to offline");
+        let result = load_manager.begin_request(endpoint_id).await;
+        assert!(
+            result.is_err(),
+            "begin_request must reject offline endpoints (TOCTOU guard)"
+        );
+    }
+
+    #[tokio::test]
+    async fn begin_request_error_endpoint_returns_error() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+        load_manager
+            .endpoint_registry()
+            .update_status(endpoint_id, EndpointStatus::Error, None, Some("boom"))
+            .await
+            .expect("update status to error");
+        let result = load_manager.begin_request(endpoint_id).await;
+        assert!(
+            result.is_err(),
+            "begin_request must reject error-state endpoints (TOCTOU guard)"
+        );
+    }
+
+    // Pending は従来どおり許可する（begin_request は歴史的に状態を問わなかった。
+    // 本番では選択が Online のみ返すため、Pending への直接割当は回帰させない）。
+    #[tokio::test]
+    async fn begin_request_pending_endpoint_is_allowed() {
+        let _lock = TEST_LOCK.lock().await;
+        let (load_manager, endpoint_id) = setup_test_load_manager().await;
+        // setup の既定状態は Pending
+        let result = load_manager.begin_request(endpoint_id).await;
+        assert!(
+            result.is_ok(),
+            "begin_request must still allow pending endpoints"
+        );
     }
 
     #[tokio::test]
@@ -1598,32 +1651,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ===== wait_for_ready_with_timeout テスト =====
-
-    #[tokio::test]
-    async fn wait_for_ready_with_timeout_already_ready() {
-        let _lock = TEST_LOCK.lock().await;
-        let (load_manager, endpoint_id) = setup_test_load_manager().await;
-        load_manager
-            .upsert_initial_state(endpoint_id, false, Some((1, 1)))
-            .await;
-        let result = load_manager
-            .wait_for_ready_with_timeout(10, StdDuration::from_millis(100))
-            .await;
-        assert_eq!(result, WaitResult::Ready);
-    }
-
-    #[tokio::test]
-    async fn wait_for_ready_with_timeout_capacity_exceeded() {
-        let _lock = TEST_LOCK.lock().await;
-        let (load_manager, _) = setup_test_load_manager().await;
-        // max_waiters=0 なので即座に CapacityExceeded
-        let result = load_manager
-            .wait_for_ready_with_timeout(0, StdDuration::from_millis(100))
-            .await;
-        assert_eq!(result, WaitResult::CapacityExceeded);
-    }
-
     // ===== wait_for_idle_node_with_timeout テスト =====
 
     #[tokio::test]
@@ -1728,13 +1755,8 @@ pub struct LoadManager {
     state: Arc<RwLock<HashMap<Uuid, EndpointLoadState>>>,
     round_robin: Arc<AtomicUsize>,
     history: Arc<RwLock<VecDeque<RequestHistoryPoint>>>,
-    /// 待機中リクエスト数（簡易カウンタ）
-    #[allow(dead_code)]
-    pending: Arc<AtomicUsize>,
     /// ready通知
     ready_notify: Arc<Notify>,
-    /// 待機中リクエスト数（上限判定用）
-    waiters: Arc<AtomicUsize>,
     /// リクエストキュー待機中の通知
     queue_notify: Arc<Notify>,
     /// リクエストキュー待機数
@@ -1752,9 +1774,7 @@ impl LoadManager {
             state: Arc::new(RwLock::new(HashMap::new())),
             round_robin: Arc::new(AtomicUsize::new(0)),
             history: Arc::new(RwLock::new(VecDeque::new())),
-            pending: Arc::new(AtomicUsize::new(0)),
             ready_notify: Arc::new(Notify::new()),
-            waiters: Arc::new(AtomicUsize::new(0)),
             queue_notify: Arc::new(Notify::new()),
             queue_waiters: Arc::new(AtomicUsize::new(0)),
             tps_tracker: Arc::new(RwLock::new(HashMap::new())),
@@ -1779,6 +1799,22 @@ impl LoadManager {
             return;
         }
         let mut tracker = self.tps_tracker.write().await;
+        // オフライン/エラー遷移で clear_tps_for_endpoint された後に、in-flight リクエスト
+        // 完了の遅延 update_tps が TPS エントリを再生成するのを防ぐ。
+        // tps_tracker の書き込みロックを保持したまま現在のステータスを確認することで、
+        // clear_tps_for_endpoint（同じロックを取得）との競合を直列化し、
+        // ステータス確認と再生成の間の TOCTOU 競合を排除する。
+        // レジストリ未登録（None）の場合は従来どおり更新する（テスト互換・production では
+        // 削除直後の一時的な遅延更新のみが該当し、forget_endpoint が別途状態を掃除する）。
+        if let Some(endpoint) = self.endpoint_registry.get(endpoint_id).await {
+            if matches!(
+                endpoint.status,
+                crate::types::endpoint::EndpointStatus::Offline
+                    | crate::types::endpoint::EndpointStatus::Error
+            ) {
+                return;
+            }
+        }
         let state = tracker
             .entry((endpoint_id, model_id, api_kind))
             .or_default();
@@ -1791,6 +1827,23 @@ impl LoadManager {
     pub async fn clear_tps_for_endpoint(&self, endpoint_id: Uuid) {
         let mut tracker = self.tps_tracker.write().await;
         tracker.retain(|(eid, _, _), _| *eid != endpoint_id);
+    }
+
+    /// エンドポイント削除時に LoadManager が保持する状態を破棄する。
+    ///
+    /// `EndpointRegistry::remove` はレジストリ・DB・モデルマッピングのみを掃除するため、
+    /// LoadManager 側の `state`（負荷状態）と `tps_tracker`（TPS 状態）は残存しリークする。
+    /// これらは `begin_request` / `update_tps` の `entry().or_default()` で挿入されるが
+    /// 削除契機がないため、本メソッドを削除ハンドラから呼び出して完全に除去する。
+    pub async fn forget_endpoint(&self, endpoint_id: Uuid) {
+        {
+            let mut state = self.state.write().await;
+            state.remove(&endpoint_id);
+        }
+        {
+            let mut tracker = self.tps_tracker.write().await;
+            tracker.retain(|(eid, _, _), _| *eid != endpoint_id);
+        }
     }
 
     /// エンドポイントのモデル別TPS情報を取得（SPEC-4bb5b55f）
@@ -2120,49 +2173,6 @@ impl LoadManager {
         !state.is_empty() && state.values().all(|s| s.initializing)
     }
 
-    /// readyなノードが出るまで待機。待ち人数が上限を超えたらfalse。
-    pub async fn wait_for_ready(&self, max_waiters: usize) -> bool {
-        let current = self.waiters.fetch_add(1, AtomicOrdering::SeqCst) + 1;
-        if current > max_waiters {
-            self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
-            return false;
-        }
-        if self.has_ready_nodes().await {
-            self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
-            return true;
-        }
-        self.ready_notify.notified().await;
-        self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
-        true
-    }
-
-    /// タイムアウト付きでreadyなノードが出るまで待機
-    pub async fn wait_for_ready_with_timeout(
-        &self,
-        max_waiters: usize,
-        timeout_duration: StdDuration,
-    ) -> WaitResult {
-        let current = self.waiters.fetch_add(1, AtomicOrdering::SeqCst) + 1;
-        if current > max_waiters {
-            self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
-            return WaitResult::CapacityExceeded;
-        }
-
-        if self.has_ready_nodes().await {
-            self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
-            return WaitResult::Ready;
-        }
-
-        let result = tokio::time::timeout(timeout_duration, self.ready_notify.notified()).await;
-
-        self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
-
-        match result {
-            Ok(_) => WaitResult::Ready,
-            Err(_) => WaitResult::Timeout,
-        }
-    }
-
     /// リクエストキュー待機数を取得
     pub fn queue_waiters(&self) -> usize {
         self.queue_waiters.load(AtomicOrdering::Relaxed)
@@ -2251,28 +2261,19 @@ impl LoadManager {
         }
     }
 
-    /// アドミッション制御（段階的バックプレッシャー）
-    pub fn admission_control(&self, max_waiters: usize) -> AdmissionDecision {
-        let waiters = self.waiters.load(AtomicOrdering::Relaxed);
-        let threshold_accept = max_waiters / 2;
-        let threshold_reject = max_waiters * 4 / 5;
-
-        if waiters < threshold_accept {
-            AdmissionDecision::Accept
-        } else if waiters < threshold_reject {
-            let load_ratio =
-                (waiters - threshold_accept) as f64 / (threshold_reject - threshold_accept) as f64;
-            let delay_ms = 10 + (load_ratio * 90.0) as u64;
-            AdmissionDecision::AcceptWithDelay(StdDuration::from_millis(delay_ms))
-        } else {
-            AdmissionDecision::Reject
-        }
-    }
-
     /// リクエスト開始を記録
+    ///
+    /// 選択(find_by_model は Online のみ返す)から本メソッド呼び出しまでの間に
+    /// エンドポイントが Offline/Error へ遷移する TOCTOU を塞ぐため、dead 状態
+    /// (Offline/Error)への割当を拒否する。Pending は従来どおり許可する。
     pub async fn begin_request(&self, endpoint_id: Uuid) -> RouterResult<RequestLease> {
-        if self.endpoint_registry.get(endpoint_id).await.is_none() {
+        let Some(endpoint) = self.endpoint_registry.get(endpoint_id).await else {
             return Err(LbError::EndpointNotFound(endpoint_id));
+        };
+        if endpoint.status == crate::types::endpoint::EndpointStatus::Offline
+            || endpoint.status == crate::types::endpoint::EndpointStatus::Error
+        {
+            return Err(LbError::EndpointOffline(endpoint_id));
         }
 
         let mut state = self.state.write().await;
@@ -2773,147 +2774,6 @@ impl LoadManager {
 
     /// 指定モデルに対応するエンドポイントを直接選択（ラウンドロビン）
     pub async fn select_endpoint_direct_for_model(
-        &self,
-        model_id: &str,
-    ) -> RouterResult<crate::types::endpoint::Endpoint> {
-        let endpoints = self.collect_online_endpoints(Some(model_id)).await?;
-        self.select_endpoint_round_robin_from_endpoints(endpoints)
-    }
-
-    /// 指定モデルに対応するエンドポイントをTPS優先で選択する。
-    ///
-    /// `api_kind` を指定した場合、そのモデル×API種別のTPS EMAを用いる。
-    pub async fn select_endpoint_by_tps_for_model(
-        &self,
-        model_id: &str,
-        api_kind: Option<TpsApiKind>,
-    ) -> RouterResult<crate::types::endpoint::Endpoint> {
-        let endpoints = self.collect_online_endpoints(Some(model_id)).await?;
-        self.select_endpoint_by_tps_from_endpoints(endpoints, Some(model_id), api_kind)
-            .await
-    }
-
-    /// アイドルエンドポイントを選択
-    pub async fn select_idle_endpoint(
-        &self,
-    ) -> RouterResult<Option<crate::types::endpoint::Endpoint>> {
-        let endpoints = self.endpoint_registry.list_online().await;
-        if endpoints.is_empty() {
-            return Err(LbError::NoEndpointsAvailable);
-        }
-
-        let state = self.state.read().await;
-        let non_initializing: Vec<_> = endpoints
-            .iter()
-            .filter(|ep| {
-                state
-                    .get(&ep.id)
-                    .map(|load| !load.initializing)
-                    .unwrap_or(true)
-            })
-            .cloned()
-            .collect();
-
-        let idle_endpoints: Vec<_> = non_initializing
-            .iter()
-            .filter(|ep| {
-                state
-                    .get(&ep.id)
-                    .map(|load| load.combined_active() == 0)
-                    .unwrap_or(true)
-            })
-            .cloned()
-            .collect();
-
-        if idle_endpoints.is_empty() {
-            return Ok(None);
-        }
-
-        let round_robin_cursor = self.round_robin.fetch_add(1, AtomicOrdering::SeqCst);
-        let round_robin_start = round_robin_cursor % non_initializing.len().max(1);
-        let round_robin_priority =
-            compute_round_robin_priority_for_endpoints(&non_initializing, round_robin_start);
-
-        let mut ordered = idle_endpoints;
-        ordered.sort_by(|a, b| {
-            let a_rank = round_robin_priority
-                .get(&a.id)
-                .copied()
-                .unwrap_or(usize::MAX);
-            let b_rank = round_robin_priority
-                .get(&b.id)
-                .copied()
-                .unwrap_or(usize::MAX);
-            a_rank.cmp(&b_rank)
-        });
-
-        Ok(ordered.first().cloned())
-    }
-
-    /// モデル対応のアイドルエンドポイントを選択
-    pub async fn select_idle_endpoint_for_model(
-        &self,
-        model_id: &str,
-    ) -> RouterResult<Option<crate::types::endpoint::Endpoint>> {
-        let endpoints = self.collect_online_endpoints(Some(model_id)).await?;
-        let state = self.state.read().await;
-
-        let non_initializing: Vec<_> = endpoints
-            .into_iter()
-            .filter(|ep| {
-                state
-                    .get(&ep.id)
-                    .map(|load| !load.initializing)
-                    .unwrap_or(true)
-            })
-            .collect();
-
-        let idle_endpoints: Vec<_> = non_initializing
-            .iter()
-            .filter(|ep| {
-                state
-                    .get(&ep.id)
-                    .map(|load| load.combined_active() == 0)
-                    .unwrap_or(true)
-            })
-            .cloned()
-            .collect();
-
-        if idle_endpoints.is_empty() {
-            return Ok(None);
-        }
-
-        let round_robin_cursor = self.round_robin.fetch_add(1, AtomicOrdering::SeqCst);
-        let round_robin_start = round_robin_cursor % non_initializing.len().max(1);
-        let round_robin_priority =
-            compute_round_robin_priority_for_endpoints(&non_initializing, round_robin_start);
-
-        let mut ordered = idle_endpoints;
-        ordered.sort_by(|a, b| {
-            let a_rank = round_robin_priority
-                .get(&a.id)
-                .copied()
-                .unwrap_or(usize::MAX);
-            let b_rank = round_robin_priority
-                .get(&b.id)
-                .copied()
-                .unwrap_or(usize::MAX);
-            a_rank.cmp(&b_rank)
-        });
-
-        Ok(ordered.first().cloned())
-    }
-
-    /// 純粋なラウンドロビンでエンドポイントを選択
-    pub async fn select_endpoint_round_robin_direct(
-        &self,
-    ) -> RouterResult<crate::types::endpoint::Endpoint> {
-        let endpoints = self.collect_online_endpoints(None).await?;
-        self.select_endpoint_round_robin_from_endpoints(endpoints)
-    }
-
-    /// 指定モデルに対応するエンドポイントを純粋なラウンドロビンで選択
-    pub async fn select_endpoint_round_robin_direct_for_model(
         &self,
         model_id: &str,
     ) -> RouterResult<crate::types::endpoint::Endpoint> {

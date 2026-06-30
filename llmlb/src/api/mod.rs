@@ -66,7 +66,6 @@ const _DASHBOARD_ASSETS_BUILD_STAMP: &str = include_str!(concat!(
 ));
 
 /// APIllmlbを作成
-#[allow(deprecated)] // NodeRegistry migration in progress - legacy APIs still registered
 pub fn create_app(state: AppState) -> Router {
     // `/api/*`: llmlb独自API（管理/運用向け）
     // JWTが必要な認証ルート（ログイン以外）
@@ -156,7 +155,7 @@ pub fn create_app(state: AppState) -> Router {
 
     // エンドポイントログ取得（lb→endpoint proxy）
     let node_logs_routes = Router::new()
-        .route("/endpoints/{id}/logs", get(logs::get_node_logs))
+        .route("/endpoints/{id}/logs", get(logs::get_endpoint_logs))
         .layer(middleware::from_fn(
             crate::auth::middleware::require_password_changed_middleware,
         ))
@@ -206,19 +205,10 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
-    // 新招待キーAPI（T-0009）
-    let new_invitations_routes = Router::new()
-        .route("/admin/invitations", post(auth::create_invitation))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            crate::auth::middleware::require_jwt_auth_middleware,
-        ));
-
     let admin_routes = Router::new()
         .merge(users_routes)
         .merge(my_api_keys_routes)
         .merge(invitations_routes)
-        .merge(new_invitations_routes)
         .merge(node_logs_routes)
         .merge(models_manage_routes)
         .merge(metrics_routes);
@@ -327,6 +317,33 @@ pub fn create_app(state: AppState) -> Router {
             crate::inference_gate::inference_gate_middleware,
         ));
 
+    // Load Test 専用エンドポイント: Chat と同じハンドラを再利用しつつ admin ロール限定。
+    // Load Test は LB 経由で実推論を大量発行する運用ツールのため、viewer からの過負荷を防ぐ。
+    // ミドルウェア順は dashboard_audit_routes を踏襲（jwt_auth で Claims を設定 → admin_role で判定）。
+    let dashboard_playground_loadtest_routes = Router::new()
+        .route(
+            "/dashboard/playground/load-test/chat/completions",
+            post(openai::dashboard_playground_chat_completions),
+        )
+        .layer(DefaultBodyLimit::max(OPENAI_BODY_LIMIT_BYTES))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::require_password_changed_middleware,
+        ))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::csrf_protect_middleware,
+        ))
+        .layer(middleware::from_fn(
+            crate::auth::middleware::require_admin_role_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth::middleware::require_jwt_auth_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.inference_gate.clone(),
+            crate::inference_gate::inference_gate_middleware,
+        ));
+
     // 監査ログAPI (SPEC-8301d106): adminロールのみ
     let dashboard_audit_routes = Router::new()
         .route("/dashboard/audit-logs", get(audit_log::list_audit_logs))
@@ -343,6 +360,11 @@ pub fn create_app(state: AppState) -> Router {
         let dashboard_general_routes = dashboard_general_routes
             .layer(middleware::from_fn(
                 crate::auth::middleware::require_password_changed_middleware,
+            ))
+            // 状態変更系（PUT /dashboard/settings 等）を他の mutation ルートと同様に
+            // Cookie 認証時の CSRF から保護する（ヘッダ認証はミドルウェア側で対象外）
+            .layer(middleware::from_fn(
+                crate::auth::middleware::csrf_protect_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -362,6 +384,7 @@ pub fn create_app(state: AppState) -> Router {
         dashboard_general_routes
             .merge(dashboard_audit_routes)
             .merge(dashboard_playground_routes)
+            .merge(dashboard_playground_loadtest_routes)
     };
 
     // システムAPI（更新状態/適用）
@@ -607,10 +630,6 @@ pub fn create_app(state: AppState) -> Router {
     // NOTE: /api/models (GET) は Admin/Node スコープ共用。
     // 外部クライアントは /v1/models を使用してください（Azure OpenAI 形式の capabilities 付き）。
 
-    // SPEC-e8e9326e: テスト用内部エンドポイント（デバッグビルドのみ）
-    // NOTE: ノード登録ベースのテストは廃止。エンドポイント登録を使用
-    let test_routes = Router::new();
-
     let api_routes = Router::new()
         // 認証不要エンドポイント
         .route("/version", get(system::get_version))
@@ -619,7 +638,6 @@ pub fn create_app(state: AppState) -> Router {
         // 認証エンドポイント（ログインは認証不要）
         .route("/auth/login", post(auth::login))
         .route("/auth/register", post(auth::register))
-        .route("/auth/accept-invitation", post(auth::accept_invitation))
         .merge(auth_routes)
         .merge(system_mutation_routes)
         .merge(dashboard_api_routes)
@@ -627,9 +645,7 @@ pub fn create_app(state: AppState) -> Router {
         .merge(endpoint_routes)
         .merge(playground_proxy_routes)
         .merge(model_registry_routes)
-        .merge(models_list_routes)
-        // デバッグ用テストエンドポイント
-        .merge(test_routes);
+        .merge(models_list_routes);
 
     let dashboard_routes = Router::new()
         .route("/dashboard", get(serve_dashboard_index))
@@ -811,9 +827,14 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_audit_logs_requires_admin_role() {
         let state = test_state().await;
-        let viewer_token =
-            crate::auth::jwt::create_jwt("viewer-user", UserRole::Viewer, &state.jwt_secret, false)
-                .expect("create viewer jwt");
+        let viewer_token = crate::auth::jwt::create_jwt(
+            "viewer-user",
+            UserRole::Viewer,
+            &state.jwt_secret,
+            false,
+            0,
+        )
+        .expect("create viewer jwt");
         let mut app = create_app(state);
 
         let response = app
@@ -899,9 +920,14 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_audit_logs_allows_admin_role() {
         let state = test_state().await;
-        let admin_token =
-            crate::auth::jwt::create_jwt("admin-user", UserRole::Admin, &state.jwt_secret, false)
-                .expect("create admin jwt");
+        let admin_token = crate::auth::jwt::create_jwt(
+            "admin-user",
+            UserRole::Admin,
+            &state.jwt_secret,
+            false,
+            0,
+        )
+        .expect("create admin jwt");
         let mut app = create_app(state);
 
         let response = app

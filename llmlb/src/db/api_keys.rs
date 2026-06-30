@@ -84,7 +84,7 @@ pub async fn find_by_hash(pool: &SqlitePool, key_hash: &str) -> Result<Option<Ap
     .await
     .map_err(|e| LbError::Database(format!("Failed to find API key: {}", e)))?;
 
-    Ok(row.map(|r| r.into_api_key()))
+    row.map(|r| r.into_api_key()).transpose()
 }
 
 /// すべてのAPIキーを取得
@@ -103,7 +103,7 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ApiKey>, LbError> {
     .await
     .map_err(|e| LbError::Database(format!("Failed to list API keys: {}", e)))?;
 
-    Ok(rows.into_iter().map(|r| r.into_api_key()).collect())
+    rows.into_iter().map(|r| r.into_api_key()).collect()
 }
 
 /// 指定ユーザーが発行したAPIキーを取得
@@ -127,7 +127,7 @@ pub async fn list_by_creator(pool: &SqlitePool, created_by: Uuid) -> Result<Vec<
     .await
     .map_err(|e| LbError::Database(format!("Failed to list API keys by creator: {}", e)))?;
 
-    Ok(rows.into_iter().map(|r| r.into_api_key()).collect())
+    rows.into_iter().map(|r| r.into_api_key()).collect()
 }
 
 /// APIキーを更新（名前と有効期限）
@@ -169,7 +169,7 @@ pub async fn update(
     .await
     .map_err(|e| LbError::Database(format!("Failed to find updated API key: {}", e)))?;
 
-    Ok(row.map(|r| r.into_api_key()))
+    row.map(|r| r.into_api_key()).transpose()
 }
 
 /// APIキーを更新（名前と有効期限、発行者限定）
@@ -250,7 +250,7 @@ pub async fn update_by_creator(
     .await
     .map_err(|e| LbError::Database(format!("Failed to find updated API key by creator: {}", e)))?;
 
-    Ok(row.map(|r| r.into_api_key()))
+    row.map(|r| r.into_api_key()).transpose()
 }
 
 /// APIキーを削除
@@ -344,11 +344,27 @@ struct ApiKeyRow {
 }
 
 impl ApiKeyRow {
-    fn into_api_key(self) -> ApiKey {
-        let id = Uuid::parse_str(&self.id).unwrap();
-        let created_by = Uuid::parse_str(&self.created_by).unwrap();
+    /// DB行を `ApiKey` へ変換する。
+    ///
+    /// 認証ホットパス（`find_by_hash`）からも呼ばれるため、不正な行データで
+    /// panic させず `LbError` を返す。`expires_at` のパース失敗のみ無期限扱いで
+    /// 緩和する（致命的でないため）。
+    fn into_api_key(self) -> Result<ApiKey, LbError> {
+        let id = Uuid::parse_str(&self.id)
+            .map_err(|e| LbError::Database(format!("Invalid API key id '{}': {}", self.id, e)))?;
+        let created_by = Uuid::parse_str(&self.created_by).map_err(|e| {
+            LbError::Database(format!(
+                "Invalid API key created_by '{}': {}",
+                self.created_by, e
+            ))
+        })?;
         let created_at = DateTime::parse_from_rfc3339(&self.created_at)
-            .unwrap()
+            .map_err(|e| {
+                LbError::Database(format!(
+                    "Invalid API key created_at '{}': {}",
+                    self.created_at, e
+                ))
+            })?
             .with_timezone(&Utc);
         let expires_at = self.expires_at.as_ref().and_then(|s| {
             DateTime::parse_from_rfc3339(s)
@@ -358,7 +374,7 @@ impl ApiKeyRow {
 
         let permissions = parse_permissions(self.permissions);
 
-        ApiKey {
+        Ok(ApiKey {
             id,
             key_hash: self.key_hash,
             key_prefix: self.key_prefix,
@@ -367,7 +383,7 @@ impl ApiKeyRow {
             created_at,
             expires_at,
             permissions,
-        }
+        })
     }
 }
 

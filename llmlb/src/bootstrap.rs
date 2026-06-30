@@ -3,7 +3,7 @@
 //! データベース接続、レジストリ初期化、ヘルスチェッカー起動など
 //! サーバー起動に必要なコンポーネントの初期化を担当する。
 
-use crate::config::{get_env_with_fallback_or, get_env_with_fallback_parse};
+use crate::config::get_env_with_fallback_parse;
 use crate::lock::ServerLock;
 use crate::{auth, balancer, health, sync, AppState};
 use sqlx::sqlite::SqliteConnectOptions;
@@ -92,6 +92,9 @@ async fn initialize_inner(
 
     // HTTPクライアント（接続プーリング有効）を作成
     let http_client = reqwest::Client::builder()
+        // 接続確立のタイムアウト（応答しないエンドポイントで無期限ハングするのを防ぐ）。
+        // ストリーミングを壊さないよう全体のリクエストタイムアウトは設けない。
+        .connect_timeout(std::time::Duration::from_secs(10))
         .pool_max_idle_per_host(32)
         .pool_idle_timeout(std::time::Duration::from_secs(60))
         .tcp_keepalive(std::time::Duration::from_secs(30))
@@ -110,10 +113,6 @@ async fn initialize_inner(
         .with_load_manager(load_manager.clone())
         .with_interval(health_check_interval_secs);
     endpoint_health_checker.start();
-
-    let load_balancer_mode =
-        get_env_with_fallback_or("LLMLB_LOAD_BALANCER_MODE", "LOAD_BALANCER_MODE", "auto");
-    info!("Load balancer mode: {}", load_balancer_mode);
 
     // リクエスト履歴ストレージを初期化（SQLite使用）
     let request_history = std::sync::Arc::new(
@@ -322,7 +321,6 @@ async fn initialize_inner(
         db_pool,
         jwt_secret,
         http_client,
-        queue_config: crate::config::QueueConfig::from_env(),
         event_bus: {
             let bus = crate::events::create_shared_event_bus();
             update_manager.set_event_bus(bus.clone());

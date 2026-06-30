@@ -442,20 +442,6 @@ impl UpdateManager {
         self.inner.state.read().await.clone()
     }
 
-    /// Force an update check now (ignores TTL cache).
-    ///
-    /// Intended for the dashboard "Check for updates" button.
-    /// **Deprecated**: Use [`check_only`] + [`download_background`] instead.
-    pub async fn check_now(&self) -> Result<UpdateState> {
-        match self.check_and_maybe_download(true).await {
-            Ok(()) => Ok(self.state().await),
-            Err(err) => {
-                self.record_check_failure(err.to_string()).await;
-                Err(err)
-            }
-        }
-    }
-
     /// Check GitHub for a newer release (synchronous, no download).
     ///
     /// This only queries the GitHub Releases API (timeout 5 s) and updates the
@@ -1307,56 +1293,6 @@ impl UpdateManager {
             timeout_at,
         };
         self.notify_state_changed();
-    }
-
-    #[allow(dead_code)]
-    fn spawn_apply_timeout_watchdog(
-        &self,
-        latest: String,
-        method: ApplyMethod,
-        phase: ApplyPhase,
-        timeout: Duration,
-        timeout_message: String,
-    ) {
-        let mgr = self.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(timeout).await;
-
-            let should_fail = {
-                let st = mgr.inner.state.read().await;
-                matches!(
-                    &*st,
-                    UpdateState::Applying {
-                        latest: applying_latest,
-                        method: applying_method,
-                        phase: applying_phase,
-                        ..
-                    } if applying_latest == &latest
-                        && applying_method == &method
-                        && applying_phase == &phase
-                )
-            };
-
-            if !should_fail {
-                return;
-            }
-
-            mgr.inner.gate.stop_rejecting();
-            *mgr.inner.state.write().await = UpdateState::Failed {
-                latest: Some(latest.clone()),
-                release_url: None,
-                message: timeout_message.clone(),
-                failed_at: Utc::now(),
-            };
-            mgr.notify_state_changed();
-            tracing::warn!(
-                latest = %latest,
-                method = ?method,
-                phase = ?phase,
-                timeout_secs = timeout.as_secs(),
-                "update apply phase timed out"
-            );
-        });
     }
 
     async fn apply_flow(&self, mode: ApplyRequestMode) -> Result<()> {
@@ -2575,59 +2511,6 @@ mod tests {
         assert!(json.get("phase_message").is_some());
         assert!(json.get("started_at").is_some());
         assert!(json.get("timeout_at").is_none());
-    }
-
-    #[tokio::test]
-    async fn apply_timeout_watchdog_transitions_to_failed() {
-        use tokio::time;
-
-        time::pause();
-
-        let gate = InferenceGate::default();
-        let manager = UpdateManager::new(
-            reqwest::Client::new(),
-            gate.clone(),
-            ShutdownController::default(),
-        )
-        .expect("create update manager");
-
-        manager
-            .set_applying_state(
-                "4.5.1",
-                ApplyMethod::WindowsSetup,
-                ApplyPhase::RunningInstaller,
-                Utc::now(),
-                Some(Utc::now() + chrono::Duration::seconds(600)),
-            )
-            .await;
-        gate.start_rejecting();
-
-        manager.spawn_apply_timeout_watchdog(
-            "4.5.1".to_string(),
-            ApplyMethod::WindowsSetup,
-            ApplyPhase::RunningInstaller,
-            Duration::from_secs(10),
-            "Installer timed out after 600s".to_string(),
-        );
-
-        tokio::task::yield_now().await;
-        time::advance(Duration::from_secs(11)).await;
-        tokio::task::yield_now().await;
-
-        let state = manager.state().await;
-        match state {
-            UpdateState::Failed { message, .. } => {
-                assert!(
-                    message.contains("timed out"),
-                    "unexpected failure message: {message}"
-                );
-            }
-            other => panic!("expected failed state after watchdog timeout, got {other:?}"),
-        }
-        assert!(
-            !gate.is_rejecting(),
-            "gate should stop rejecting after apply timeout watchdog"
-        );
     }
 
     // =======================================================================

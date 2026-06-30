@@ -28,7 +28,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::{Stream, StreamExt};
 use serde_json::{json, Map, Value};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
@@ -38,11 +38,25 @@ use uuid::Uuid;
 const UNSPECIFIED_IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 const ANTHROPIC_CLOUD_ENDPOINT_ID: &str = "00000000-0000-0000-0000-00000000c003";
 
+/// 非ストリーミングの Anthropic クラウド転送に適用する全体タイムアウト（秒）。
+///
+/// 共有 http_client には全体タイムアウトが無いため、応答しないクラウドで
+/// 無期限ハングするのを防ぐ。ストリーミング経路にはストリームが途中で切れるため付与しない。
+const ANTHROPIC_CLOUD_TIMEOUT_SECS: u64 = 300;
+
 #[derive(Debug)]
 struct ConvertedAnthropicRequest {
     openai_payload: Value,
     request_text: String,
     stream: bool,
+}
+
+/// ストリーミング中に断片化された tool_call を index 単位で蓄積する
+#[derive(Default)]
+struct StreamingToolCall {
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
 }
 
 struct AnthropicStreamTracker {
@@ -58,9 +72,15 @@ struct AnthropicStreamTracker {
     load_manager: crate::balancer::LoadManager,
     event_bus: crate::events::SharedEventBus,
     sent_message_start: bool,
-    sent_content_block_start: bool,
-    sent_content_block_stop: bool,
     sent_message_stop: bool,
+    /// 次に割り当てる content block index（0始まり連番）
+    next_block_index: usize,
+    /// 現在開いているテキストブロックの index（無ければ None）
+    open_text_index: Option<usize>,
+    /// tool_call を index 単位で蓄積し、終了時に単一オープンで逐次出力する
+    tool_buffer: BTreeMap<u64, StreamingToolCall>,
+    /// tool_use ブロックを1つ以上出力したか（stop_reason 補正用）
+    emitted_tool_use: bool,
     response_id: String,
     public_model: String,
     stop_reason: Option<&'static str>,
@@ -178,6 +198,12 @@ async fn proxy_anthropic_cloud_messages(
         .json(&upstream_body);
     if let Some(beta) = anthropic_beta {
         builder = builder.header("anthropic-beta", beta);
+    }
+    // 非ストリーミングは有界レスポンスのため全体タイムアウトを付与する。
+    // ストリーミングは connect_timeout（共有 client）のみで担保し、
+    // 全体タイムアウトでストリームが途中で切れるのを避ける。
+    if !stream {
+        builder = builder.timeout(std::time::Duration::from_secs(ANTHROPIC_CLOUD_TIMEOUT_SECS));
     }
 
     let upstream = match builder.send().await {
@@ -322,96 +348,49 @@ async fn proxy_local_anthropic_messages(
         }
     }
 
-    let queue_config = state.queue_config;
     let request_type = RequestType::AnthropicMessages;
     let tps_api_kind = Some(TpsApiKind::ChatCompletions);
     let mut queued_wait_ms = None;
 
-    let endpoint = match select_available_endpoint_with_queue_for_model(
-        state,
-        queue_config,
-        &resolved_model,
-        tps_api_kind,
-    )
-    .await
-    {
-        Ok(QueueSelection::Ready {
-            endpoint,
-            queued_wait_ms: wait_ms,
-        }) => {
-            queued_wait_ms = wait_ms;
-            *endpoint
-        }
-        Ok(QueueSelection::CapacityExceeded) => {
-            let message = "Request queue is full".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    0,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            let retry_after = queue_config.timeout.as_secs().max(1);
-            return Ok(anthropic_error_response_with_retry_after(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limit_error",
-                &message,
-                Some(retry_after),
-            ));
-        }
-        Ok(QueueSelection::Timeout { waited_ms }) => {
-            let message = "Queue wait timeout".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    waited_ms as u64,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            return Ok(anthropic_error_response(
-                StatusCode::GATEWAY_TIMEOUT,
-                "api_error",
-                message,
-            ));
-        }
-        Err(err) => {
-            let message = if matches!(err, LbError::NoCapableEndpoints(_)) {
-                format!("No available endpoints support model: {}", model)
-            } else {
-                format!("Endpoint selection failed: {}", err)
-            };
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    queued_wait_ms.unwrap_or(0) as u64,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            if matches!(err, LbError::NoCapableEndpoints(_)) {
-                return Ok(anthropic_error_response(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "api_error",
-                    message,
-                ));
+    let endpoint =
+        match select_available_endpoint_with_queue_for_model(state, &resolved_model, tps_api_kind)
+            .await
+        {
+            Ok(QueueSelection::Ready {
+                endpoint,
+                queued_wait_ms: wait_ms,
+            }) => {
+                queued_wait_ms = wait_ms;
+                *endpoint
             }
-            return Err(err.into());
-        }
-    };
+            Err(err) => {
+                let message = if matches!(err, LbError::NoCapableEndpoints(_)) {
+                    format!("No available endpoints support model: {}", model)
+                } else {
+                    format!("Endpoint selection failed: {}", err)
+                };
+                save_request_record(
+                    state.request_history.clone(),
+                    RequestResponseRecord::error(
+                        model.clone(),
+                        request_type,
+                        request_body,
+                        message.clone(),
+                        queued_wait_ms.unwrap_or(0) as u64,
+                        client_ip,
+                        api_key_id,
+                    ),
+                );
+                if matches!(err, LbError::NoCapableEndpoints(_)) {
+                    return Ok(anthropic_error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "api_error",
+                        message,
+                    ));
+                }
+                return Err(err.into());
+            }
+        };
 
     let endpoint_id = endpoint.id;
     let endpoint_name = endpoint.name.clone();
@@ -457,7 +436,6 @@ async fn proxy_local_anthropic_messages(
         &endpoint,
         "/v1/chat/completions",
         body_bytes,
-        true,
     )
     .await
     {
@@ -831,9 +809,11 @@ fn transform_openai_streaming_response_to_anthropic(
         load_manager,
         event_bus,
         sent_message_start: false,
-        sent_content_block_start: false,
-        sent_content_block_stop: false,
         sent_message_stop: false,
+        next_block_index: 0,
+        open_text_index: None,
+        tool_buffer: BTreeMap::new(),
+        emitted_tool_use: false,
         response_id: format!("msg_{}", Uuid::new_v4().simple()),
         public_model: model_id,
         stop_reason: None,
@@ -902,6 +882,10 @@ impl AnthropicStreamTracker {
     }
 
     fn process_upstream_line(&mut self, line: &str) {
+        // メッセージ確定後は一切のイベントを発行しない（[DONE] 後に届くデータ等）
+        if self.sent_message_stop {
+            return;
+        }
         self.accumulator.process_chunk(line);
 
         let trimmed = line.trim();
@@ -926,6 +910,27 @@ impl AnthropicStreamTracker {
             self.response_id = id.replace("chatcmpl-", "msg_").replace("chatcmpl", "msg");
         }
 
+        // upstream のエラーチャンクを握り潰さず Anthropic の error イベントとして配信する
+        if let Some(error_obj) = json.get("error") {
+            self.ensure_message_start();
+            let message = error_obj
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("upstream error")
+                .to_string();
+            self.emit_event(
+                "error",
+                json!({
+                    "type": "error",
+                    "error": { "type": "api_error", "message": message }
+                }),
+            );
+            let usage = self.accumulator.finalize();
+            self.record_stats_once(false, usage);
+            self.sent_message_stop = true;
+            return;
+        }
+
         self.ensure_message_start();
 
         if let Some(choice) = json
@@ -939,13 +944,13 @@ impl AnthropicStreamTracker {
                 .and_then(|delta| delta.get("content"))
                 .and_then(Value::as_str)
             {
-                self.ensure_content_block_start();
+                let text_index = self.ensure_text_block_open();
                 if !content.is_empty() {
                     self.emit_event(
                         "content_block_delta",
                         json!({
                             "type": "content_block_delta",
-                            "index": 0,
+                            "index": text_index,
                             "delta": {
                                 "type": "text_delta",
                                 "text": content
@@ -960,43 +965,39 @@ impl AnthropicStreamTracker {
                 .and_then(Value::as_array)
             {
                 if !tool_calls.is_empty() {
-                    // Close text content block if it was open
-                    if self.sent_content_block_start && !self.sent_content_block_stop {
-                        self.sent_content_block_stop = true;
+                    // 開いているテキストブロックを閉じてから tool を蓄積する。
+                    // Anthropic の「同時に開く content block は1つ」契約を守るため、
+                    // tool_use ブロックは finish_stream で単一オープンに逐次出力する。
+                    if let Some(text_index) = self.open_text_index.take() {
                         self.emit_event(
                             "content_block_stop",
-                            json!({
-                                "type": "content_block_stop",
-                                "index": 0
-                            }),
+                            json!({ "type": "content_block_stop", "index": text_index }),
                         );
                     }
 
-                    // Emit tool_use content blocks
-                    for (idx, tool_call) in tool_calls.iter().enumerate() {
-                        if let Some(tool_use) =
-                            convert_openai_tool_call_to_anthropic_tool_use(tool_call)
-                        {
-                            let tool_index = 1 + idx; // Start from index 1 (0 is for text)
-
-                            // Start tool_use content block
-                            self.emit_event(
-                                "content_block_start",
-                                json!({
-                                    "type": "content_block_start",
-                                    "index": tool_index,
-                                    "content_block": tool_use
-                                }),
-                            );
-
-                            // Immediately stop tool_use content block (tools are complete in delta)
-                            self.emit_event(
-                                "content_block_stop",
-                                json!({
-                                    "type": "content_block_stop",
-                                    "index": tool_index
-                                }),
-                            );
+                    // tool_callはデルタ間で断片化される（最初のデルタにid+name、後続に引数の断片）。
+                    // index 単位で id/name/arguments を蓄積する（interleave/再出現にも頑健）。
+                    for tool_call in tool_calls {
+                        let oai_index = tool_call.get("index").and_then(Value::as_u64).unwrap_or(0);
+                        let func = tool_call.get("function");
+                        let entry = self.tool_buffer.entry(oai_index).or_default();
+                        if entry.id.is_none() {
+                            if let Some(id) = tool_call.get("id").and_then(Value::as_str) {
+                                entry.id = Some(id.to_string());
+                            }
+                        }
+                        if entry.name.is_none() {
+                            if let Some(name) =
+                                func.and_then(|f| f.get("name")).and_then(Value::as_str)
+                            {
+                                entry.name = Some(name.to_string());
+                            }
+                        }
+                        // arguments は文字列・オブジェクトいずれの形でも取りこぼさない
+                        match func.and_then(|f| f.get("arguments")) {
+                            Some(Value::String(s)) => entry.arguments.push_str(s),
+                            Some(v) if !v.is_null() => entry.arguments.push_str(&v.to_string()),
+                            _ => {}
                         }
                     }
                 }
@@ -1034,22 +1035,26 @@ impl AnthropicStreamTracker {
         );
     }
 
-    fn ensure_content_block_start(&mut self) {
-        if self.sent_content_block_start {
-            return;
+    /// テキストブロックを開く（未オープンなら次の連番 index を割り当てて開始）。開いている index を返す。
+    fn ensure_text_block_open(&mut self) -> usize {
+        if let Some(idx) = self.open_text_index {
+            return idx;
         }
-        self.sent_content_block_start = true;
+        let idx = self.next_block_index;
+        self.next_block_index += 1;
+        self.open_text_index = Some(idx);
         self.emit_event(
             "content_block_start",
             json!({
                 "type": "content_block_start",
-                "index": 0,
+                "index": idx,
                 "content_block": {
                     "type": "text",
                     "text": ""
                 }
             }),
         );
+        idx
     }
 
     fn finish_stream(&mut self) {
@@ -1058,18 +1063,76 @@ impl AnthropicStreamTracker {
         }
 
         self.ensure_message_start();
-        self.ensure_content_block_start();
 
-        if !self.sent_content_block_stop {
-            self.sent_content_block_stop = true;
+        // 開いているテキストブロックを閉じる
+        if let Some(text_index) = self.open_text_index.take() {
             self.emit_event(
                 "content_block_stop",
-                json!({
-                    "type": "content_block_stop",
-                    "index": 0
-                }),
+                json!({ "type": "content_block_stop", "index": text_index }),
             );
         }
+
+        // テキストも tool も無い空応答の場合は空テキストブロック(index 0)を保証する
+        if self.next_block_index == 0 && self.tool_buffer.is_empty() {
+            let text_index = self.ensure_text_block_open();
+            self.open_text_index = None;
+            self.emit_event(
+                "content_block_stop",
+                json!({ "type": "content_block_stop", "index": text_index }),
+            );
+        }
+
+        // 蓄積した tool_use ブロックを単一オープンで逐次出力する（start→delta→stop）
+        let buffered: Vec<StreamingToolCall> = std::mem::take(&mut self.tool_buffer)
+            .into_values()
+            .collect();
+        for call in buffered {
+            let block_index = self.next_block_index;
+            self.next_block_index += 1;
+            let tool_id = call
+                .id
+                .unwrap_or_else(|| format!("toolu_{}", Uuid::new_v4().simple()));
+            let tool_name = call.name.unwrap_or_default();
+            self.emit_event(
+                "content_block_start",
+                json!({
+                    "type": "content_block_start",
+                    "index": block_index,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": tool_id,
+                        "name": tool_name,
+                        "input": {}
+                    }
+                }),
+            );
+            if !call.arguments.is_empty() {
+                self.emit_event(
+                    "content_block_delta",
+                    json!({
+                        "type": "content_block_delta",
+                        "index": block_index,
+                        "delta": {
+                            "type": "input_json_delta",
+                            "partial_json": call.arguments
+                        }
+                    }),
+                );
+            }
+            self.emit_event(
+                "content_block_stop",
+                json!({ "type": "content_block_stop", "index": block_index }),
+            );
+            self.emitted_tool_use = true;
+        }
+
+        // tool_use を出力した場合は stop_reason を tool_use に補正する
+        let effective_stop_reason =
+            if self.emitted_tool_use && matches!(self.stop_reason, None | Some("end_turn")) {
+                "tool_use"
+            } else {
+                self.stop_reason.unwrap_or("end_turn")
+            };
 
         let usage = self.accumulator.finalize();
         self.emit_event(
@@ -1077,7 +1140,7 @@ impl AnthropicStreamTracker {
             json!({
                 "type": "message_delta",
                 "delta": {
-                    "stop_reason": self.stop_reason.unwrap_or("end_turn"),
+                    "stop_reason": effective_stop_reason,
                     "stop_sequence": self.stop_sequence
                 },
                 "usage": {
@@ -1119,6 +1182,63 @@ impl AnthropicStreamTracker {
             self.load_manager.clone(),
             self.event_bus.clone(),
         );
+    }
+}
+
+impl Drop for AnthropicStreamTracker {
+    /// クライアント切断などで try_unfold が完走せず drop された場合のフォールバック。
+    /// stats_recorded が false のまま破棄されると統計が漏れるため、ここで記録する。
+    /// （proxy.rs の TpsTrackingState::drop を踏襲）
+    fn drop(&mut self) {
+        if self.stats_recorded {
+            return;
+        }
+
+        // 未処理の行バッファをトークン集計へ反映してから確定する。
+        if !self.upstream_line_buffer.is_empty() {
+            let pending = std::mem::take(&mut self.upstream_line_buffer);
+            self.accumulator
+                .process_chunk(pending.trim_end_matches('\r'));
+        }
+        let usage = self.accumulator.finalize();
+
+        // record_endpoint_request_stats は内部で tokio::spawn するため、ランタイム外で
+        // drop されると panic しうる。Handle の存在を確認してから記録する。
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.record_stats_once(true, usage);
+        } else {
+            tracing::warn!(
+                endpoint_id = %self.endpoint_id,
+                model_id = %self.model_id,
+                "Anthropic streaming tracker dropped without runtime; skipping stats fallback"
+            );
+        }
+    }
+}
+
+/// Anthropic の tool_result.content（文字列または content ブロック配列）を
+/// OpenAI tool メッセージ用の文字列へ変換する。配列形式（Claude Code が常用）でも
+/// 中身を欠落させない。
+fn anthropic_tool_result_content_to_string(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(items)) => {
+            let mut parts = Vec::new();
+            for item in items {
+                match item.get("type").and_then(Value::as_str) {
+                    Some("text") => {
+                        if let Some(t) = item.get("text").and_then(Value::as_str) {
+                            parts.push(t.to_string());
+                        }
+                    }
+                    // text 以外（image 等）は JSON で温存して情報欠落を防ぐ
+                    _ => parts.push(item.to_string()),
+                }
+            }
+            parts.join("\n")
+        }
+        Some(v) if !v.is_null() => v.to_string(),
+        _ => String::new(),
     }
 }
 
@@ -1188,8 +1308,8 @@ fn anthropic_request_to_openai(payload: &Value) -> Result<ConvertedAnthropicRequ
             )
         })?;
 
-        // Handle assistant messages with tool_use content blocks (for future tool use handling)
-        // For now, we skip processing tool_use blocks since OpenAI doesn't have them in messages
+        // assistant メッセージ内の tool_use ブロックを OpenAI の assistant + tool_calls に変換する。
+        // 併記された text も欠落させない（マルチターンのツール会話の整合性に必要）。
         if role == "assistant" {
             if let Some(content_array) = content.as_array() {
                 let has_tool_use = content_array
@@ -1197,8 +1317,51 @@ fn anthropic_request_to_openai(payload: &Value) -> Result<ConvertedAnthropicRequ
                     .any(|item| item.get("type").and_then(Value::as_str) == Some("tool_use"));
 
                 if has_tool_use {
-                    // Skip processing assistant tool_use messages for now
-                    // They will be handled through tool_calls in the response
+                    let mut text_parts = Vec::new();
+                    let mut tool_calls = Vec::new();
+                    for item in content_array {
+                        match item.get("type").and_then(Value::as_str) {
+                            Some("text") => {
+                                if let Some(t) = item.get("text").and_then(Value::as_str) {
+                                    text_parts.push(t.to_string());
+                                }
+                            }
+                            Some("tool_use") => {
+                                let id = item.get("id").and_then(Value::as_str).unwrap_or("");
+                                let name =
+                                    item.get("name").and_then(Value::as_str).unwrap_or_default();
+                                // OpenAI は arguments を JSON 文字列で要求する
+                                let arguments = item
+                                    .get("input")
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_else(|| "{}".to_string());
+                                tool_calls.push(json!({
+                                    "id": id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": name,
+                                        "arguments": arguments
+                                    }
+                                }));
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    let joined_text = text_parts.join("");
+                    let mut assistant_msg = Map::new();
+                    assistant_msg.insert("role".to_string(), json!("assistant"));
+                    assistant_msg.insert(
+                        "content".to_string(),
+                        if joined_text.is_empty() {
+                            Value::Null
+                        } else {
+                            json!(joined_text)
+                        },
+                    );
+                    assistant_msg.insert("tool_calls".to_string(), Value::Array(tool_calls));
+                    openai_messages.push(Value::Object(assistant_msg));
+                    request_text_parts.push(format!("assistant(tool_use): {}", joined_text));
                     continue;
                 }
             }
@@ -1212,30 +1375,43 @@ fn anthropic_request_to_openai(payload: &Value) -> Result<ConvertedAnthropicRequ
                     .any(|item| item.get("type").and_then(Value::as_str) == Some("tool_result"));
 
                 if has_tool_result {
-                    // Convert Anthropic tool_result messages to OpenAI tool messages
+                    // Anthropic tool_result を OpenAI tool メッセージへ変換する。
+                    // 併記された text ブロックは破棄せず、後続の user メッセージとして保持する。
+                    let mut user_text_parts = Vec::new();
                     for content_item in content_array {
-                        if let Some("tool_result") =
-                            content_item.get("type").and_then(Value::as_str)
-                        {
-                            let tool_use_id = content_item
-                                .get("tool_use_id")
-                                .and_then(Value::as_str)
-                                .unwrap_or("unknown");
-                            let result_content = content_item
-                                .get("content")
-                                .and_then(Value::as_str)
-                                .unwrap_or("");
-
-                            openai_messages.push(json!({
-                                "role": "tool",
-                                "tool_call_id": tool_use_id,
-                                "content": result_content
-                            }));
-                            request_text_parts
-                                .push(format!("tool_result[{}]: {}", tool_use_id, result_content));
+                        match content_item.get("type").and_then(Value::as_str) {
+                            Some("tool_result") => {
+                                let tool_use_id = content_item
+                                    .get("tool_use_id")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("unknown");
+                                let result_content = anthropic_tool_result_content_to_string(
+                                    content_item.get("content"),
+                                );
+                                openai_messages.push(json!({
+                                    "role": "tool",
+                                    "tool_call_id": tool_use_id,
+                                    "content": result_content
+                                }));
+                                request_text_parts.push(format!(
+                                    "tool_result[{}]: {}",
+                                    tool_use_id, result_content
+                                ));
+                            }
+                            Some("text") => {
+                                if let Some(t) = content_item.get("text").and_then(Value::as_str) {
+                                    user_text_parts.push(t.to_string());
+                                }
+                            }
+                            _ => {}
                         }
                     }
-                    continue; // Skip normal text processing for tool_result messages
+                    if !user_text_parts.is_empty() {
+                        let joined = user_text_parts.join("\n");
+                        openai_messages.push(json!({ "role": "user", "content": joined }));
+                        request_text_parts.push(format!("user: {}", joined));
+                    }
+                    continue; // tool_result メッセージは通常のテキスト処理をスキップ
                 }
             }
         }
@@ -1650,23 +1826,6 @@ fn anthropic_error_response(
         })),
     )
         .into_response()
-}
-
-fn anthropic_error_response_with_retry_after(
-    status: StatusCode,
-    error_type: &str,
-    message: &str,
-    retry_after: Option<u64>,
-) -> Response {
-    let mut response = anthropic_error_response(status, error_type, message);
-    if let Some(retry_after) = retry_after {
-        if let Ok(value) = HeaderValue::from_str(&retry_after.to_string()) {
-            response
-                .headers_mut()
-                .insert(HeaderName::from_static("retry-after"), value);
-        }
-    }
-    response
 }
 
 fn anthropic_error_from_lb_error(err: &LbError) -> Response {
@@ -2095,6 +2254,38 @@ mod tests {
 
         assert_eq!(tool_message["tool_call_id"], "toolu_123");
         assert_eq!(tool_message["content"], "file1.txt\nfile2.txt");
+
+        // assistant の tool_use が破棄されず assistant + tool_calls に変換されていること
+        let assistant_with_tools = messages
+            .iter()
+            .find(|m| {
+                m.get("role").and_then(Value::as_str) == Some("assistant")
+                    && m.get("tool_calls").is_some()
+            })
+            .expect("assistant tool_use must convert to assistant + tool_calls, not be dropped");
+        let tool_calls = assistant_with_tools["tool_calls"]
+            .as_array()
+            .expect("tool_calls array");
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0]["id"], "toolu_123");
+        assert_eq!(tool_calls[0]["function"]["name"], "bash");
+        let args: Value =
+            serde_json::from_str(tool_calls[0]["function"]["arguments"].as_str().unwrap()).unwrap();
+        assert_eq!(args["command"], "ls");
+
+        // 順序整合: assistant(tool_calls) が tool 結果メッセージより前に出現する
+        let assistant_pos = messages
+            .iter()
+            .position(|m| m.get("tool_calls").is_some())
+            .unwrap();
+        let tool_pos = messages
+            .iter()
+            .position(|m| m.get("role").and_then(Value::as_str) == Some("tool"))
+            .unwrap();
+        assert!(
+            assistant_pos < tool_pos,
+            "assistant tool_calls must precede the tool result message"
+        );
     }
 
     #[test]
@@ -2154,11 +2345,299 @@ mod tests {
         assert_eq!(response["stop_reason"], "tool_use");
     }
 
-    #[test]
-    fn test_tool_use_streaming() {
-        // Test that streaming tool call events are properly transformed
-        // This test is a placeholder for streaming transformation logic
-        // TODO: Implement streaming transformation and associated tests
+    #[tokio::test]
+    #[serial]
+    async fn streaming_tool_use_accumulates_fragmented_arguments() {
+        // OpenAI/llama.cpp はtool_callをデルタ間で断片化して送る。
+        // 引数を捨てずに input_json_delta として蓄積・配信することを検証する。
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let mut tracker = AnthropicStreamTracker {
+            upstream: Box::pin(futures::stream::empty::<Result<Bytes, reqwest::Error>>()),
+            upstream_line_buffer: String::new(),
+            output_queue: VecDeque::new(),
+            accumulator: StreamingTokenAccumulator::new("test-model"),
+            endpoint_id: Uuid::new_v4(),
+            model_id: "test-model".to_string(),
+            endpoint_type: EndpointType::OpenaiCompatible,
+            request_started_at: Instant::now(),
+            endpoint_registry: state.endpoint_registry.clone(),
+            load_manager: state.load_manager.clone(),
+            event_bus: state.event_bus.clone(),
+            sent_message_start: false,
+            sent_message_stop: false,
+            next_block_index: 0,
+            open_text_index: None,
+            tool_buffer: BTreeMap::new(),
+            emitted_tool_use: false,
+            response_id: "msg_test".to_string(),
+            public_model: "test-model".to_string(),
+            stop_reason: None,
+            stop_sequence: None,
+            stats_recorded: false,
+        };
+
+        tracker.process_upstream_line(
+            r#"data: {"id":"chatcmpl-1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"location\":"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"NYC\"}"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
+        );
+        tracker.finish_stream();
+
+        let events = parse_sse_events(&tracker);
+
+        // tool 単独ストリームでも先頭ブロックは index 0 の tool_use（index 0 欠番の回帰防止）
+        let (first_index, first_type) = first_content_block(&events);
+        assert_eq!(
+            (first_index, first_type.as_str()),
+            (0, "tool_use"),
+            "tool-only stream must start at content block index 0 as tool_use, got ({first_index}, {first_type})"
+        );
+        assert_content_blocks_well_formed(&events);
+
+        // tool_use の id / name が保持されている
+        let (_, start_block) = events
+            .iter()
+            .find(|(name, _)| name == "content_block_start")
+            .expect("content_block_start present");
+        assert_eq!(start_block["content_block"]["type"], "tool_use");
+        assert_eq!(start_block["content_block"]["name"], "get_weather");
+        assert_eq!(start_block["content_block"]["id"], "call_abc");
+
+        // 全 input_json_delta の partial_json を結合して引数JSONを復元する
+        let reconstructed = reconstruct_tool_arguments(&events);
+        assert_eq!(
+            reconstructed, r#"{"location":"NYC"}"#,
+            "tool arguments were not accumulated correctly: {reconstructed:?}"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn streaming_text_then_interleaved_parallel_tools() {
+        // text の後に、引数フラグメントが index を跨いで interleave される並列 tool_call が来ても、
+        // index 単位で正しく結合され、単一オープンの逐次 tool_use ブロックとして出力されることを検証する。
+        let _guard = TEST_LOCK.lock().await;
+        let (state, _dir) = create_state_with_tempdir().await;
+
+        let mut tracker = AnthropicStreamTracker {
+            upstream: Box::pin(futures::stream::empty::<Result<Bytes, reqwest::Error>>()),
+            upstream_line_buffer: String::new(),
+            output_queue: VecDeque::new(),
+            accumulator: StreamingTokenAccumulator::new("test-model"),
+            endpoint_id: Uuid::new_v4(),
+            model_id: "test-model".to_string(),
+            endpoint_type: EndpointType::OpenaiCompatible,
+            request_started_at: Instant::now(),
+            endpoint_registry: state.endpoint_registry.clone(),
+            load_manager: state.load_manager.clone(),
+            event_bus: state.event_bus.clone(),
+            sent_message_start: false,
+            sent_message_stop: false,
+            next_block_index: 0,
+            open_text_index: None,
+            tool_buffer: BTreeMap::new(),
+            emitted_tool_use: false,
+            response_id: "msg_test".to_string(),
+            public_model: "test-model".to_string(),
+            stop_reason: None,
+            stop_sequence: None,
+            stats_recorded: false,
+        };
+
+        tracker.process_upstream_line(r#"data: {"choices":[{"delta":{"content":"thinking"}}]}"#);
+        // index 0 と 1 を開き、引数を 0,1,0,1 と交互に流す
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c0","type":"function","function":{"name":"f0","arguments":"{\"a\":"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"c1","type":"function","function":{"name":"f1","arguments":"{\"b\":"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"1}"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"2}"}}]}}]}"#,
+        );
+        tracker.process_upstream_line(
+            r#"data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
+        );
+        tracker.finish_stream();
+
+        let events = parse_sse_events(&tracker);
+        assert_content_blocks_well_formed(&events);
+
+        // ブロックは text(0) → tool_use(1) → tool_use(2) の単一オープン逐次
+        let blocks: Vec<(u64, String)> = events
+            .iter()
+            .filter(|(name, _)| name == "content_block_start")
+            .map(|(_, j)| {
+                (
+                    j["index"].as_u64().unwrap(),
+                    j["content_block"]["type"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            blocks,
+            vec![
+                (0, "text".to_string()),
+                (1, "tool_use".to_string()),
+                (2, "tool_use".to_string())
+            ],
+            "blocks must be text(0) -> tool_use(1) -> tool_use(2): {blocks:?}"
+        );
+
+        // 各 tool の id/name と interleave 結合された引数を検証
+        let tool_starts: Vec<&Value> = events
+            .iter()
+            .filter(|(name, j)| {
+                name == "content_block_start"
+                    && j["content_block"]["type"].as_str() == Some("tool_use")
+            })
+            .map(|(_, j)| j)
+            .collect();
+        assert_eq!(tool_starts[0]["content_block"]["id"], "c0");
+        assert_eq!(tool_starts[0]["content_block"]["name"], "f0");
+        assert_eq!(tool_starts[1]["content_block"]["id"], "c1");
+        assert_eq!(tool_starts[1]["content_block"]["name"], "f1");
+
+        // input_json_delta を index 別に結合
+        let mut args_by_index: std::collections::BTreeMap<u64, String> = Default::default();
+        for (name, j) in &events {
+            if name == "content_block_delta"
+                && j["delta"]["type"].as_str() == Some("input_json_delta")
+            {
+                let idx = j["index"].as_u64().unwrap();
+                args_by_index
+                    .entry(idx)
+                    .or_default()
+                    .push_str(j["delta"]["partial_json"].as_str().unwrap());
+            }
+        }
+        assert_eq!(
+            args_by_index.get(&1).map(String::as_str),
+            Some(r#"{"a":1}"#)
+        );
+        assert_eq!(
+            args_by_index.get(&2).map(String::as_str),
+            Some(r#"{"b":2}"#)
+        );
+    }
+
+    /// emit された SSE ペイロードを (event名, data JSON) の列にパースする。
+    fn parse_sse_events(tracker: &AnthropicStreamTracker) -> Vec<(String, Value)> {
+        tracker
+            .output_queue
+            .iter()
+            .filter_map(|b| {
+                let payload = String::from_utf8_lossy(b);
+                let name = payload
+                    .lines()
+                    .find(|l| l.starts_with("event: "))?
+                    .trim_start_matches("event: ")
+                    .to_string();
+                let data = payload.lines().find(|l| l.starts_with("data: "))?;
+                let json = serde_json::from_str::<Value>(data.trim_start_matches("data: ")).ok()?;
+                Some((name, json))
+            })
+            .collect()
+    }
+
+    fn first_content_block(events: &[(String, Value)]) -> (u64, String) {
+        let (_, j) = events
+            .iter()
+            .find(|(name, _)| name == "content_block_start")
+            .expect("at least one content_block_start");
+        (
+            j["index"].as_u64().unwrap(),
+            j["content_block"]["type"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
+        )
+    }
+
+    /// content_block_start の index が 0 始まり連番で、各 start に対応する stop が
+    /// ちょうど1回あり、message_stop の後にイベントが無いことを検証する。
+    fn assert_content_blocks_well_formed(events: &[(String, Value)]) {
+        // Anthropic 契約: 同時に開く content block は常に1つ。各 start は 0 始まり連番で、
+        // 対応する stop で閉じてから次を start する。delta は開いているブロックにのみ送る。
+        let mut open_block: Option<usize> = None;
+        let mut next_expected = 0usize;
+        let mut seen_message_stop = false;
+        for (name, j) in events {
+            assert!(
+                !seen_message_stop,
+                "no event may follow message_stop, got {name}"
+            );
+            match name.as_str() {
+                "content_block_start" => {
+                    let idx = j["index"].as_u64().unwrap() as usize;
+                    assert!(
+                        open_block.is_none(),
+                        "content_block_start({idx}) while block {open_block:?} is still open (overlap)"
+                    );
+                    assert_eq!(
+                        idx, next_expected,
+                        "content_block_start index must be 0-based contiguous"
+                    );
+                    open_block = Some(idx);
+                    next_expected += 1;
+                }
+                "content_block_delta" => {
+                    let idx = j["index"].as_u64().unwrap() as usize;
+                    assert_eq!(
+                        open_block,
+                        Some(idx),
+                        "content_block_delta({idx}) must target the currently open block {open_block:?}"
+                    );
+                }
+                "content_block_stop" => {
+                    let idx = j["index"].as_u64().unwrap() as usize;
+                    assert_eq!(
+                        open_block,
+                        Some(idx),
+                        "content_block_stop({idx}) must close the currently open block {open_block:?}"
+                    );
+                    open_block = None;
+                }
+                "message_stop" => seen_message_stop = true,
+                _ => {}
+            }
+        }
+        assert!(
+            open_block.is_none(),
+            "a content block was left open: {open_block:?}"
+        );
+        assert!(seen_message_stop, "stream must end with message_stop");
+    }
+
+    fn reconstruct_tool_arguments(events: &[(String, Value)]) -> String {
+        let mut out = String::new();
+        for (_, j) in events {
+            if j.get("delta")
+                .and_then(|d| d.get("type"))
+                .and_then(Value::as_str)
+                == Some("input_json_delta")
+            {
+                if let Some(frag) = j["delta"]["partial_json"].as_str() {
+                    out.push_str(frag);
+                }
+            }
+        }
+        out
     }
 
     #[tokio::test]

@@ -2,6 +2,9 @@ import { ApiError, type ChatMessage } from '@/lib/api'
 
 export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 
+/** 1 メッセージの入力文字数上限（過大入力を送信前に弾く） */
+export const MAX_INPUT_CHARS = 100_000
+
 export interface MessageAttachment {
   type: 'image' | 'audio'
   name: string
@@ -12,6 +15,8 @@ export interface MessageAttachment {
 export interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
+  /** 思考過程（reasoning）。アシスタント応答でモデルが返した場合のみ。折りたたみ表示する。 */
+  reasoning?: string
   attachments?: MessageAttachment[]
 }
 

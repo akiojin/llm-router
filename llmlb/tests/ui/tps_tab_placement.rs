@@ -27,7 +27,7 @@ fn models_table_renders_endpoint_model_tps() {
         "ModelsTable should fetch endpoint x model TPS data"
     );
     assert!(
-        source.contains("TPS: {modelTpsSummary}"),
+        source.contains("TPS: ${modelTpsSummary}"),
         "ModelsTable expanded endpoint row should display TPS summary"
     );
 }

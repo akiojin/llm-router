@@ -208,7 +208,8 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
           </DialogTitle>
           <DialogDescription>
             {step === 'search' && 'Search for models on HuggingFace to add to your endpoints'}
-            {step === 'detail' && `Details for ${selectedModel?.repo_id ?? ''}`}
+            {step === 'detail' &&
+              `Details for ${selectedModel?.repo_id ?? ''}`}
             {step === 'endpoints' && 'Choose which endpoints should download this model'}
             {step === 'download' && 'Sending download requests to selected endpoints'}
           </DialogDescription>
@@ -287,7 +288,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
 
               {searchResults && searchResults.models.length === 0 && debouncedQuery.length >= 2 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  No models found for &quot;{debouncedQuery}&quot;
+                  {`No models found for "${debouncedQuery}"`}
                 </div>
               )}
 
@@ -322,7 +323,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                     )}
                     {modelDetail.downloads != null && (
                       <p className="text-xs text-muted-foreground">
-                        Downloads: {modelDetail.downloads.toLocaleString()}
+                        {`Downloads: ${modelDetail.downloads.toLocaleString()}`}
                       </p>
                     )}
                   </div>
@@ -359,7 +360,7 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
                   {modelDetail.siblings && modelDetail.siblings.length > 0 && (
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Files ({modelDetail.siblings.length})
+                        {`Files (${modelDetail.siblings.length})`}
                       </p>
                       <div className="rounded-md border max-h-[200px] overflow-y-auto">
                         <div className="p-2 space-y-0.5">
@@ -485,8 +486,9 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
               disabled={selectedEndpointIds.size === 0}
             >
               <Download className="h-4 w-4 mr-1" />
-              Download to {selectedEndpointIds.size} Endpoint
-              {selectedEndpointIds.size !== 1 ? 's' : ''}
+              {selectedEndpointIds.size === 1
+                ? `Download to ${selectedEndpointIds.size} Endpoint`
+                : `Download to ${selectedEndpointIds.size} Endpoints`}
             </Button>
           )}
           {step === 'download' && allDownloadsFinished && (

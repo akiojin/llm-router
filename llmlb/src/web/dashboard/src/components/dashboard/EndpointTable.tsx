@@ -65,6 +65,7 @@ import {
   Trash2,
   Plus,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 /**
  * SPEC-e8e9326e: Router-Driven Endpoint Registration System
@@ -95,7 +96,9 @@ function getStatusBadgeVariant(
   }
 }
 
-function getStatusLabel(status: DashboardEndpoint['status']): string {
+function getStatusLabel(
+  status: DashboardEndpoint['status']
+): string {
   switch (status) {
     case 'online':
       return 'Online'
@@ -111,7 +114,9 @@ function getStatusLabel(status: DashboardEndpoint['status']): string {
 }
 
 /** SPEC-e8e9326e: Get display label for endpoint type */
-function getTypeLabel(type: EndpointType): string {
+function getTypeLabel(
+  type: EndpointType
+): string {
   switch (type) {
     case 'xllm':
       return 'xLLM'
@@ -429,10 +434,20 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
               <TableBody>
                 {paginatedEndpoints.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      {search || statusFilter !== 'all'
-                        ? 'No endpoints match the filter criteria'
-                        : 'No endpoints registered'}
+                    <TableCell colSpan={9} className="p-0">
+                      <EmptyState
+                        icon={<Server className="h-10 w-10" />}
+                        title={
+                          search || statusFilter !== 'all'
+                            ? 'No endpoints match the filter criteria'
+                            : 'No endpoints registered'
+                        }
+                        description={
+                          search || statusFilter !== 'all'
+                            ? undefined
+                            : 'Add an endpoint to start routing inference requests.'
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -464,7 +479,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
                           {endpoint.last_error && (
                             <>
                               <span className="ml-2 text-xs text-destructive">
-                                ({endpoint.error_count} errors)
+                                {`(${endpoint.error_count} errors)`}
                               </span>
                               {errorDisplay && (
                                 <Badge
@@ -562,8 +577,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * PAGE_SIZE + 1} -{' '}
-                {Math.min(currentPage * PAGE_SIZE, sortedEndpoints.length)} of {sortedEndpoints.length}
+                {`Showing ${(currentPage - 1) * PAGE_SIZE + 1} - ${Math.min(currentPage * PAGE_SIZE, sortedEndpoints.length)} of ${sortedEndpoints.length}`}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -606,8 +620,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Endpoint?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete &quot;{deletingEndpoint?.name}&quot;. This action cannot be undone.
-              Models associated with this endpoint will no longer be available.
+              {`This will delete "${deletingEndpoint?.name}". This action cannot be undone. Models associated with this endpoint will no longer be available.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

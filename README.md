@@ -197,40 +197,19 @@ Day-to-day management is still done via the Dashboard UI (`/dashboard`) or the H
 
 ## Load Balancing
 
-LLM Load Balancer supports multiple load balancing strategies to optimize request distribution across runtimes.
+LLM Load Balancer distributes requests across endpoints using a **TPS (Tokens Per Second) priority** strategy.
 
-### Strategies
+### TPS-Priority Strategy
 
-#### 1. Metrics-Based Load Balancing (Recommended)
+- On each successful inference the endpoint's token-generation speed (TPS) is measured.
+- TPS is smoothed with an exponential moving average (EMA, α = 0.2).
+- When selecting an endpoint, candidates are sorted by TPS in descending order (highest throughput first).
+- Endpoints with identical TPS are tie-broken with round-robin.
+- A newly registered endpoint starts at TPS = 0.0 (lowest priority) until it has been measured.
+- When an endpoint goes offline its TPS is reset to 0.0.
+- Latency is retained as an auxiliary metric for the dashboard and debugging (persisted to SQLite); it is not the primary routing signal.
 
-Selects runtimes based on real-time metrics (CPU usage, memory usage, active requests). This intelligent mode provides optimal performance by dynamically routing requests to the least loaded runtime, ensuring efficient resource utilization.
-
-**Configuration:**
-```bash
-# Enable metrics-based load balancing
-LLMLB_LOAD_BALANCER_MODE=metrics cargo run -p llmlb
-```
-
-**Load Score Calculation:**
-```
-score = cpu_usage + memory_usage + (active_requests × 10)
-```
-
-The runtime with the **lowest score** is selected. If all runtimes have CPU usage > 80%, the system automatically falls back to round-robin.
-
-**Example:**
-- Runtime A: CPU 20%, Memory 30%, Active 1 → Score = 60 ✓ Selected
-- Runtime B: CPU 70%, Memory 50%, Active 5 → Score = 170
-
-#### 2. Advanced Load Balancing (Default)
-
-Combines multiple factors including response time, active requests, and CPU usage to provide sophisticated runtime selection with adaptive performance optimization.
-
-**Configuration:**
-```bash
-# Use default advanced load balancing (or omit LOAD_BALANCER_MODE)
-LLMLB_LOAD_BALANCER_MODE=auto cargo run -p llmlb
-```
+The load balancer treats each endpoint as a black box (gateway design): it does not track endpoint-internal state such as VRAM or model-load status. See [docs/architecture.md](docs/architecture.md) for details.
 
 ### Health / Metrics
 
@@ -748,9 +727,6 @@ vLLM, xLLM, llama.cpp (`llama-server`), and other OpenAI-compatible endpoints.
 | `LLMLB_LOG_DIR` | `~/.llmlb/logs` | Log directory | `LLM_LOG_DIR` (deprecated) |
 | `LLMLB_LOG_RETENTION_DAYS` | `7` | Log retention days | `LLM_LOG_RETENTION_DAYS` |
 | `LLMLB_HEALTH_CHECK_INTERVAL` | `30` | Endpoint health check interval (seconds) | `HEALTH_CHECK_INTERVAL` |
-| `LLMLB_LOAD_BALANCER_MODE` | `auto` | Load balancer mode (`auto` / `metrics`) | `LOAD_BALANCER_MODE` |
-| `LLMLB_QUEUE_MAX` | `100` | Admission queue limit | `QUEUE_MAX` |
-| `LLMLB_QUEUE_TIMEOUT_SECS` | `60` | Admission queue timeout (seconds) | `QUEUE_TIMEOUT_SECS` |
 | `LLMLB_REQUEST_HISTORY_RETENTION_DAYS` | `7` | Request history retention days | `REQUEST_HISTORY_RETENTION_DAYS` |
 | `LLMLB_REQUEST_HISTORY_CLEANUP_INTERVAL_SECS` | `3600` | Request history cleanup interval (seconds) | `REQUEST_HISTORY_CLEANUP_INTERVAL_SECS` |
 | `LLMLB_DEFAULT_EMBEDDING_MODEL` | `nomic-embed-text-v1.5` | Default embedding model | `LLM_DEFAULT_EMBEDDING_MODEL` |

@@ -1,7 +1,8 @@
-import { type RefObject, type ReactNode } from 'react'
+import { useState, type RefObject, type ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Settings, Trash2, ArrowLeft } from 'lucide-react'
+import { Settings, Trash2, ArrowLeft, Menu } from 'lucide-react'
 import type { Message, MessageAttachment } from './types'
 import { MessageList } from './MessageList'
 import { ChatForm } from './ChatForm'
@@ -31,8 +32,8 @@ interface PlaygroundBaseProps {
   inputDisabled?: boolean
   attachments: MessageAttachment[]
   onRemoveAttachment: (index: number) => void
-  onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void
-  inputRef: RefObject<HTMLInputElement | null>
+  onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+  inputRef: RefObject<HTMLTextAreaElement | null>
   imageInputRef: RefObject<HTMLInputElement | null>
   audioInputRef: RefObject<HTMLInputElement | null>
   onImageAttach: (file: File) => void
@@ -141,9 +142,30 @@ export function PlaygroundBase({
   sidebarWidth = 'w-72',
   sidebarId,
 }: PlaygroundBaseProps) {
+  // モバイルではサイドバーをドロワー化（既定で隠し、ハンバーガーで開く）。md 以上は常時表示。
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   return (
     <div className="flex h-screen bg-background">
-      <div id={sidebarId} className={`${sidebarWidth} border-r flex flex-col`}>
+      {/* モバイル用バックドロップ */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        id={sidebarId}
+        className={cn(
+          // デスクトップ(md+)は static で従来どおり常時表示。モバイル(max-md)のみ
+          // 固定オーバーレイのドロワーになる（fixed と md:static の優先順位問題を回避）。
+          'flex flex-col border-r bg-background shrink-0 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform',
+          sidebarWidth,
+          sidebarOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'
+        )}
+      >
         <div className="p-4 border-b">{sidebarHeader}</div>
 
         {sidebarInfo}
@@ -151,11 +173,25 @@ export function PlaygroundBase({
         <Separator />
 
         <div className="p-3 space-y-2">
-          <Button variant="outline" className="w-full justify-start" onClick={onBack}>
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => {
+              setSidebarOpen(false)
+              onBack()
+            }}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Dashboard
           </Button>
-          <Button variant="outline" className="w-full justify-start" onClick={() => onSettingsOpenChange(true)}>
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => {
+              setSidebarOpen(false)
+              onSettingsOpenChange(true)
+            }}
+          >
             <Settings className="mr-2 h-4 w-4" />
             Settings
           </Button>
@@ -165,16 +201,35 @@ export function PlaygroundBase({
         <div className="flex-1" />
 
         <div className="p-3 border-t">
-          <Button variant="outline" size="sm" className="w-full" onClick={resetChat}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              setSidebarOpen(false)
+              resetChat()
+            }}
+          >
             <Trash2 className="mr-2 h-4 w-4" />
             Clear Chat
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        <div className="h-14 border-b flex items-center justify-between px-4">
-          {headerContent}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="h-14 border-b flex items-center justify-between gap-2 px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0 md:hidden"
+              aria-label="Open menu"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="h-4 w-4" />
+            </Button>
+            {headerContent}
+          </div>
           {headerRight}
         </div>
 

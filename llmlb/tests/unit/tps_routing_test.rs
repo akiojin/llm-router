@@ -321,3 +321,47 @@ async fn tps_routing_single_endpoint_is_selected() {
 
     assert_eq!(selected.id, only.id);
 }
+
+#[tokio::test]
+async fn tps_update_after_offline_does_not_recreate_entry() {
+    // オフライン遷移で clear_tps_for_endpoint された後に、in-flight リクエスト完了の
+    // 遅延 update_tps が TPS エントリを再生成しないことを検証する。
+    let load_manager = create_test_load_manager().await;
+    let endpoint = add_online_endpoint(&load_manager, "Target", &["shared-model"]).await;
+
+    // オンライン中の計測は通常どおり反映される
+    load_manager
+        .update_tps(
+            endpoint.id,
+            "shared-model".to_string(),
+            TpsApiKind::ChatCompletions,
+            100,
+            1_000,
+        )
+        .await;
+    assert_eq!(load_manager.get_model_tps(endpoint.id).await.len(), 1);
+
+    // オフライン遷移 → TPSクリア（health checker の挙動を再現）
+    load_manager
+        .endpoint_registry()
+        .update_status(endpoint.id, EndpointStatus::Offline, None, Some("offline"))
+        .await
+        .expect("offline transition should succeed");
+    load_manager.clear_tps_for_endpoint(endpoint.id).await;
+
+    // クリア後に届いた遅延計測は破棄され、エントリが再生成されない
+    load_manager
+        .update_tps(
+            endpoint.id,
+            "shared-model".to_string(),
+            TpsApiKind::ChatCompletions,
+            100,
+            1_000,
+        )
+        .await;
+
+    assert!(
+        load_manager.get_model_tps(endpoint.id).await.is_empty(),
+        "オフライン後の遅延 update_tps は TPS エントリを再生成してはならない"
+    );
+}

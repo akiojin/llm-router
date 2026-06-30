@@ -476,6 +476,7 @@ mod tests {
             role: crate::common::auth::UserRole::Admin,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert!(check_admin(&claims).is_ok());
     }
@@ -487,6 +488,7 @@ mod tests {
             role: crate::common::auth::UserRole::Viewer,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert!(check_admin(&claims).is_err());
     }

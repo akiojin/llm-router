@@ -47,18 +47,18 @@ export function ClientDrilldown({ ip }: ClientDrilldownProps) {
       {/* Summary */}
       <div className="flex flex-wrap gap-4 text-sm">
         <div>
-          <span className="text-muted-foreground">Total: </span>
-          <span className="font-medium">{data.total_requests.toLocaleString()} requests</span>
+          <span className="text-muted-foreground">{'Total: '}</span>
+          <span className="font-medium">{`${data.total_requests.toLocaleString()} requests`}</span>
         </div>
         {data.first_seen && (
           <div>
-            <span className="text-muted-foreground">First: </span>
+            <span className="text-muted-foreground">{'First: '}</span>
             <span>{formatDate(data.first_seen)}</span>
           </div>
         )}
         {data.last_seen && (
           <div>
-            <span className="text-muted-foreground">Last: </span>
+            <span className="text-muted-foreground">{'Last: '}</span>
             <span>{formatDate(data.last_seen)}</span>
           </div>
         )}

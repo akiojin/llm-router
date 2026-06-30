@@ -44,6 +44,26 @@ pub struct AuditLogQueryParams {
     pub format: Option<String>,
 }
 
+/// per_page の上限（監査ログテーブル全行のメモリ展開によるDoSを防ぐ）
+const MAX_AUDIT_PER_PAGE: i64 = 200;
+/// page の上限（offset = (page-1)*per_page の乗算オーバーフローを防ぐ）
+const MAX_AUDIT_PAGE: i64 = 1_000_000;
+/// アーカイブ統合検索時に一度にメモリ展開する最大件数
+const MAX_AUDIT_FETCH_LIMIT: i64 = 10_000;
+
+/// アーカイブ統合検索の総件数を「ページングで実際に到達可能な最大件数」に丸める。
+///
+/// クロスDBマージでは各ソースの先頭 `MAX_AUDIT_FETCH_LIMIT` 件のみを取得して
+/// マージするため、グローバルに正しい並びは先頭 `MAX_AUDIT_FETCH_LIMIT` 件まで。
+/// それを超える深ページは items が空になるのに total が全件を返すと、ページングが
+/// 取得不能なページを提示してしまう。total を fetch 窓に丸めて整合させる
+/// （完全対応は ATTACH-UNION か cursor pagination による再設計が必要）。
+fn clamp_archive_total(main_total: i64, archive_total: i64) -> i64 {
+    main_total
+        .saturating_add(archive_total)
+        .min(MAX_AUDIT_FETCH_LIMIT)
+}
+
 impl From<AuditLogQueryParams> for AuditLogFilter {
     fn from(params: AuditLogQueryParams) -> Self {
         Self {
@@ -56,8 +76,10 @@ impl From<AuditLogQueryParams> for AuditLogFilter {
             time_to: params.time_to,
             client_ip: params.ip,
             search_text: params.search,
-            page: params.page,
-            per_page: params.per_page,
+            // page は上限をクランプして offset 乗算のオーバーフローを防ぐ
+            page: params.page.map(|p| p.clamp(1, MAX_AUDIT_PAGE)),
+            // per_page は上限をクランプして全行のメモリ展開を防ぐ
+            per_page: params.per_page.map(|p| p.clamp(1, MAX_AUDIT_PER_PAGE)),
             include_archive: params.include_archive,
         }
     }
@@ -124,12 +146,12 @@ pub async fn list_audit_logs(
         }
     }
 
-    let page = params.page.unwrap_or(1);
-    let per_page = params.per_page.unwrap_or(50);
-    let include_archive = params.include_archive.unwrap_or(false);
-    let search_text = params.search.clone();
-
     let filter: AuditLogFilter = params.into();
+    // レスポンスにはクランプ後の実効値を返す（生入力ではなく実際に使用した値）
+    let page = filter.page.unwrap_or(1);
+    let per_page = filter.per_page.unwrap_or(50);
+    let include_archive = filter.include_archive.unwrap_or(false);
+    let search_text = filter.search_text.clone();
     let storage = &state.audit_log_storage;
 
     let (items, total) = match (include_archive, state.audit_archive_pool.as_ref()) {
@@ -164,8 +186,9 @@ async fn query_with_archive(
     search_text: Option<&str>,
 ) -> Result<(Vec<AuditLogEntry>, i64), AppError> {
     let page = filter.page.unwrap_or(1).max(1);
-    let per_page = filter.per_page.unwrap_or(50).max(1);
-    let fetch_limit = page.saturating_mul(per_page);
+    let per_page = filter.per_page.unwrap_or(50).clamp(1, MAX_AUDIT_PER_PAGE);
+    // page×per_page が膨張してもメモリ展開を一定に抑える
+    let fetch_limit = page.saturating_mul(per_page).min(MAX_AUDIT_FETCH_LIMIT);
 
     let mut merged_filter = filter.clone();
     merged_filter.page = Some(1);
@@ -201,10 +224,10 @@ async fn query_with_archive(
             .then_with(|| b.request_path.cmp(&a.request_path))
     });
 
-    let offset = ((page - 1) * per_page) as usize;
+    let offset = page.saturating_sub(1).saturating_mul(per_page) as usize;
     let limit = per_page as usize;
     let paged_items = all_items.into_iter().skip(offset).take(limit).collect();
-    let total = main_total + archive_total;
+    let total = clamp_archive_total(main_total, archive_total);
 
     Ok((paged_items, total))
 }
@@ -267,6 +290,23 @@ mod tests {
 
     async fn create_test_pool() -> sqlx::SqlitePool {
         crate::db::test_utils::test_db_pool().await
+    }
+
+    #[test]
+    fn clamp_archive_total_caps_at_fetch_limit() {
+        // fetch 窓を超える深い総数は到達可能な最大件数(MAX_AUDIT_FETCH_LIMIT)に丸める
+        assert_eq!(clamp_archive_total(8000, 5000), MAX_AUDIT_FETCH_LIMIT);
+        assert_eq!(
+            clamp_archive_total(MAX_AUDIT_FETCH_LIMIT, 1),
+            MAX_AUDIT_FETCH_LIMIT
+        );
+    }
+
+    #[test]
+    fn clamp_archive_total_preserves_small_totals() {
+        // 窓に収まる総数はそのまま返し、ページング整合を壊さない
+        assert_eq!(clamp_archive_total(100, 50), 150);
+        assert_eq!(clamp_archive_total(0, 0), 0);
     }
 
     fn create_test_entry(
@@ -334,7 +374,6 @@ mod tests {
             db_pool: pool,
             jwt_secret: "test-secret".to_string(),
             http_client,
-            queue_config: crate::config::QueueConfig::from_env(),
             event_bus: crate::events::create_shared_event_bus(),
             endpoint_registry,
             inference_gate,

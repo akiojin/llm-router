@@ -224,8 +224,8 @@ export default function Dashboard() {
       request_id: record.id,
       timestamp: record.timestamp,
       model: record.model,
-      node_id: record.node_id,
-      node_name: record.node_machine_name,
+      node_id: record.endpoint_id,
+      node_name: record.endpoint_name,
       status: record.status.type,
       duration_ms: record.duration_ms,
       error: record.status.type === 'error' ? record.status.message : undefined,
@@ -359,8 +359,7 @@ export default function Dashboard() {
         if (result.queued) {
           toast({
             title: 'Update queued',
-            description:
-              'llmlb will restart after in-flight requests complete.',
+            description: 'llmlb will restart after in-flight requests complete.',
           })
         } else {
           toast({
@@ -501,19 +500,19 @@ export default function Dashboard() {
                 )}
                 {updateState === 'draining' && drainCountdown != null && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Drain timeout in {drainCountdown}
+                    {`Drain timeout in ${drainCountdown}`}
                   </p>
                 )}
                 {updateState === 'applying' && applyTimeoutCountdown != null && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Apply timeout in {applyTimeoutCountdown}
+                    {`Apply timeout in ${applyTimeoutCountdown}`}
                   </p>
                 )}
                 {scheduleInfo && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Scheduled by {scheduleInfo.scheduled_by} ({scheduleInfo.mode})
+                    {`Scheduled by ${scheduleInfo.scheduled_by} (${scheduleInfo.mode})`}
                     {scheduleInfo.scheduled_at && (
-                      <> at {new Date(scheduleInfo.scheduled_at).toLocaleString()}</>
+                      <>{` at ${new Date(scheduleInfo.scheduled_at).toLocaleString()}`}</>
                     )}
                     <button
                       type="button"
@@ -576,8 +575,7 @@ export default function Dashboard() {
                           <div className="space-y-1">
                             <Label className="text-sm font-medium">Authentication required</Label>
                             <p className="text-sm text-muted-foreground">
-                              All external and management APIs always require a valid API key or an
-                              authenticated dashboard session. Unauthenticated requests receive 401.
+                              All external and management APIs always require a valid API key or an authenticated dashboard session. Unauthenticated requests receive 401.
                             </p>
                           </div>
                         </div>
@@ -724,8 +722,7 @@ export default function Dashboard() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Force update now?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        In-flight inference requests will be terminated immediately and llmlb will restart.
-                        Use this only for urgent maintenance.
+                        In-flight inference requests will be terminated immediately and llmlb will restart. Use this only for urgent maintenance.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -777,8 +774,7 @@ export default function Dashboard() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Rollback to previous version?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will restore the previous binary and restart llmlb.
-                        In-flight requests will complete before the rollback is applied.
+                        This will restore the previous binary and restart llmlb. In-flight requests will complete before the rollback is applied.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -827,6 +823,7 @@ export default function Dashboard() {
     drainCountdown,
     applyTimeoutCountdown,
     queryClient,
+    isAdmin,
   ])
 
   if (error) {

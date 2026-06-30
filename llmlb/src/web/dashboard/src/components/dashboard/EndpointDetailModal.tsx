@@ -68,7 +68,9 @@ function getStatusBadgeVariant(
   }
 }
 
-function getStatusLabel(status: DashboardEndpoint['status']): string {
+function getStatusLabel(
+  status: DashboardEndpoint['status']
+): string {
   switch (status) {
     case 'online':
       return 'Online'
@@ -83,7 +85,9 @@ function getStatusLabel(status: DashboardEndpoint['status']): string {
   }
 }
 
-function getTypeLabel(type: EndpointType | undefined): string {
+function getTypeLabel(
+  type: EndpointType | undefined
+): string {
   switch (type) {
     case 'xllm':
       return 'xLLM'
@@ -201,8 +205,14 @@ function EndpointDetailModalContent({
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
       toast({
-        title: result.success ? 'Connection Successful' : 'Connection Failed',
-        description: result.message || (result.latency_ms ? `Latency: ${result.latency_ms}ms` : ''),
+        title: result.success
+          ? 'Connection Successful'
+          : 'Connection Failed',
+        description:
+          result.message
+          || (result.latency_ms
+            ? `Latency: ${result.latency_ms}ms`
+            : ''),
         variant: result.success ? 'default' : 'destructive',
       })
     },
@@ -275,7 +285,7 @@ function EndpointDetailModalContent({
                 Type is auto-detected
               </span>
               <span className="text-sm text-muted-foreground">
-                Models: {endpoint.model_count}
+                {`Models: ${endpoint.model_count}`}
               </span>
             </div>
             <div className="flex items-center gap-2">

@@ -9,13 +9,16 @@ import {
   type OpenAIModelsResponse,
   type RequestResponseRecord,
 } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, isAbortError } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/useAuth'
 import { usePlayground } from '@/hooks/usePlayground'
+import { splitAssistantMessage } from '@/lib/reasoning'
 import {
   PlaygroundBase,
   getErrorMessage,
   transformMessage,
+  MAX_INPUT_CHARS,
   type Message,
 } from '@/components/playground'
 import { Button } from '@/components/ui/button'
@@ -79,19 +82,6 @@ interface LoadBalancerPlaygroundProps {
   initialModel?: string
 }
 
-function extractAssistantMessageText(response: {
-  choices?: Array<{
-    message?: {
-      content?: string
-      reasoning?: string
-      reasoning_content?: string
-    }
-  }>
-}): string {
-  const message = response.choices?.[0]?.message
-  return message?.content || message?.reasoning_content || message?.reasoning || ''
-}
-
 function generateRunId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -101,17 +91,6 @@ function generateRunId(): string {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    return error.name === 'AbortError'
-  }
-  if (!error || typeof error !== 'object') {
-    return false
-  }
-  const withName = error as { name?: unknown }
-  return withName.name === 'AbortError'
 }
 
 function toNumberValue(value: string, fallback: number): number {
@@ -134,7 +113,7 @@ function buildDistributionRows(records: RequestResponseRecord[]): DistributionRo
   >()
 
   records.forEach((record) => {
-    const endpoint = record.node_machine_name || record.node_id || 'unknown'
+    const endpoint = record.endpoint_name || record.endpoint_id || 'unknown'
     const current = map.get(endpoint) ?? { count: 0, success: 0, error: 0, totalDuration: 0 }
     current.count += 1
     current.totalDuration += record.duration_ms ?? 0
@@ -158,7 +137,17 @@ function buildDistributionRows(records: RequestResponseRecord[]): DistributionRo
 }
 
 export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBalancerPlaygroundProps) {
+  const { user } = useAuth()
+  // Load Test は実推論を大量発行するため admin ロール限定（Chat は全ユーザー可）。
+  const isAdmin = user?.role === 'admin'
   const [mode, setMode] = useState<PlaygroundMode>('chat')
+
+  // 非 admin が Load Test モードに留まらないよう Chat へ矯正する。
+  useEffect(() => {
+    if (!isAdmin && mode === 'load_test') {
+      setMode('chat')
+    }
+  }, [isAdmin, mode])
 
   const [loadTestTotalRequests, setLoadTestTotalRequests] = useState(
     String(DEFAULT_LOAD_TEST_SETTINGS.totalRequests)
@@ -295,6 +284,15 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   const sendMessage = async () => {
     if ((!pg.input.trim() && pg.attachments.length === 0) || !pg.selectedModel || pg.isStreaming) return
 
+    if (pg.input.length > MAX_INPUT_CHARS) {
+      toast({
+        title: 'Message too long',
+        description: `Keep your message under ${MAX_INPUT_CHARS.toLocaleString()} characters.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
     const runId = generateRunId()
     const runTag = `lbpg:${runId}:1`
 
@@ -321,6 +319,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
 
       if (pg.streamEnabled) {
         let assistantContent = ''
+        let assistantReasoning = ''
         pg.setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
 
         await chatApi.complete(
@@ -332,11 +331,17 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
             max_tokens: effectiveMaxTokens,
             user: runTag,
           },
-          (chunk) => {
-            assistantContent += chunk
+          (delta) => {
+            assistantContent += delta.content
+            assistantReasoning += delta.reasoning
+            if (!isMountedRef.current) return
             pg.setMessages((prev) => {
               const updated = [...prev]
-              updated[updated.length - 1] = { role: 'assistant', content: assistantContent }
+              updated[updated.length - 1] = {
+                role: 'assistant',
+                content: assistantContent,
+                reasoning: assistantReasoning || undefined,
+              }
               return updated
             })
           },
@@ -356,15 +361,17 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
           pg.abortControllerRef.current.signal
         )
 
+        const { content, reasoning } = splitAssistantMessage(response)
         pg.setMessages((prev) => [...prev, {
           role: 'assistant',
-          content: extractAssistantMessageText(response),
+          content,
+          reasoning: reasoning || undefined,
         }])
       }
 
       await fetchDistributionForRun(runId, 1)
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
+      if (!isAbortError(error)) {
         const description =
           error instanceof ApiError
             ? getErrorMessage(error)
@@ -373,7 +380,16 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               : 'Unknown error'
 
         toast({ title: 'Failed to send message', description, variant: 'destructive' })
-        pg.setMessages(pg.messages)
+        // Drop only the optimistic empty assistant placeholder (streaming),
+        // keep the user's message, and restore the input so it can be resent.
+        pg.setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === 'assistant' && last.content === '') {
+            return prev.slice(0, -1)
+          }
+          return prev
+        })
+        pg.setInput(userMessage.content)
       }
     } finally {
       if (isMountedRef.current) {
@@ -387,7 +403,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
   }
 
   const startLoadTest = async () => {
-    if (!pg.selectedModel || isLoadTesting) return
+    // Load Test は admin ロール限定（バックエンドの専用エンドポイントでも強制）。
+    if (!isAdmin || !pg.selectedModel || isLoadTesting) return
 
     const totalRequests = Math.max(1, toNumberValue(loadTestTotalRequests, DEFAULT_LOAD_TEST_SETTINGS.totalRequests))
     const concurrency = Math.max(1, toNumberValue(loadTestConcurrency, DEFAULT_LOAD_TEST_SETTINGS.concurrency))
@@ -428,7 +445,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
         loadTestAbortControllersRef.current.add(requestAbortController)
 
         try {
-          await chatApi.complete(
+          await chatApi.completeLoadTest(
             {
               model: pg.selectedModel,
               messages: requestMessages,
@@ -437,7 +454,6 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               max_tokens: effectiveMaxTokens,
               user: runTag,
             },
-            undefined,
             requestAbortController.signal
           )
           success += 1
@@ -571,8 +587,8 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       {loadTestProgress && (
         <div className="space-y-2" id="lb-load-test-progress">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{loadTestProgress.completed}/{loadTestProgress.total} completed</span>
-            <span>success={loadTestProgress.success}, error={loadTestProgress.error}</span>
+            <span>{`${loadTestProgress.completed}/${loadTestProgress.total} completed`}</span>
+            <span>{`success=${loadTestProgress.success}, error=${loadTestProgress.error}`}</span>
           </div>
           <div className="h-2 rounded-full bg-muted">
             <div
@@ -656,9 +672,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
       {distributionSummary && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground" id="lb-distribution-summary">
-            Run: {distributionSummary.runId.slice(0, 8)} | Matched:{' '}
-            {distributionSummary.matchedCount}/{distributionSummary.expectedCount} | Updated:{' '}
-            {new Date(distributionSummary.updatedAt).toLocaleTimeString()}
+            {`Run: ${distributionSummary.runId.slice(0, 8)} | Matched: ${distributionSummary.matchedCount}/${distributionSummary.expectedCount} | Updated: ${new Date(distributionSummary.updatedAt).toLocaleTimeString()}`}
           </p>
           <div className="rounded-md border bg-background">
             <div className="grid grid-cols-[1fr_80px_80px_80px_120px] border-b px-3 py-2 text-xs font-medium text-muted-foreground">
@@ -754,16 +768,18 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
               <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
               Chat
             </Button>
-            <Button
-              size="sm"
-              variant={mode === 'load_test' ? 'default' : 'outline'}
-              onClick={() => setMode('load_test')}
-              className="h-7"
-              id="lb-mode-load-test"
-            >
-              <Gauge className="mr-1.5 h-3.5 w-3.5" />
-              Load Test
-            </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant={mode === 'load_test' ? 'default' : 'outline'}
+                onClick={() => setMode('load_test')}
+                className="h-7"
+                id="lb-mode-load-test"
+              >
+                <Gauge className="mr-1.5 h-3.5 w-3.5" />
+                Load Test
+              </Button>
+            )}
           </div>
 
           <Select value={pg.selectedModel} onValueChange={pg.setSelectedModel}>

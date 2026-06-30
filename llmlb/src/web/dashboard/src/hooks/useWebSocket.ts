@@ -35,8 +35,6 @@ interface UseWebSocketOptions {
   onMessage?: (event: DashboardEvent) => void
   onConnect?: () => void
   onDisconnect?: () => void
-  /** @deprecated Use exponential backoff instead. Kept for interface compatibility. */
-  reconnectInterval?: number
   enabled?: boolean
 }
 
@@ -211,12 +209,6 @@ export function useDashboardWebSocket(options: UseDashboardWebSocketOptions = {}
   const { enabled = true } = options
   const { isConnected, lastEvent, reconnect } = useWebSocket({
     enabled,
-    onConnect: () => {
-      console.log('Dashboard WebSocket connected')
-    },
-    onDisconnect: () => {
-      console.log('Dashboard WebSocket disconnected')
-    },
   })
 
   return {

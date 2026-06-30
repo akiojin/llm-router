@@ -325,7 +325,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                   API Key Created Successfully
                 </p>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Copy this key now. You won't be able to see it again.
+                  {"Copy this key now. You won't be able to see it again."}
                 </p>
                 <div className="flex items-center gap-2">
                   <code
@@ -337,7 +337,11 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label={showKey === 'created' ? 'Hide API key' : 'Show API key'}
+                    aria-label={
+                      showKey === 'created'
+                        ? 'Hide API key'
+                        : 'Show API key'
+                    }
                     onClick={() => setShowKey(showKey === 'created' ? null : 'created')}
                   >
                     {showKey === 'created' ? (
@@ -540,8 +544,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete API Key</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteKey?.name}"? This action cannot
-              be undone.
+              {`Are you sure you want to delete "${deleteKey?.name}"? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

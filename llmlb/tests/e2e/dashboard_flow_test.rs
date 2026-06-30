@@ -58,7 +58,6 @@ async fn build_app() -> (Router, sqlx::SqlitePool, String) {
         db_pool: db_pool.clone(),
         jwt_secret,
         http_client,
-        queue_config: llmlb::config::QueueConfig::from_env(),
         event_bus: llmlb::events::create_shared_event_bus(),
         endpoint_registry,
         inference_gate,
@@ -84,6 +83,7 @@ async fn build_app() -> (Router, sqlx::SqlitePool, String) {
         UserRole::Admin,
         &support::lb::test_jwt_secret(),
         false,
+        0,
     )
     .expect("create admin jwt");
 

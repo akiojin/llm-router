@@ -25,17 +25,6 @@ export function formatDuration(ms: number | null | undefined): string {
   return `${(ms / 3600000).toFixed(1)}h`
 }
 
-export function formatUptime(seconds: number | null | undefined): string {
-  if (seconds == null) return '-'
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-
-  if (days > 0) return `${days}d ${hours}h`
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
-}
-
 export function formatNumber(num: number | null | undefined): string {
   if (num == null) return '-'
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
@@ -84,6 +73,21 @@ export function truncate(str: string, length: number): string {
   return `${str.slice(0, length)}...`
 }
 
+/**
+ * fetch の中断（AbortController.abort()）由来のエラーかを安全に判定する。
+ * 中断は「失敗」ではなくユーザー操作・unmount による正常な打ち切りなので、
+ * エラートースト等の対象から除外するために使う。
+ */
+export function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  return (error as { name?: unknown }).name === 'AbortError'
+}
+
 export function debounce<T extends (...args: unknown[]) => unknown>(
   fn: T,
   delay: number
@@ -93,10 +97,6 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
     clearTimeout(timeoutId)
     timeoutId = setTimeout(() => fn(...args), delay)
   }
-}
-
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9)
 }
 
 export type ClipboardCopyMethod = 'exec-command' | 'clipboard' | 'manual'

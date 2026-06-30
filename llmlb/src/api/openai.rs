@@ -100,13 +100,13 @@ use crate::{
         models::{list_registered_models, load_registered_model, LifecycleStatus},
         openai_util::{
             classify_upstream_request_error, model_unavailable_response, openai_error_response,
-            openai_error_response_with_type, probe_ollama_model_loaded, queue_error_response,
+            openai_error_response_with_type, probe_ollama_model_loaded, read_capped_body,
             sanitize_openai_payload_for_history, upstream_error_message_from_bytes,
+            UPSTREAM_ERROR_SUMMARY_MAX_BYTES,
         },
         proxy::{
             forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
-            save_request_record, select_available_endpoint,
-            select_available_endpoint_with_queue_for_model,
+            save_request_record, select_available_endpoint_with_queue_for_model,
             select_available_endpoint_with_queue_for_model_and_api, QueueSelection,
         },
     },
@@ -218,7 +218,6 @@ fn parse_client_ip_from_forwarded_value(value: &str) -> Option<IpAddr> {
 }
 
 /// POST /v1/chat/completions - OpenAI互換チャットAPI
-#[allow(deprecated)] // NodeRegistry migration in progress
 pub async fn chat_completions(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
@@ -553,7 +552,6 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Response, AppE
 /// GET /v1/models/:id - モデル詳細取得（Azure capabilities 形式）
 ///
 /// SPEC-0f1de549: Endpoints APIで登録されたモデルも検索対象に含める
-#[allow(deprecated)] // NodeRegistry migration in progress
 pub async fn get_model(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
@@ -826,7 +824,6 @@ async fn proxy_openai_cloud_post(
     Ok(outcome.response)
 }
 
-#[allow(deprecated)] // NodeRegistry migration in progress
 #[allow(clippy::too_many_arguments)]
 async fn proxy_openai_post(
     state: &AppState,
@@ -894,27 +891,19 @@ async fn proxy_openai_post(
     } else {
         None
     };
-    let queue_config = state.queue_config;
     let mut queued_wait_ms: Option<u128> = None;
 
     // FR-004: エンドポイント選択失敗時もリクエスト履歴に記録する
     let endpoint = match if let Some(required_api) = required_supported_api {
         select_available_endpoint_with_queue_for_model_and_api(
             state,
-            queue_config,
             &resolved_model,
             required_api,
             tps_api_kind,
         )
         .await
     } else {
-        select_available_endpoint_with_queue_for_model(
-            state,
-            queue_config,
-            &resolved_model,
-            tps_api_kind,
-        )
-        .await
+        select_available_endpoint_with_queue_for_model(state, &resolved_model, tps_api_kind).await
     } {
         Ok(QueueSelection::Ready {
             endpoint,
@@ -922,49 +911,6 @@ async fn proxy_openai_post(
         }) => {
             queued_wait_ms = wait_ms;
             *endpoint
-        }
-        Ok(QueueSelection::CapacityExceeded) => {
-            let message = "Request queue is full".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    0,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            let retry_after = queue_config.timeout.as_secs().max(1);
-            return Ok(queue_error_response(
-                StatusCode::TOO_MANY_REQUESTS,
-                &message,
-                "rate_limit_exceeded",
-                Some(retry_after),
-            ));
-        }
-        Ok(QueueSelection::Timeout { waited_ms }) => {
-            let message = "Queue wait timeout".to_string();
-            save_request_record(
-                state.request_history.clone(),
-                RequestResponseRecord::error(
-                    model.clone(),
-                    request_type,
-                    request_body,
-                    message.clone(),
-                    waited_ms as u64,
-                    client_ip,
-                    api_key_id,
-                ),
-            );
-            return Ok(queue_error_response(
-                StatusCode::GATEWAY_TIMEOUT,
-                &message,
-                "timeout",
-                None,
-            ));
         }
         Err(e) => {
             let error_message = if matches!(e, LbError::NoCapableEndpoints(_)) {
@@ -1034,22 +980,18 @@ async fn proxy_openai_post(
         &endpoint_models,
     );
 
-    let upstream_model = state
-        .endpoint_registry
-        .list_models(endpoint_id)
-        .await
-        .ok()
-        .and_then(|endpoint_models| {
-            endpoint_models
-                .into_iter()
-                .find(|endpoint_model| {
-                    endpoint_model.model_id == model
-                        || endpoint_model.model_id == resolved_model
-                        || endpoint_model.canonical_name.as_deref() == Some(model.as_str())
-                        || endpoint_model.canonical_name.as_deref() == Some(resolved_model.as_str())
-                })
-                .map(|endpoint_model| endpoint_model.model_id)
+    // 上の list_models 結果を再利用する（1リクエストあたりの list_models 呼び出しを
+    // 2回から1回に削減）。取得失敗時は endpoint_models が空 Vec のため find は None を
+    // 返し、従来どおり resolve_engine_name のフォールバックに流れる。
+    let upstream_model = endpoint_models
+        .iter()
+        .find(|endpoint_model| {
+            endpoint_model.model_id == model
+                || endpoint_model.model_id == resolved_model
+                || endpoint_model.canonical_name.as_deref() == Some(model.as_str())
+                || endpoint_model.canonical_name.as_deref() == Some(resolved_model.as_str())
         })
+        .map(|endpoint_model| endpoint_model.model_id.clone())
         .or_else(|| {
             crate::models::mapping::resolve_engine_name(&model, &endpoint_type).map(str::to_string)
         })
@@ -1169,32 +1111,6 @@ async fn proxy_openai_post(
     if stream {
         let duration = start.elapsed();
         let succeeded = response.status().is_success();
-        let outcome = if succeeded {
-            RequestOutcome::Success
-        } else {
-            RequestOutcome::Error
-        };
-        request_lease
-            .complete(outcome, duration)
-            .await
-            .map_err(AppError::from)?;
-        if succeeded {
-            // SPEC-f8e3a1b7: 成功時に推論レイテンシを更新
-            update_inference_latency(&state.endpoint_registry, endpoint_id, duration);
-        } else {
-            record_endpoint_request_stats(
-                state.endpoint_registry.clone(),
-                endpoint_id,
-                model.clone(),
-                false,
-                0,
-                0,
-                tps_api_kind,
-                endpoint_type,
-                state.load_manager.clone(),
-                state.event_bus.clone(),
-            );
-        }
 
         let mut axum_response = if succeeded {
             {
@@ -1212,6 +1128,8 @@ async fn proxy_openai_post(
                 );
                 save_request_record(state.request_history.clone(), record);
             }
+            // lease と推論レイテンシ更新は forwarder に移譲し、ストリーム完走時に
+            // 実時間で確定する（ヘッダー受信時点での早期解放を避ける: lease-ttfb）。
             forward_streaming_response_with_tps_tracking(
                 response,
                 endpoint_id,
@@ -1222,9 +1140,28 @@ async fn proxy_openai_post(
                 state.endpoint_registry.clone(),
                 state.load_manager.clone(),
                 state.event_bus.clone(),
+                Some(request_lease),
             )
             .map_err(AppError::from)?
         } else {
+            // 失敗時はトークンストリームが無いため、ここで lease を完了し統計を記録する
+            request_lease
+                .complete(RequestOutcome::Error, duration)
+                .await
+                .map_err(AppError::from)?;
+            record_endpoint_request_stats(
+                state.endpoint_registry.clone(),
+                endpoint_id,
+                model.clone(),
+                false,
+                0,
+                0,
+                tps_api_kind,
+                endpoint_type,
+                state.load_manager.clone(),
+                state.event_bus.clone(),
+            );
+
             let status = response.status();
             let headers = response.headers().clone();
             let body_bytes = response.bytes().await.unwrap_or_default();
@@ -1302,7 +1239,9 @@ async fn proxy_openai_post(
         let status = response.status();
         // OpenAI互換経路では upstream 非2xx は 502 に正規化して返す
         let status_code = StatusCode::BAD_GATEWAY;
-        let body_bytes = response.bytes().await.unwrap_or_default();
+        // ボディはエラー要約にしか使わず、クライアントには新規 JSON を返すため、
+        // 巨大ボディによるメモリ枯渇を避けて先頭部分のみ読み取る。
+        let body_bytes = read_capped_body(response, UPSTREAM_ERROR_SUMMARY_MAX_BYTES).await;
         let message = upstream_error_message_from_bytes(status, &body_bytes);
 
         {
@@ -1455,70 +1394,6 @@ async fn proxy_openai_post(
             Err(LbError::Http(format!("Failed to parse OpenAI response: {}", e)).into())
         }
     }
-}
-
-#[allow(dead_code)]
-async fn proxy_openai_get(state: &AppState, target_path: &str) -> Result<Response, AppError> {
-    let endpoint = select_available_endpoint(state).await?;
-    let endpoint_id = endpoint.id;
-
-    let request_lease = state
-        .load_manager
-        .begin_request(endpoint_id)
-        .await
-        .map_err(AppError::from)?;
-
-    let client = state.http_client.clone();
-    let runtime_url = format!("{}{}", endpoint.base_url.trim_end_matches('/'), target_path);
-    let start = Instant::now();
-
-    let response = client.get(&runtime_url).send().await.map_err(|e| {
-        AppError::from(LbError::Http(format!(
-            "Failed to proxy OpenAI models request: {}",
-            e
-        )))
-    })?;
-
-    let duration = start.elapsed();
-    let outcome = if response.status().is_success() {
-        RequestOutcome::Success
-    } else {
-        RequestOutcome::Error
-    };
-    request_lease
-        .complete(outcome, duration)
-        .await
-        .map_err(AppError::from)?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let status_code = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-        let body_bytes = response.bytes().await.unwrap_or_default();
-        let message = if body_bytes.is_empty() {
-            status.to_string()
-        } else {
-            String::from_utf8_lossy(&body_bytes).trim().to_string()
-        };
-
-        let payload = json!({
-            "error": {
-                "message": message,
-                "type": "node_upstream_error",
-                "code": status_code.as_u16(),
-            }
-        });
-
-        return Ok((status_code, Json(payload)).into_response());
-    }
-
-    let body = response.json::<Value>().await.map_err(|e| {
-        AppError::from(LbError::Http(format!(
-            "Failed to parse OpenAI models response: {}",
-            e
-        )))
-    })?;
-
-    Ok((StatusCode::OK, Json(body)).into_response())
 }
 
 fn validation_error(message: impl Into<String>) -> AppError {

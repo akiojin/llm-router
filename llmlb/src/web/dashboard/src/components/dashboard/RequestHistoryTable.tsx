@@ -4,13 +4,14 @@ import {
   copyToClipboard,
   formatDuration,
   formatRelativeTime,
-  cn,
   selectTextForManualCopy,
   cleanupManualCopyBuffer,
 } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -57,6 +58,7 @@ const PAGE_SIZES = [25, 50, 100]
 export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableProps) {
   const [pageSize, setPageSize] = useState(25)
   const [currentPage, setCurrentPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'error'>('all')
   const [selectedRequest, setSelectedRequest] = useState<RequestHistoryItem | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
@@ -64,8 +66,14 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
     return () => cleanupManualCopyBuffer()
   }, [])
 
-  const totalPages = Math.ceil(history.length / pageSize)
-  const paginatedHistory = history.slice(
+  const filteredHistory =
+    statusFilter === 'all'
+      ? history
+      : history.filter((item) =>
+          statusFilter === 'success' ? item.status === 'success' : item.status !== 'success'
+        )
+  const totalPages = Math.ceil(filteredHistory.length / pageSize)
+  const paginatedHistory = filteredHistory.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   )
@@ -92,14 +100,15 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
   }
 
   const serializeBody = (body: unknown, kind: 'request' | 'response') => {
+    const kindLabel = kind === 'request' ? 'request' : 'response'
     try {
       const value = JSON.stringify(body, null, 2)
       if (value === undefined) {
-        return `No ${kind} body`
+        return `No ${kindLabel} body`
       }
       return value
     } catch {
-      return `Unable to display ${kind} body`
+      return `Unable to display ${kindLabel} body`
     }
   }
 
@@ -113,9 +122,9 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div role="status" aria-label="Loading" aria-busy="true" className="space-y-4">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-12 shimmer rounded" />
+              <Skeleton key={i} className="h-12" />
             ))}
           </div>
         </CardContent>
@@ -136,7 +145,27 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
               </Badge>
             </CardTitle>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value as 'all' | 'success' | 'error')
+                  setCurrentPage(1)
+                }}
+              >
+                <SelectTrigger
+                  id="history-status-filter"
+                  className="w-32"
+                  aria-label="Filter by status"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All status</SelectItem>
+                  <SelectItem value="success">Success</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                </SelectContent>
+              </Select>
               <span className="text-sm text-muted-foreground">Show</span>
               <Select
                 value={pageSize.toString()}
@@ -178,11 +207,20 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
               <TableBody id="request-history-tbody">
                 {paginatedHistory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <History className="h-8 w-8" />
-                        <p>No request history</p>
-                      </div>
+                    <TableCell colSpan={7} className="p-0">
+                      <EmptyState
+                        icon={<History className="h-8 w-8" />}
+                        title={
+                          statusFilter === 'all'
+                            ? 'No request history'
+                            : 'No requests match the filter'
+                        }
+                        description={
+                          statusFilter === 'all'
+                            ? 'Requests will appear here once traffic is routed through the balancer.'
+                            : undefined
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -237,8 +275,10 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t px-6 py-4">
               <p className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                {Math.min(currentPage * pageSize, history.length)} of {history.length}
+                {`Showing ${(currentPage - 1) * pageSize + 1} to ${Math.min(
+                  currentPage * pageSize,
+                  history.length
+                )} of ${history.length}`}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -251,7 +291,7 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span id="history-page-info" className="text-sm">
-                  Page {currentPage} of {totalPages}
+                  {`Page ${currentPage} of ${totalPages}`}
                 </span>
                 <Button
                   id="history-page-next"
@@ -285,7 +325,8 @@ export function RequestHistoryTable({ history, isLoading }: RequestHistoryTableP
               Request Details
             </DialogTitle>
             <DialogDescription>
-              Request ID: <code className="text-xs">{selectedRequest?.request_id}</code>
+              Request ID:{' '}
+              <code className="text-xs">{selectedRequest?.request_id}</code>
             </DialogDescription>
           </DialogHeader>
 

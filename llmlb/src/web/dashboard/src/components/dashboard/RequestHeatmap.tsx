@@ -65,7 +65,8 @@ export function RequestHeatmap({ data }: RequestHeatmapProps) {
       ))}
 
       {/* Rows: one per day */}
-      {DAY_LABELS.map((label, row) => (
+      {DAY_LABELS.map((label, row) => {
+        return (
         <Fragment key={`row-${row}`}>
           {/* Row label */}
           <div
@@ -98,7 +99,8 @@ export function RequestHeatmap({ data }: RequestHeatmapProps) {
             />
           ))}
         </Fragment>
-      ))}
+        )
+      })}
     </div>
   )
 }

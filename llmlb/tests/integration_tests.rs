@@ -130,9 +130,13 @@ mod system_info_public_test;
 #[path = "integration/settings_test.rs"]
 mod settings_test;
 
-// SPEC #580 US-004: 招待キー生成・受け入れAPI（T-0008, T-0010）
-#[path = "integration/invitation_keys_api_test.rs"]
-mod invitation_keys_api_test;
+// LB Playground の Load Test を admin ロール限定にする
+#[path = "integration/playground_load_test_access_test.rs"]
+mod playground_load_test_access_test;
+
+// dashboard WebSocket のセッション無効化を強制する（PR #679 Codex review）
+#[path = "integration/dashboard_ws_revocation_test.rs"]
+mod dashboard_ws_revocation_test;
 
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.
