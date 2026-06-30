@@ -12,7 +12,6 @@ use std::{
         atomic::{AtomicUsize, Ordering as AtomicOrdering},
         Arc,
     },
-    time::Duration as StdDuration,
 };
 use uuid::Uuid;
 
@@ -63,17 +62,6 @@ impl Drop for QueueWaiterGuard {
     fn drop(&mut self) {
         self.waiters.fetch_sub(1, AtomicOrdering::SeqCst);
     }
-}
-
-/// アドミッション制御の判断結果
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AdmissionDecision {
-    /// 即座に受け入れ
-    Accept,
-    /// 遅延付きで受け入れ
-    AcceptWithDelay(StdDuration),
-    /// リジェクト
-    Reject,
 }
 
 // SPEC-f8e3a1b7: Node依存のヘルパー関数は削除されました
@@ -281,13 +269,6 @@ pub struct EndpointLoadSnapshot {
     /// 総トークン累計
     pub total_tokens: u64,
 }
-
-/// ノードのロードスナップショット（後方互換エイリアス）
-///
-/// NodeRegistry廃止移行のための後方互換エイリアス。
-/// 新規コードは`EndpointLoadSnapshot`を使用すること。
-#[deprecated(note = "Use EndpointLoadSnapshot instead")]
-pub type NodeLoadSnapshot = EndpointLoadSnapshot;
 
 /// システム全体の統計サマリー
 #[derive(Debug, Clone, Serialize, Default)]

@@ -9,6 +9,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ScrollText } from 'lucide-react'
 
 interface AuditLogTableProps {
   entries: AuditLogEntry[]
@@ -27,26 +30,30 @@ function methodBadgeVariant(method: string): 'default' | 'secondary' | 'destruct
 }
 
 function statusColor(code: number): string {
-  if (code >= 200 && code < 300) return 'text-green-600'
-  if (code >= 300 && code < 400) return 'text-yellow-600'
-  if (code >= 400 && code < 500) return 'text-orange-600'
-  return 'text-red-600'
+  if (code >= 200 && code < 300) return 'text-success font-medium'
+  if (code >= 300 && code < 400) return 'text-warning font-medium'
+  if (code >= 400 && code < 500) return 'text-orange-600 dark:text-orange-400 font-medium'
+  return 'text-destructive font-medium'
 }
 
 export function AuditLogTable({ entries, loading }: AuditLogTableProps) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8 text-muted-foreground">
-        Loading...
+      <div className="space-y-2 rounded-md border p-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-full" />
+        ))}
       </div>
     )
   }
 
   if (entries.length === 0) {
     return (
-      <div className="flex items-center justify-center py-8 text-muted-foreground">
-        No audit log entries found
-      </div>
+      <EmptyState
+        icon={<ScrollText className="h-10 w-10" />}
+        title="No audit log entries found"
+        description="Audit entries will appear here as API and dashboard activity is recorded."
+      />
     )
   }
 

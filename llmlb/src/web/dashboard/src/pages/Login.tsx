@@ -65,9 +65,7 @@ export default function LoginPage() {
           <Card className="glass border-border/50">
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-semibold">Sign in</CardTitle>
-              <CardDescription>
-                Enter your credentials to access the dashboard
-              </CardDescription>
+              <CardDescription>Enter your credentials to access the dashboard</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">

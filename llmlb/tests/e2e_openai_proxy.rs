@@ -194,6 +194,7 @@ async fn openai_proxy_end_to_end_updates_dashboard_history() {
         llmlb::common::auth::UserRole::Admin,
         &support::lb::test_jwt_secret(),
         false,
+        0,
     )
     .expect("create jwt");
 

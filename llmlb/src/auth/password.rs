@@ -48,15 +48,24 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, LbError> {
 /// * `Ok(())` - パスワード要件を満たす
 /// * `Err(LbError)` - パスワード要件を満たさない（段階的エラーメッセージ付き）
 pub fn validate_password(password: &str) -> Result<(), LbError> {
-    // 長さチェック（8文字以上）
-    if password.len() < 8 {
+    // 長さチェック（8文字以上、文字数で判定）
+    if password.chars().count() < 8 {
         return Err(LbError::Common(
             crate::common::error::CommonError::Validation("8文字以上必要です".to_string()),
         ));
     }
 
-    // 大文字チェック（1文字以上）
-    if !password.chars().any(|c| c.is_uppercase()) {
+    // 上限チェック（bcrypt は72バイトで切り捨てるため、末尾が黙って無視されるのを防ぐ）
+    if password.len() > 72 {
+        return Err(LbError::Common(
+            crate::common::error::CommonError::Validation(
+                "パスワードは72バイト以下にしてください".to_string(),
+            ),
+        ));
+    }
+
+    // 大文字チェック（ASCII大文字を1文字以上。全角等を数えない）
+    if !password.chars().any(|c| c.is_ascii_uppercase()) {
         return Err(LbError::Common(
             crate::common::error::CommonError::Validation(
                 "大文字を1文字以上含めてください".to_string(),
@@ -64,8 +73,8 @@ pub fn validate_password(password: &str) -> Result<(), LbError> {
         ));
     }
 
-    // 数字チェック（1文字以上）
-    if !password.chars().any(|c| c.is_numeric()) {
+    // 数字チェック（ASCII数字を1文字以上。全角数字・ローマ数字等を数えない）
+    if !password.chars().any(|c| c.is_ascii_digit()) {
         return Err(LbError::Common(
             crate::common::error::CommonError::Validation(
                 "数字を1文字以上含めてください".to_string(),
@@ -178,9 +187,7 @@ mod tests {
         assert!(verify_password(pw, &h).unwrap());
     }
 
-    // --- validate_password テストモジュール（TDD RED フェーズ）---
-    // validate_password 関数は未実装（T-0003で実装）
-    // 本セクションはテスト仕様のみを定義
+    // --- validate_password テストモジュール ---
 
     #[test]
     fn validate_password_fails_too_short() {

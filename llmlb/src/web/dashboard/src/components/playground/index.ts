@@ -6,6 +6,7 @@ export { CurlDialog } from './CurlDialog'
 export type { Message, MessageAttachment } from './types'
 export {
   MAX_ATTACHMENT_BYTES,
+  MAX_INPUT_CHARS,
   getErrorMessage,
   transformMessage,
   extractMediaFromContent,

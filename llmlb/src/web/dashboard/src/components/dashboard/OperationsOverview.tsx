@@ -104,8 +104,7 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
                   {loadingValue ?? healthLabel(operations?.health)}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {metricValue(operations?.online_endpoints)} online,{' '}
-                  {metricValue(failedAndImpaired)} requiring review
+                  {`${metricValue(operations?.online_endpoints)} online, ${metricValue(failedAndImpaired)} requiring review`}
                 </p>
               </div>
             </div>
@@ -217,23 +216,30 @@ export function OperationsOverview({ overview, isLoading }: OperationsOverviewPr
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">
-          <p className="text-xs font-medium uppercase text-muted-foreground">Model capacity</p>
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Model capacity
+          </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? metricValue(capacity?.total_models)}
           </p>
         </div>
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">
-          <p className="text-xs font-medium uppercase text-muted-foreground">GPU memory</p>
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            GPU memory
+          </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? byteValue(capacity?.used_gpu_memory_bytes)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {byteValue(capacity?.total_gpu_memory_bytes)} total,{' '}
+            {`${byteValue(capacity?.total_gpu_memory_bytes)} total`}
+            {', '}
             {formatPercentage(capacity?.gpu_memory_usage_percent)}
           </p>
         </div>
         <div className="rounded-md border border-border/70 bg-card px-4 py-3">
-          <p className="text-xs font-medium uppercase text-muted-foreground">Telemetry</p>
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Telemetry
+          </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">
             {loadingValue ?? capacity?.telemetry_status ?? '-'}
           </p>

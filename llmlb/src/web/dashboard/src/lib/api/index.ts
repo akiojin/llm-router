@@ -8,12 +8,9 @@ export type { RegisterRequest, RegisterResponse } from './auth'
 
 export { dashboardApi } from './dashboard'
 export type {
-  DashboardStats,
   DashboardOperations,
   DashboardCapacity,
   DashboardActionItem,
-  SyncState,
-  SyncProgress,
   RequestHistoryItem,
   RequestResponseRecord,
   RequestResponsesPage,
@@ -30,7 +27,6 @@ export type {
 
 export {
   endpointsApi,
-  benchmarkApi,
   CREATE_ENDPOINT_TIMEOUT_GUIDANCE,
   getRecommendedInferenceTimeout,
   getRecommendedInferenceTimeoutLabel,
@@ -39,16 +35,10 @@ export type {
   EndpointType,
   DashboardEndpoint,
   DownloadTask,
-  ModelMetadata,
   EndpointTodayStats,
   EndpointDailyStatEntry,
   ModelStatEntry,
   ModelTpsEntry,
-  TpsBenchmarkRequest,
-  TpsBenchmarkEndpointSummary,
-  TpsBenchmarkResult,
-  TpsBenchmarkRun,
-  TpsBenchmarkAccepted,
 } from './endpoints'
 
 export { modelsApi } from './models'
@@ -57,9 +47,6 @@ export type {
   DownloadProgress,
   ModelCapabilities,
   OpenAIModel,
-  GgufFileInfo,
-  GgufDiscoveryResult,
-  DiscoverGgufResponse,
   OpenAIModelsResponse,
   RegisteredModelView,
   ModelsView,
@@ -68,7 +55,6 @@ export type {
 export { chatApi } from './chat'
 export type {
   ChatMessage,
-  ChatSession,
   ChatCompletionRequest,
 } from './chat'
 
@@ -105,7 +91,6 @@ export { auditLogApi } from './audit-log'
 export type {
   AuditLogEntry,
   AuditLogListResponse,
-  AuditLogStatsResponse,
   HashChainVerifyResult,
   AuditLogFilters,
 } from './audit-log'

@@ -69,7 +69,7 @@ export function AlertThresholdSettings() {
     <div className="flex items-center gap-2 text-sm">
       <Settings2 className="h-4 w-4 text-muted-foreground" />
       <span className="text-muted-foreground">Alert threshold (1h):</span>
-      <span className="font-medium">{threshold} requests</span>
+      <span className="font-medium">{`${threshold} requests`}</span>
       <Button size="sm" variant="ghost" className="h-7" onClick={startEditing}>
         Edit
       </Button>

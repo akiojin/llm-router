@@ -3,9 +3,6 @@
 /// パスワードハッシュ化・検証（bcrypt）
 pub mod password;
 
-/// 招待キー生成・検証
-pub mod invitation;
-
 /// JWT生成・検証（jsonwebtoken）
 pub mod jwt;
 

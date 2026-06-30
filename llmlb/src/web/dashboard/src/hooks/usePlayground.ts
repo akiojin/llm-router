@@ -30,7 +30,7 @@ export function usePlayground(options: UsePlaygroundOptions = {}) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
 
@@ -113,7 +113,7 @@ export function usePlayground(options: UsePlaygroundOptions = {}) {
   }, [])
 
   const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLInputElement>) => {
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const files = e.clipboardData?.files
       if (!files) return
       for (const file of Array.from(files)) {

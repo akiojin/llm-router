@@ -163,7 +163,14 @@ pub async fn sync_models_with_type(
 
     // 削除されたモデルを削除
     for model_id in removed_ids {
-        let _ = db::delete_endpoint_model(pool, endpoint_id, model_id).await;
+        if let Err(e) = db::delete_endpoint_model(pool, endpoint_id, model_id).await {
+            tracing::warn!(
+                endpoint_id = %endpoint_id,
+                model_id = %model_id,
+                error = %e,
+                "Failed to delete endpoint model during sync"
+            );
+        }
     }
 
     // 新しいモデルを追加（capabilitiesを自動判定 + エンドポイントからの情報を使用）
@@ -191,7 +198,14 @@ pub async fn sync_models_with_type(
             canonical_name,
         };
 
-        let _ = db::add_endpoint_model(pool, &model).await;
+        if let Err(e) = db::add_endpoint_model(pool, &model).await {
+            tracing::warn!(
+                endpoint_id = %endpoint_id,
+                model_id = %model.model_id,
+                error = %e,
+                "Failed to add endpoint model during sync"
+            );
+        }
         synced_models.push(model);
     }
 
@@ -216,7 +230,14 @@ pub async fn sync_models_with_type(
             canonical_name,
         };
 
-        let _ = db::update_endpoint_model(pool, &model).await;
+        if let Err(e) = db::update_endpoint_model(pool, &model).await {
+            tracing::warn!(
+                endpoint_id = %endpoint_id,
+                model_id = %model.model_id,
+                error = %e,
+                "Failed to update endpoint model during sync"
+            );
+        }
         synced_models.push(model);
     }
 

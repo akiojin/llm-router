@@ -65,6 +65,7 @@ import {
   Trash2,
   Server,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ModelAddWizard } from './ModelAddWizard'
 import { ModelDeleteDialog } from './ModelDeleteDialog'
 
@@ -254,8 +255,19 @@ function getLifecycleBadgeVariant(
   }
 }
 
-function getLifecycleLabel(status: LifecycleStatus): string {
-  return status.charAt(0).toUpperCase() + status.slice(1)
+function getLifecycleLabel(
+  status: LifecycleStatus
+): string {
+  switch (status) {
+    case 'registered':
+      return 'Registered'
+    case 'caching':
+      return 'Caching'
+    case 'pending':
+      return 'Pending'
+    case 'error':
+      return 'Error'
+  }
 }
 
 const SUPPORTED_API_BADGES: {
@@ -321,8 +333,8 @@ function TrafficCell({ stat }: { stat?: ModelStatEntry }) {
         </TooltipTrigger>
         <TooltipContent>
           <div className="text-xs space-y-0.5">
-            <div className="text-green-400">OK: {successful.toLocaleString()}</div>
-            <div className="text-red-400">Fail: {failed.toLocaleString()}</div>
+            <div className="text-green-400">{`OK: ${successful.toLocaleString()}`}</div>
+            <div className="text-red-400">{`Fail: ${failed.toLocaleString()}`}</div>
           </div>
         </TooltipContent>
       </Tooltip>
@@ -403,14 +415,14 @@ function EndpointStatsRow({
         <span className="truncate font-medium">{endpoint.name}</span>
       </div>
       <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-        <span>Total: {totalRequests.toLocaleString()}</span>
+        <span>{`Total: ${totalRequests.toLocaleString()}`}</span>
         <span className="text-green-600">
-          OK: {successfulRequests.toLocaleString()}
+          {`OK: ${successfulRequests.toLocaleString()}`}
         </span>
         <span className="text-red-600">
-          Fail: {failedRequests.toLocaleString()}
+          {`Fail: ${failedRequests.toLocaleString()}`}
         </span>
-        <span>TPS: {modelTpsSummary}</span>
+        <span>{`TPS: ${modelTpsSummary}`}</span>
         <a
           href={`#playground/${endpoint.id}`}
           className="text-primary hover:underline"
@@ -802,8 +814,11 @@ export function ModelsTable({
               <TableBody>
                 {viewerFiltered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                      {search ? 'No models match your search' : 'No models registered'}
+                    <TableCell colSpan={3} className="p-0">
+                      <EmptyState
+                        icon={<Package className="h-10 w-10" />}
+                        title={search ? 'No models match your search' : 'No models registered'}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -980,13 +995,20 @@ export function ModelsTable({
             <TableBody>
               {sorted.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={visibleColumns.length + 2}
-                    className="text-center py-8 text-muted-foreground"
-                  >
-                    {search || statusFilter !== 'all' || activeApiFilters.length > 0
-                      ? 'No models match the filter criteria'
-                      : 'No models registered'}
+                  <TableCell colSpan={visibleColumns.length + 2} className="p-0">
+                    <EmptyState
+                      icon={<Package className="h-10 w-10" />}
+                      title={
+                        search || statusFilter !== 'all' || activeApiFilters.length > 0
+                          ? 'No models match the filter criteria'
+                          : 'No models registered'
+                      }
+                      description={
+                        search || statusFilter !== 'all' || activeApiFilters.length > 0
+                          ? undefined
+                          : 'Register a model or connect an endpoint that serves models.'
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -1058,6 +1080,8 @@ function ModelRow({
           <Button
             variant="secondary"
             size="icon"
+            aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+            aria-expanded={isExpanded}
             className="h-6 w-6 bg-transparent shadow-none hover:bg-muted/70"
           >
             {isExpanded ? (
@@ -1077,6 +1101,7 @@ function ModelRow({
                 <Button
                   variant="secondary"
                   size="icon"
+                  aria-label="Open in playground"
                   className="h-7 w-7 bg-transparent shadow-none hover:bg-muted/70"
                   disabled={!model.ready}
                   onClick={(e) => {
@@ -1097,7 +1122,9 @@ function ModelRow({
           <TableCell colSpan={visibleColumns.length + 2} className="bg-muted/30 p-0">
             <div className="py-2 px-4">
               <div className="text-xs font-medium text-muted-foreground mb-2">
-                Endpoints ({model.endpointCount} source{model.endpointCount !== 1 ? 's' : ''})
+                {model.endpointCount === 1
+                  ? `Endpoints (${model.endpointCount} source)`
+                  : `Endpoints (${model.endpointCount} sources)`}
               </div>
               <div className="space-y-1 rounded-md border bg-background">
                 {modelEndpoints.length > 0 ? (

@@ -14,9 +14,15 @@ use axum::body::Body;
 use axum::http::{header::CONTENT_TYPE, HeaderValue, StatusCode};
 use axum::response::Response;
 use serde_json::{json, Value};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::info;
 use uuid::Uuid;
+
+/// 非ストリーミングのクラウド転送に適用する全体タイムアウト（秒）。
+///
+/// 共有 http_client には全体タイムアウトが無いため、応答しないクラウドプロバイダで
+/// 無期限ハングするのを防ぐ。ストリーミング経路にはストリームが途中で切れるため付与しない。
+const CLOUD_PROXY_TIMEOUT_SECS: u64 = 300;
 
 /// クラウドプロバイダへのプロキシ結果
 pub struct CloudProxyResult {
@@ -73,7 +79,13 @@ pub async fn proxy_cloud_provider(
     let (url, body) = provider.transform_request(payload, model, stream)?;
 
     let builder = http_client.post(&url).json(&body);
-    let builder = provider.apply_auth(builder)?;
+    let mut builder = provider.apply_auth(builder)?;
+    // 非ストリーミングは有界レスポンスのため全体タイムアウトを付与する。
+    // ストリーミングは connect_timeout（共有 client）のみで担保し、
+    // 全体タイムアウトでストリームが途中で切れるのを避ける。
+    if !stream {
+        builder = builder.timeout(Duration::from_secs(CLOUD_PROXY_TIMEOUT_SECS));
+    }
     let res = builder.send().await.map_err(map_reqwest_error)?;
 
     if stream {

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { type ModelStatEntry, type ModelTpsEntry, endpointsApi } from '@/lib/api'
+import { type ModelTpsEntry, endpointsApi } from '@/lib/api'
 import {
   Table,
   TableBody,
@@ -168,7 +168,7 @@ export function EndpointModelsTable({
       <div className="flex items-center justify-between">
         <Label className="flex items-center gap-2">
           <Grid3X3 className="h-4 w-4" />
-          Models ({consolidatedRows.length})
+          {`Models (${consolidatedRows.length})`}
         </Label>
         {headerActions && <div className="flex gap-2">{headerActions}</div>}
       </div>

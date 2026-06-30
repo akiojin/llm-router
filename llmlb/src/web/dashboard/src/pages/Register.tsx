@@ -4,6 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  PasswordStrengthMeter,
+  isPasswordValid,
+} from '@/components/auth/PasswordStrengthMeter'
 import { toast } from '@/hooks/use-toast'
 import { Cpu, Lock, User, Ticket, CheckCircle2 } from 'lucide-react'
 
@@ -27,11 +31,11 @@ export default function RegisterPage() {
       return
     }
 
-    if (password.length < 6) {
+    if (!isPasswordValid(password)) {
       toast({
         variant: 'destructive',
-        title: 'Password too short',
-        description: 'Password must be at least 6 characters',
+        title: 'Password too weak',
+        description: 'Use at least 8 characters including an uppercase letter and a number.',
       })
       return
     }
@@ -146,9 +150,7 @@ export default function RegisterPage() {
           <Card className="glass border-border/50">
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-semibold">Register</CardTitle>
-              <CardDescription>
-                Enter your invitation code and create an account
-              </CardDescription>
+              <CardDescription>Enter your invitation code and create an account</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -199,8 +201,10 @@ export default function RegisterPage() {
                       className="pl-10"
                       required
                       autoComplete="new-password"
+                      aria-describedby={password ? 'password-strength' : undefined}
                     />
                   </div>
+                  <PasswordStrengthMeter id="password-strength" password={password} />
                 </div>
 
                 <div className="space-y-2">

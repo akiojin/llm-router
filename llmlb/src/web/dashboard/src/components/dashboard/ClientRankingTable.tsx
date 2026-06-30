@@ -100,7 +100,7 @@ export function ClientRankingTable({
       {totalCount > perPage && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            {totalCount} clients total
+            {`${totalCount} clients total`}
           </p>
           <div className="flex items-center gap-2">
             <Button

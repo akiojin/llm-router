@@ -21,3 +21,6 @@ mod update_phase2;
 
 #[path = "ui/tps_tab_placement.rs"]
 mod tps_tab_placement;
+
+#[path = "ui/load_test_admin_gate.rs"]
+mod load_test_admin_gate;

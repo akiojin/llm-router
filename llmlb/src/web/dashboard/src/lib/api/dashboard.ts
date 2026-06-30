@@ -1,42 +1,8 @@
 // Dashboard API
 
-import { createApiErrorFromResponse, fetchWithAuth, API_BASE } from './client'
+import { fetchWithAuth } from './client'
 import type { DashboardEndpoint } from './endpoints'
 import type { ModelStatEntry } from './endpoints'
-
-export interface DashboardStats {
-  /**
-   * v2 (2026-01+): "runtimes" naming returned by the API
-   * - Rust: #[serde(rename = "*_runtimes", alias = "*_nodes")]
-   */
-  total_runtimes?: number
-  online_runtimes?: number
-  pending_runtimes?: number
-  registering_runtimes?: number
-  offline_runtimes?: number
-
-  /**
-   * v1 (deprecated): "nodes" naming returned by older servers
-   */
-  total_nodes?: number
-  online_nodes?: number
-  pending_nodes?: number
-  registering_nodes?: number
-  offline_nodes?: number
-
-  total_requests: number
-  successful_requests: number
-  failed_requests: number
-  total_active_requests: number
-  queued_requests: number
-  average_response_time_ms: number | null
-  average_gpu_usage: number | null
-  average_gpu_memory_usage: number | null
-  // Token statistics
-  total_input_tokens: number
-  total_output_tokens: number
-  total_tokens: number
-}
 
 export interface DashboardOperations {
   health: 'healthy' | 'attention' | 'empty' | string
@@ -78,15 +44,6 @@ export interface DashboardActionItem {
   count: number
 }
 
-export type SyncState = 'idle' | 'running' | 'success' | 'failed'
-
-export interface SyncProgress {
-  model_id: string
-  file: string
-  downloaded_bytes: number
-  total_bytes: number
-}
-
 export interface RequestHistoryItem {
   request_id: string
   timestamp: string
@@ -105,14 +62,16 @@ export interface RequestHistoryItem {
 }
 
 // /api/dashboard/request-responses APIのレスポンス型
+// フィールド名はバックエンド（common::protocol::RequestResponseRecord）の
+// シリアライズ結果に一致させる。endpoint_id/endpoint_name/endpoint_ip で返る。
 export interface RequestResponseRecord {
   id: string
   timestamp: string
   request_type: string
   model: string
-  node_id?: string
-  node_machine_name?: string
-  node_ip?: string
+  endpoint_id?: string
+  endpoint_name?: string
+  endpoint_ip?: string
   request_body?: unknown
   response_body?: unknown
   duration_ms: number
@@ -186,11 +145,7 @@ export const dashboardApi = {
   /** SPEC-e8e9326e: List endpoints */
   getEndpoints: () => fetchWithAuth<DashboardEndpoint[]>('/api/dashboard/endpoints'),
 
-  getStats: () => fetchWithAuth<DashboardStats>('/api/dashboard/stats'),
-
   // Token statistics endpoints
-  getTokenStats: () => fetchWithAuth<TokenStats>('/api/dashboard/stats/tokens'),
-
   getDailyTokenStats: (days?: number) =>
     fetchWithAuth<DailyTokenStats[]>('/api/dashboard/stats/tokens/daily', {
       params: { days },
@@ -201,14 +156,6 @@ export const dashboardApi = {
       params: { months },
     }),
 
-  getRequestHistory: (limit?: number) =>
-    fetchWithAuth<RequestHistoryItem[]>('/api/dashboard/request-history', {
-      params: { limit },
-    }),
-
-  getNodeMetrics: (nodeId: string) =>
-    fetchWithAuth<unknown[]>(`/api/dashboard/metrics/${nodeId}`),
-
   getRequestResponses: (params?: {
     limit?: number
     offset?: number
@@ -216,22 +163,6 @@ export const dashboardApi = {
     status?: string
     client_ip?: string
   }) => fetchWithAuth<RequestResponsesPage>('/api/dashboard/request-responses', { params }),
-
-  getRequestResponseDetail: (id: string) =>
-    fetchWithAuth<unknown>(`/api/dashboard/request-responses/${id}`),
-
-  exportRequestResponses: async (format: 'csv' | 'json') => {
-    const response = await fetch(
-      `${API_BASE}/api/dashboard/request-responses/export?format=${format}`,
-      {
-        credentials: 'include',
-      }
-    )
-    if (!response.ok) {
-      throw await createApiErrorFromResponse(response)
-    }
-    return response.blob()
-  },
 
   getRouterLogs: (params?: { limit?: number }) =>
     fetchWithAuth<LogResponse>('/api/dashboard/logs/lb', { params }),

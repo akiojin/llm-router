@@ -328,48 +328,81 @@ fn extract_api_key(request: &Request) -> Result<String, Response> {
         .into_response())
 }
 
-/// JWT認証ミドルウェア
-///
-/// Authorizationヘッダーから "Bearer {token}" を抽出してJWT検証を行う
-///
-/// # Arguments
-/// * `State(jwt_secret)` - JWT署名検証用のシークレットキー
-/// * `request` - HTTPリクエスト
-/// * `next` - 次のミドルウェア/ハンドラー
-///
-/// # Returns
-/// * `Ok(Response)` - 認証成功、requestにClaimsを追加
-/// * `Err(Response)` - 認証失敗、401 Unauthorized
-pub async fn jwt_auth_middleware(
-    State(jwt_secret): State<String>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, Response> {
-    // AuthorizationヘッダーまたはCookieからトークンを取得
-    let token = if let Some(auth_header) = request
-        .headers()
+/// Authorization ヘッダー（Bearer）または JWT Cookie からトークンを取り出す。無ければ 401。
+#[allow(clippy::result_large_err)]
+fn extract_bearer_or_cookie_token(headers: &HeaderMap) -> Result<String, Response> {
+    if let Some(auth_header) = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
     {
-        auth_header
+        return auth_header
             .strip_prefix("Bearer ")
+            .map(str::to_string)
             .ok_or_else(|| {
                 (
                     StatusCode::UNAUTHORIZED,
                     "Invalid Authorization header format".to_string(),
                 )
                     .into_response()
-            })?
-            .to_string()
-    } else if let Some(cookie_token) = extract_jwt_cookie(request.headers()) {
-        cookie_token
-    } else {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "Missing Authorization header or JWT cookie".to_string(),
-        )
-            .into_response());
+            });
+    }
+    if let Some(cookie_token) = extract_jwt_cookie(headers) {
+        return Ok(cookie_token);
+    }
+    Err((
+        StatusCode::UNAUTHORIZED,
+        "Missing Authorization header or JWT cookie".to_string(),
+    )
+        .into_response())
+}
+
+/// パスワード変更/リセット後の旧 JWT セッションを無効化する。
+///
+/// token の `password_changed_at` が DB の現在値より小さい場合は 401 を返す
+/// （= パスワードが変更/リセットされた後に発行前のトークンが使われている）。
+/// dev 固定ログイン（nil UUID）や DB 未登録ユーザーはスキップする。
+///
+/// DB 参照に失敗した場合は **fail-open**（セッションを有効として扱う）。
+/// 無効化は「DB の pca がトークンより新しい」と積極的に確認できた場合のみ行う。
+/// DB 障害時に全認証ユーザーをロックアウトすると、ダッシュボードの
+/// グレースフルデグレード（キャッシュ応答）を壊し自己 DoS となるため。
+/// JWT 自体は 24h で失効するので、障害中の無効化遅延は限定的。
+#[allow(clippy::result_large_err)]
+pub(crate) async fn enforce_session_not_revoked(
+    pool: &sqlx::SqlitePool,
+    claims: &Claims,
+) -> Result<(), Response> {
+    let Ok(user_id) = uuid::Uuid::parse_str(&claims.sub) else {
+        return Ok(());
     };
+    if user_id.is_nil() {
+        return Ok(());
+    }
+    match crate::db::users::find_by_id(pool, user_id).await {
+        Ok(Some(user)) if claims.password_changed_at < user.password_changed_at => Err((
+            StatusCode::UNAUTHORIZED,
+            "Session revoked: please sign in again".to_string(),
+        )
+            .into_response()),
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // fail-open: DB 障害時はセッションを有効扱いにして可用性を優先する。
+            tracing::warn!("Session revocation check skipped (DB error): {}", e);
+            Ok(())
+        }
+    }
+}
+
+/// JWT認証ミドルウェア
+///
+/// Authorization ヘッダーまたは Cookie からトークンを抽出して JWT 検証を行う。
+pub async fn jwt_auth_middleware(
+    State(jwt_secret): State<String>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    // AuthorizationヘッダーまたはCookieからトークンを取得
+    let token = extract_bearer_or_cookie_token(request.headers())?;
 
     // JWTを検証
     let claims = verify_jwt_claims(&token, &jwt_secret)?;
@@ -391,10 +424,20 @@ pub async fn jwt_auth_middleware(
 /// `AppState` から JWT secret を取り出して `jwt_auth_middleware` に委譲する。
 pub async fn require_jwt_auth_middleware(
     State(app_state): State<AppState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<Response, Response> {
-    jwt_auth_middleware(State(app_state.jwt_secret.clone()), request, next).await
+    let token = extract_bearer_or_cookie_token(request.headers())?;
+    let claims = verify_jwt_claims(&token, &app_state.jwt_secret)?;
+    // パスワード変更/リセット後の旧セッションを無効化する
+    enforce_session_not_revoked(&app_state.db_pool, &claims).await?;
+
+    let claims_for_response = claims.clone();
+    request.extensions_mut().insert(claims);
+    let mut response = next.run(request).await;
+    // 監査ログミドルウェア (SPEC-8301d106) がresponse extensionsからアクター情報を取得
+    response.extensions_mut().insert(claims_for_response);
+    Ok(response)
 }
 
 /// JWT claims に admin ロールを要求するミドルウェア
@@ -672,6 +715,8 @@ pub async fn jwt_or_api_key_permission_middleware(
     // JWTがあれば優先
     if let Some(token) = extract_jwt_from_headers(request.headers()) {
         let claims = verify_jwt_claims(&token, &config.app_state.jwt_secret)?;
+        // パスワード変更/リセット後の旧セッションを無効化する
+        enforce_session_not_revoked(&config.app_state.db_pool, &claims).await?;
 
         if let Some(required_role) = config.jwt_required_role {
             if claims.role != required_role {
@@ -714,6 +759,7 @@ pub async fn jwt_or_api_key_permission_middleware(
         role: config.api_key_role,
         exp,
         must_change_password: false,
+        password_changed_at: 0,
     };
     let claims_for_response = claims.clone();
     let auth_context_for_response = auth_context.clone();
@@ -978,6 +1024,7 @@ mod tests {
             crate::common::auth::UserRole::Admin,
             "secret",
             false,
+            0,
         )
         .unwrap();
         assert!(token_looks_like_jwt(&token));
@@ -1006,6 +1053,7 @@ mod tests {
             crate::common::auth::UserRole::Admin,
             "secret",
             false,
+            0,
         )
         .unwrap();
         let mut headers = HeaderMap::new();
@@ -1031,7 +1079,7 @@ mod tests {
     #[test]
     fn extract_jwt_from_headers_falls_back_to_cookie() {
         let token =
-            crate::auth::jwt::create_jwt("u", crate::common::auth::UserRole::Viewer, "s", false)
+            crate::auth::jwt::create_jwt("u", crate::common::auth::UserRole::Viewer, "s", false, 0)
                 .unwrap();
         let mut headers = HeaderMap::new();
         headers.insert(

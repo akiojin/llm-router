@@ -250,8 +250,10 @@ pub async fn update_user(
         }
     }
 
-    // パスワードをハッシュ化（指定された場合）
+    // パスワードをハッシュ化（指定された場合）。要件検証を経てからハッシュ化する。
     let password_hash = if let Some(ref password) = request.password {
+        crate::auth::password::validate_password(password)
+            .map_err(|e| AppError(e).into_response())?;
         Some(crate::auth::password::hash_password(password).map_err(|e| {
             tracing::error!("Failed to hash password: {}", e);
             AppError(LbError::PasswordHash(format!(
@@ -493,6 +495,7 @@ mod tests {
             created_at: Utc::now(),
             last_login: Some(Utc::now()),
             must_change_password: false,
+            password_changed_at: 0,
         };
         let resp = UserResponse::from(user.clone());
         assert_eq!(resp.id, user.id.to_string());
@@ -511,6 +514,7 @@ mod tests {
             created_at: Utc::now(),
             last_login: None,
             must_change_password: true,
+            password_changed_at: 0,
         };
         let resp = UserResponse::from(user.clone());
         assert_eq!(resp.username, "viewer_user");
@@ -528,6 +532,7 @@ mod tests {
             created_at: Utc::now(),
             last_login: None,
             must_change_password: false,
+            password_changed_at: 0,
         };
         let resp = UserResponse::from(user);
         // RFC 3339 timestamps contain "T" and "+" or "Z"
@@ -545,6 +550,7 @@ mod tests {
             created_at: now,
             last_login: Some(now),
             must_change_password: false,
+            password_changed_at: 0,
         };
         let resp = UserResponse::from(user);
         let ll = resp.last_login.unwrap();
@@ -613,6 +619,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert!(check_admin(&claims).is_ok());
     }
@@ -624,6 +631,7 @@ mod tests {
             role: UserRole::Viewer,
             exp: 9999999999,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert!(check_admin(&claims).is_err());
     }

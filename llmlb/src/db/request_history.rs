@@ -282,7 +282,7 @@ impl RequestHistoryStorage {
         let total_count = self.execute_count_query(&count_sql, &params).await?;
 
         // ページネーション
-        let offset = (page.saturating_sub(1)) * per_page;
+        let offset = page.saturating_sub(1).saturating_mul(per_page);
         let data_sql = format!(
             "SELECT * FROM request_history {} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             where_clause
@@ -1203,7 +1203,7 @@ impl RequestHistoryStorage {
         rankings.sort_by_key(|r| std::cmp::Reverse(r.request_count));
 
         let total_count = rankings.len();
-        let offset = (page.saturating_sub(1)) * per_page;
+        let offset = page.saturating_sub(1).saturating_mul(per_page);
         let paginated = rankings.into_iter().skip(offset).take(per_page).collect();
 
         Ok(ClientIpRankingResult {

@@ -2,7 +2,6 @@
 
 use crate::common::error::LbError;
 use sqlx::{migrate::MigrateDatabase, Row, Sqlite, SqlitePool};
-use std::path::Path;
 
 /// SQLiteデータベース接続プールを作成してマイグレーションを実行
 ///
@@ -223,42 +222,6 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), LbError> {
     Ok(())
 }
 
-/// JSONファイルからノードデータをインポート（マイグレーション用）
-///
-/// 注: この機能は将来的にノードデータもSQLiteに移行する際に使用
-/// 現在のところ、認証機能はノードデータとは独立して動作
-///
-/// # Arguments
-/// * `json_path` - nodes.jsonのパス
-///
-/// # Returns
-/// * `Ok(())` - インポート成功、元ファイルを.migratedにリネーム
-/// * `Err(LbError)` - インポート失敗
-pub async fn import_nodes_from_json(json_path: &str) -> Result<(), LbError> {
-    let path = Path::new(json_path);
-
-    // ファイルが存在しない場合はスキップ
-    if !path.exists() {
-        tracing::info!("No nodes.json found at {}, skipping import", json_path);
-        return Ok(());
-    }
-
-    // TODO: 将来的にノードデータをSQLiteに移行する場合、ここで実装
-    // 現在は認証機能のみSQLiteを使用し、ノードデータは既存のJSONベース実装を継続
-
-    tracing::info!("Node data import not yet implemented (nodes remain in JSON format)");
-
-    // マイグレーション完了マーク（ファイルリネーム）
-    let migrated_path = format!("{}.migrated", json_path);
-    if let Err(e) = std::fs::rename(path, &migrated_path) {
-        tracing::warn!("Failed to rename {} to {}: {}", json_path, migrated_path, e);
-    } else {
-        tracing::info!("Renamed {} to {}", json_path, migrated_path);
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,13 +262,6 @@ mod tests {
                 .await;
 
         assert!(result.is_ok(), "api_keys table should exist");
-    }
-
-    #[tokio::test]
-    async fn test_import_nodes_from_json_no_file() {
-        // 存在しないファイルの場合はエラーなく完了
-        let result = import_nodes_from_json("/nonexistent/nodes.json").await;
-        assert!(result.is_ok());
     }
 
     // --- 追加テスト ---
@@ -424,25 +380,6 @@ mod tests {
         .fetch_one(&pool)
         .await;
         assert!(result.is_ok(), "endpoint_daily_stats table should exist");
-    }
-
-    #[tokio::test]
-    async fn test_import_nodes_from_json_with_temp_file() {
-        // Create a temporary file to test actual rename behavior
-        let tmp_dir = std::env::temp_dir();
-        let tmp_file = tmp_dir.join("test_nodes_import.json");
-        std::fs::write(&tmp_file, "{}").expect("Failed to create temp file");
-
-        let result = import_nodes_from_json(tmp_file.to_str().unwrap()).await;
-        assert!(result.is_ok());
-
-        // The original file should be renamed to .migrated
-        assert!(!tmp_file.exists());
-        let migrated = format!("{}.migrated", tmp_file.display());
-        assert!(std::path::Path::new(&migrated).exists());
-
-        // Cleanup
-        let _ = std::fs::remove_file(&migrated);
     }
 
     #[tokio::test]

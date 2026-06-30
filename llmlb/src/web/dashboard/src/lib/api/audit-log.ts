@@ -30,13 +30,6 @@ export interface AuditLogListResponse {
   per_page: number
 }
 
-export interface AuditLogStatsResponse {
-  total_entries: number
-  by_method: { method: string; count: number }[]
-  by_actor_type: { actor_type: string; count: number }[]
-  last_24h: number
-}
-
 export interface HashChainVerifyResult {
   valid: boolean
   batches_checked: number
@@ -63,9 +56,6 @@ export const auditLogApi = {
     fetchWithAuth('/api/dashboard/audit-logs', {
       params: filters as Record<string, string | number | boolean | undefined>,
     }),
-
-  stats: (): Promise<AuditLogStatsResponse> =>
-    fetchWithAuth('/api/dashboard/audit-logs/stats'),
 
   verify: (): Promise<HashChainVerifyResult> =>
     fetchWithAuth('/api/dashboard/audit-logs/verify', { method: 'POST' }),

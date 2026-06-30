@@ -75,29 +75,6 @@ pub fn get_env_with_fallback_parse<T: std::str::FromStr>(
         .unwrap_or(default)
 }
 
-/// Queueing configuration (request wait queue)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct QueueConfig {
-    /// Maximum number of requests allowed to wait in the queue.
-    pub max_waiters: usize,
-    /// Maximum time a request may wait in the queue before timing out.
-    pub timeout: Duration,
-}
-
-impl QueueConfig {
-    /// Load queue configuration from environment variables.
-    pub fn from_env() -> Self {
-        let max_waiters = get_env_with_fallback_parse("LLMLB_QUEUE_MAX", "QUEUE_MAX", 100usize);
-        let timeout_secs =
-            get_env_with_fallback_parse("LLMLB_QUEUE_TIMEOUT_SECS", "QUEUE_TIMEOUT_SECS", 60u64);
-
-        Self {
-            max_waiters,
-            timeout: Duration::from_secs(timeout_secs),
-        }
-    }
-}
-
 /// デフォルトembeddingモデルを取得
 ///
 /// 環境変数 `LLMLB_DEFAULT_EMBEDDING_MODEL`（旧: `LLM_DEFAULT_EMBEDDING_MODEL`）から取得し、

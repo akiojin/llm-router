@@ -41,12 +41,12 @@ export function HashChainStatus() {
         result.valid ? (
           <Badge variant="default" className="bg-green-600">
             <ShieldCheck className="mr-1 h-3 w-3" />
-            Verified ({result.batches_checked} batches)
+            {`Verified (${result.batches_checked} batches)`}
           </Badge>
         ) : (
           <Badge variant="destructive">
             <ShieldAlert className="mr-1 h-3 w-3" />
-            Tampered: Batch {result.tampered_batch}
+            {`Tampered: Batch ${result.tampered_batch}`}
           </Badge>
         )
       )}

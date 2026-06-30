@@ -8,7 +8,7 @@
 use crate::common::auth::UserRole;
 use axum::extract::ws::{Message, WebSocket};
 use axum::{
-    extract::{Query, State, WebSocketUpgrade},
+    extract::{State, WebSocketUpgrade},
     http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
 };
@@ -18,13 +18,6 @@ use tracing::{debug, warn};
 use crate::events::SharedEventBus;
 use crate::AppState;
 
-/// Query parameter for WebSocket token authentication
-#[derive(serde::Deserialize, Default)]
-pub struct WsAuthQuery {
-    /// JWT token passed as query parameter (e.g., `?token=xxx`)
-    pub token: Option<String>,
-}
-
 /// WebSocket upgrade handler for dashboard events
 ///
 /// Clients connect to `/ws/dashboard` to receive real-time updates about:
@@ -32,11 +25,11 @@ pub struct WsAuthQuery {
 /// - Node status changes
 /// - Metrics updates
 ///
-/// Authentication is always required (JWT via Authorization header, cookie, or query parameter).
+/// Authentication is always required (JWT via Authorization header または Cookie)。
+/// クエリパラメータ経由のトークンは URL/履歴/ログに残り漏洩源となるため受理しない。
 pub async fn dashboard_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
-    Query(query): Query<WsAuthQuery>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let token = if let Some(auth_header) = headers
@@ -52,8 +45,6 @@ pub async fn dashboard_ws_handler(
                 )
             })?
             .to_string()
-    } else if let Some(query_token) = query.token {
-        query_token
     } else {
         crate::auth::middleware::extract_jwt_cookie(&headers)
             .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Missing JWT cookie".to_string()))?
@@ -68,6 +59,17 @@ pub async fn dashboard_ws_handler(
     if claims.role != UserRole::Admin {
         return Err((StatusCode::FORBIDDEN, "Admin access required".to_string()));
     }
+
+    // HTTP ダッシュボードAPIと同様に、パスワード変更/リセット後の旧トークンを無効化する。
+    // WebSocket は HTTP の require_jwt_auth ミドルウェアを通らないため、ここで明示的に検査する。
+    crate::auth::middleware::enforce_session_not_revoked(&state.db_pool, &claims)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Session revoked: please sign in again".to_string(),
+            )
+        })?;
 
     debug!("WebSocket authenticated for user: {}", claims.sub);
 
@@ -150,57 +152,6 @@ async fn handle_socket(socket: WebSocket, event_bus: SharedEventBus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // --- WsAuthQuery deserialization tests ---
-
-    #[test]
-    fn ws_auth_query_default_has_no_token() {
-        let query = WsAuthQuery::default();
-        assert!(query.token.is_none());
-    }
-
-    #[test]
-    fn ws_auth_query_deserialize_with_token() {
-        let json = r#"{"token": "my-jwt-token"}"#;
-        let query: WsAuthQuery = serde_json::from_str(json).unwrap();
-        assert_eq!(query.token, Some("my-jwt-token".to_string()));
-    }
-
-    #[test]
-    fn ws_auth_query_deserialize_without_token() {
-        let json = r#"{}"#;
-        let query: WsAuthQuery = serde_json::from_str(json).unwrap();
-        assert!(query.token.is_none());
-    }
-
-    #[test]
-    fn ws_auth_query_deserialize_with_null_token() {
-        let json = r#"{"token": null}"#;
-        let query: WsAuthQuery = serde_json::from_str(json).unwrap();
-        assert!(query.token.is_none());
-    }
-
-    #[test]
-    fn ws_auth_query_deserialize_with_empty_token() {
-        let json = r#"{"token": ""}"#;
-        let query: WsAuthQuery = serde_json::from_str(json).unwrap();
-        assert_eq!(query.token, Some("".to_string()));
-    }
-
-    #[test]
-    fn ws_auth_query_deserialize_ignores_extra_fields() {
-        let json = r#"{"token": "abc", "extra": "ignored"}"#;
-        let query: WsAuthQuery = serde_json::from_str(json).unwrap();
-        assert_eq!(query.token, Some("abc".to_string()));
-    }
-
-    #[test]
-    fn ws_auth_query_deserialize_long_token() {
-        let long_token = "a".repeat(2048);
-        let json = format!(r#"{{"token": "{}"}}"#, long_token);
-        let query: WsAuthQuery = serde_json::from_str(&json).unwrap();
-        assert_eq!(query.token.as_deref(), Some(long_token.as_str()));
-    }
 
     // --- Welcome message format tests ---
 

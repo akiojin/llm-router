@@ -27,14 +27,14 @@ export function CurlDialog({
   copied,
   onCopy,
   copyDisabled = false,
-  description = 'Copy this command to replay the current request.',
+  description,
 }: CurlDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>cURL Command</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription>{description ?? 'Copy this command to replay the current request.'}</DialogDescription>
         </DialogHeader>
 
         <div className="relative">

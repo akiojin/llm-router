@@ -49,18 +49,44 @@ export function SettingsDialog({
   useMaxContext,
   onUseMaxContextChange,
   selectedModelMaxTokens,
-  description = 'Configure chat behavior and generation parameters.',
+  description,
   maxContextCheckboxId = 'use-max-context',
 }: SettingsDialogProps) {
+  const effectiveDescription = description ?? 'Configure chat behavior and generation parameters.'
+  // プリセット/リセットは温度と最大トークンをまとめて設定する。プリセット適用時は
+  // モデル最大コンテキスト指定を解除して、指定したトークン数が反映されるようにする。
+  const applyPreset = (temp: number, tokens: number) => {
+    onTemperatureChange(temp)
+    onUseMaxContextChange(false)
+    onMaxTokensChange(tokens)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription>{effectiveDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Presets</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(0.2, 2048)}>
+                Precise
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(0.7, 4096)}>
+                Balanced
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(1.2, 8192)}>
+                Creative
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <Label>System Prompt</Label>
             <Textarea
@@ -90,7 +116,7 @@ export function SettingsDialog({
           <Separator />
 
           <div className="space-y-2">
-            <Label>Temperature: {temperature}</Label>
+            <Label>{`Temperature: ${temperature}`}</Label>
             <input
               type="range"
               min="0"
@@ -115,7 +141,11 @@ export function SettingsDialog({
                 htmlFor={maxContextCheckboxId}
                 className={cn("text-sm font-normal", selectedModelMaxTokens == null && "text-muted-foreground")}
               >
-                Use model max context{selectedModelMaxTokens != null ? ` (${selectedModelMaxTokens.toLocaleString()})` : ' (unknown)'}
+                {`Use model max context (${
+                  selectedModelMaxTokens != null
+                    ? selectedModelMaxTokens.toLocaleString()
+                    : 'unknown'
+                })`}
               </Label>
             </div>
             <Input
@@ -129,7 +159,15 @@ export function SettingsDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => applyPreset(0.7, 16384)}
+          >
+            Reset parameters
+          </Button>
           <Button onClick={() => onOpenChange(false)}>Done</Button>
         </DialogFooter>
       </DialogContent>

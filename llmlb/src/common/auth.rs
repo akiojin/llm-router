@@ -31,6 +31,9 @@ pub struct User {
     pub last_login: Option<DateTime<Utc>>,
     /// 初回パスワード変更が必要かどうか
     pub must_change_password: bool,
+    /// パスワード最終変更時刻（epochミリ秒）。JWTセッション無効化判定に使用する
+    #[serde(default)]
+    pub password_changed_at: i64,
 }
 
 /// APIキー
@@ -164,6 +167,10 @@ pub struct Claims {
     /// パスワード変更が必要か
     #[serde(default)]
     pub must_change_password: bool,
+    /// 発行時点のパスワード最終変更時刻（epochミリ秒）。
+    /// DB の現在値より小さい場合、そのセッションは無効化されている（パスワード変更/リセット後）。
+    #[serde(default)]
+    pub password_changed_at: i64,
 }
 
 #[cfg(test)]
@@ -259,6 +266,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 1_700_000_000,
             must_change_password: true,
+            password_changed_at: 0,
         };
         let json = serde_json::to_string(&claims).unwrap();
         let back: Claims = serde_json::from_str(&json).unwrap();
@@ -284,6 +292,7 @@ mod tests {
             created_at: Utc::now(),
             last_login: None,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert_eq!(user.username, "alice");
         assert_eq!(user.role, UserRole::Viewer);
@@ -417,6 +426,7 @@ mod tests {
             created_at: Utc::now(),
             last_login: Some(Utc::now()),
             must_change_password: true,
+            password_changed_at: 0,
         };
         let json = serde_json::to_string(&user).unwrap();
         let back: User = serde_json::from_str(&json).unwrap();
@@ -437,6 +447,7 @@ mod tests {
             created_at: Utc::now(),
             last_login: None,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert_eq!(user.role, UserRole::Admin);
     }
@@ -488,6 +499,7 @@ mod tests {
             role: UserRole::Admin,
             exp: 0,
             must_change_password: true,
+            password_changed_at: 0,
         };
         assert!(claims.must_change_password);
         assert_eq!(claims.exp, 0);
@@ -500,6 +512,7 @@ mod tests {
             role: UserRole::Viewer,
             exp: usize::MAX,
             must_change_password: false,
+            password_changed_at: 0,
         };
         assert_eq!(claims.role, UserRole::Viewer);
     }

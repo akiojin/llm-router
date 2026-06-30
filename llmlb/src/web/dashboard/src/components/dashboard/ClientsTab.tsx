@@ -115,7 +115,7 @@ export function ClientsTab() {
           {ipFilter && (
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">
-                Filtered: {ipFilter}
+                {`Filtered: ${ipFilter}`}
               </Badge>
               <button
                 onClick={handleClearFilter}
@@ -144,7 +144,7 @@ export function ClientsTab() {
           {ipFilter && (
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">
-                Filtered: {ipFilter}
+                {`Filtered: ${ipFilter}`}
               </Badge>
               <button
                 onClick={handleClearFilter}

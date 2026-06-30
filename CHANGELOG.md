@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [6.1.0](https://github.com/akiojin/llmlb/compare/v6.0.0...v6.1.0) (2026-06-30)
+
+### Added
+
+- Dashboard: トークン統計のチャート化、ローディング/空状態（EmptyState）の統一、アクセシビリティ改善（パスワード強度メーターの `aria-describedby` 関連付け、監査ステータス色の改善）(#678)
+- Dashboard: 主要テーブルの空状態を EmptyState に統一し、共有 UI 基盤とアクセシビリティを改善 (#678)
+- Dashboard: Playground サイドバー・各種モーダルをモバイルでドロワー化し、履歴ステータスフィルタ・設定プリセットを追加 (#678)
+- Playground: Load Test を admin ロール限定の機能として分離 (#679)
+- Auth: パスワード変更/リセット時にセッションを無効化
+
+### Fixed
+
+- Dashboard: リクエスト分配のエンドポイント名が unknown になる不具合を修正 (#679)
+- Dashboard: 401 時のログインリダイレクトを単一化し、Playground 停止ボタンの配線とアンマウント時のリーク/巻き戻しを修正 (#678)
+- API: dashboard WebSocket にセッション無効化を適用し、WS 認証のクエリトークンを廃止 (#679)
+- API: 上流転送のタイムアウト欠如とストリーム統計の取りこぼし、Anthropic 変換の契約違反（ストリーミング単一ブロック / tool_use）を修正
+- API: 監査ログのページング整合と Viewer 権限昇格を修正
+- Auth: 招待コード消費失敗時に作成済みユーザーを補償削除し、登録・bootstrap 管理者作成へのパスワード検証適用、ログインのタイミング攻撃緩和、ダッシュボード mutation の CSRF 保護を追加
+- Balancer: 選択→割当の TOCTOU とストリーミング lease 早期解放、エンドポイント削除時の状態掃除とオフライン TPS 競合を解消
+- DB: API キー解析の panic 回避とページング/監査バッチの堅牢化
+
+### Changed
+
+- Dashboard: 多言語化（i18n）を撤去し英語のみに戻す（UX・アクセシビリティ改善は維持）(#679)
+- 確認済みデッドコード・未使用依存・廃止された設定フラグを削除
+
+### Security
+
+- quinn-proto を 0.11.15 へ更新し RUSTSEC-2026-0185 に対応 (#679)
+
+### Chore
+
+- Cargo 依存パッケージ更新（dependabot cargo group, 複数件）
+
 ## [6.0.0](https://github.com/akiojin/llmlb/compare/v5.11.0...v6.0.0) (2026-06-04)
 
 ### Changed

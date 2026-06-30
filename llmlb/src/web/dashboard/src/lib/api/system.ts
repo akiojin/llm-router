@@ -126,10 +126,6 @@ export const systemApi = {
     fetchWithAuth<{ cancelled: true }>('/api/system/update/schedule', {
       method: 'DELETE',
     }),
-  getSchedule: () =>
-    fetchWithAuth<{ schedule: ScheduleInfo | null }>(
-      '/api/system/update/schedule'
-    ),
   rollback: () =>
     fetchWithAuth<RollbackResponse>('/api/system/update/rollback', {
       method: 'POST',

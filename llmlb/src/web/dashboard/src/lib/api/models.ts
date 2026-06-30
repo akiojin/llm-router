@@ -55,26 +55,6 @@ export interface OpenAIModel {
 // US-029: モデル一覧の表示モード
 export type ModelsView = 'canonical' | 'detail'
 
-// /api/models/discover-gguf response types
-export interface GgufFileInfo {
-  filename: string
-  size_bytes: number
-  quantization?: string | null
-}
-
-export interface GgufDiscoveryResult {
-  repo: string
-  provider: string
-  trusted: boolean
-  files: GgufFileInfo[]
-}
-
-export interface DiscoverGgufResponse {
-  base_model: string
-  gguf_alternatives: GgufDiscoveryResult[]
-  cached: boolean
-}
-
 // /v1/models レスポンス
 export interface OpenAIModelsResponse {
   object: 'list'

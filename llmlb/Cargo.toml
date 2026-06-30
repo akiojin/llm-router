@@ -67,10 +67,7 @@ fs2 = "0.4"
 regex = "1.10"
 
 # Token counting
-tiktoken-rs = "0.11.0"
-
-# QRコード生成（T-0009）
-qrcode = "0.14"
+tiktoken-rs = "0.12.0"
 
 # Self-update
 semver = "1.0"
@@ -98,6 +95,6 @@ once_cell = "1.21"
 wiremock = "0.6.5"
 criterion = { version = "0.8", features = ["async_tokio"] }
 sqlx = { version = "0.8.1", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate", "chrono", "uuid"] }
-serial_test = "3.0"
+serial_test = "3.5"
 tokio-tungstenite = "0.29"
 proptest = "1"

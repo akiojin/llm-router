@@ -248,50 +248,11 @@ pub struct OpenAIErrorDetail {
     pub code: Option<String>,
 }
 
-/// Runtime error type
-#[derive(Debug, Error)]
-pub enum NodeError {
-    /// Common layer error
-    #[error(transparent)]
-    Common(#[from] CommonError),
-
-    /// load balancer connection error
-    #[error("Failed to connect to Router: {0}")]
-    RouterConnection(String),
-
-    /// LLM runtime connection error
-    #[error("Failed to connect to LLM runtime: {0}")]
-    RuntimeConnection(String),
-
-    /// Registration error
-    #[error("Runtime registration failed: {0}")]
-    Registration(String),
-
-    /// Health check send error
-    #[error("Failed to send health check: {0}")]
-    Heartbeat(String),
-
-    /// Metrics collection error
-    #[error("Failed to collect metrics: {0}")]
-    Metrics(String),
-
-    /// GUI error
-    #[error("GUI error: {0}")]
-    Gui(String),
-
-    /// Internal error
-    #[error("Internal error: {0}")]
-    Internal(String),
-}
-
 /// Result type alias (Common)
 pub type CommonResult<T> = Result<T, CommonError>;
 
 /// Result type alias (load balancer)
 pub type RouterResult<T> = Result<T, LbError>;
-
-/// Result type alias (Runtime)
-pub type NodeResult<T> = Result<T, NodeError>;
 
 #[cfg(test)]
 mod tests {
@@ -314,12 +275,6 @@ mod tests {
     fn test_lb_error_no_nodes() {
         let error = LbError::NoEndpointsAvailable;
         assert_eq!(error.to_string(), "No available endpoints");
-    }
-
-    #[test]
-    fn test_node_error_router_connection() {
-        let error = NodeError::RouterConnection("timeout".to_string());
-        assert_eq!(error.to_string(), "Failed to connect to Router: timeout");
     }
 
     #[test]
@@ -549,28 +504,6 @@ mod tests {
         let common = CommonError::Config("bad config".to_string());
         let lb: LbError = common.into();
         assert!(matches!(lb, LbError::Common(CommonError::Config(_))));
-    }
-
-    #[test]
-    fn test_node_error_all_variants_display() {
-        let errors = vec![
-            NodeError::RuntimeConnection("timeout".into()),
-            NodeError::Registration("already registered".into()),
-            NodeError::Heartbeat("connection refused".into()),
-            NodeError::Metrics("parse error".into()),
-            NodeError::Gui("window error".into()),
-            NodeError::Internal("unexpected".into()),
-        ];
-        for err in &errors {
-            assert!(!err.to_string().is_empty());
-        }
-    }
-
-    #[test]
-    fn test_node_error_from_common() {
-        let common = CommonError::Validation("bad input".to_string());
-        let node: NodeError = common.into();
-        assert!(matches!(node, NodeError::Common(_)));
     }
 
     #[test]

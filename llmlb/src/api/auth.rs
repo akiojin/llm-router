@@ -1,6 +1,6 @@
 //! 認証API
 //!
-//! ログイン、ログアウト、認証情報確認、招待キー管理（T-0009, T-0011）
+//! ログイン、ログアウト、認証情報確認、ユーザー登録、パスワード変更
 
 use crate::common::auth::{Claims, UserRole};
 use crate::common::error::{CommonError, LbError};
@@ -11,10 +11,20 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use chrono::Utc;
 
 use super::error::AppError;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
+
+/// タイミング攻撃緩和用のダミー bcrypt ハッシュ。
+///
+/// 存在しないユーザー名でログイン試行された場合でも、実在ユーザーと同等の
+/// bcrypt 検証コストを発生させることで、応答時間差から有効なユーザー名を
+/// 列挙されるのを防ぐ。実際のパスワードと同じコスト係数で一度だけ生成する。
+static DUMMY_PASSWORD_HASH: LazyLock<String> = LazyLock::new(|| {
+    crate::auth::password::hash_password("dummy_password_for_timing_mitigation")
+        .expect("failed to generate dummy password hash for timing mitigation")
+});
 
 /// ログインリクエスト
 #[derive(Debug, Deserialize)]
@@ -69,44 +79,6 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
-/// 招待キー生成リクエスト（T-0009）
-#[derive(Debug, Deserialize)]
-pub struct CreateInvitationRequest {
-    /// 招待対象ユーザー名（メールアドレス形式）
-    pub username: String,
-    /// ロール（"admin" または "viewer"）
-    pub role: String,
-}
-
-/// 招待キー生成レスポンス（T-0009）
-#[derive(Debug, Serialize)]
-pub struct CreateInvitationResponse {
-    /// 招待キー（8文字英数字）
-    pub invitation_key: String,
-    /// QRコード（SVG形式）
-    pub qr_code: String,
-    /// 有効期限
-    pub expires_at: String,
-}
-
-/// 招待受け入れリクエスト（T-0011）
-#[derive(Debug, Deserialize)]
-pub struct AcceptInvitationRequest {
-    /// 招待キー
-    pub invitation_key: String,
-    /// 生体認証完了フラグ
-    pub biometric_verified: bool,
-}
-
-/// 招待受け入れレスポンス（T-0011）
-#[derive(Debug, Serialize)]
-pub struct AcceptInvitationResponse {
-    /// ユーザー名
-    pub username: String,
-    /// セットアップトークン（1時間有効）
-    pub setup_token: String,
-}
-
 /// POST /api/auth/login - ログイン
 ///
 /// ユーザー名とパスワードで認証し、JWTトークンを発行
@@ -136,6 +108,7 @@ pub async fn login(
             crate::common::auth::UserRole::Admin,
             &app_state.jwt_secret,
             false,
+            0,
         )
         .map_err(|e| {
             tracing::error!("Failed to create JWT: {}", e);
@@ -174,13 +147,24 @@ pub async fn login(
         .map_err(|e| {
             tracing::error!("Failed to find user: {}", e);
             AppError(LbError::Database(format!("Failed to find user: {}", e))).into_response()
-        })?
-        .ok_or_else(|| {
-            AppError(LbError::Authentication(
+        })?;
+
+    // タイミング攻撃緩和: ユーザーが存在しない場合でもダミーハッシュに対して
+    // bcrypt 検証を実行し、応答時間を実在ユーザーと均一化してから401を返す。
+    // これにより応答時間差から有効なユーザー名を列挙されるのを防ぐ。結果は破棄する。
+    let user = match user {
+        Some(user) => user,
+        None => {
+            let _ = crate::auth::password::verify_password(
+                &request.password,
+                DUMMY_PASSWORD_HASH.as_str(),
+            );
+            return Err(AppError(LbError::Authentication(
                 "Invalid username or password".to_string(),
             ))
-            .into_response()
-        })?;
+            .into_response());
+        }
+    };
 
     // パスワードを検証
     let is_valid = crate::auth::password::verify_password(&request.password, &user.password_hash)
@@ -216,6 +200,7 @@ pub async fn login(
         user.role,
         &app_state.jwt_secret,
         user.must_change_password,
+        user.password_changed_at,
     )
     .map_err(|e| {
         tracing::error!("Failed to create JWT: {}", e);
@@ -377,6 +362,12 @@ pub async fn register(
     State(app_state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), Response> {
+    // パスワード要件を検証（8文字以上・大文字・数字）
+    crate::auth::password::validate_password(&request.password).map_err(|e| {
+        tracing::info!("Password validation failed during registration");
+        AppError(e).into_response()
+    })?;
+
     // 招待コードを検索
     let invitation =
         crate::db::invitations::find_by_code(&app_state.db_pool, &request.invitation_code)
@@ -444,15 +435,31 @@ pub async fn register(
         AppError(LbError::Database(format!("Failed to create user: {}", e))).into_response()
     })?;
 
-    // 招待コードを使用済みにする
-    crate::db::invitations::mark_as_used(&app_state.db_pool, invitation.id, user.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to mark invitation as used: {}", e);
-            // ユーザーは既に作成されているため、エラーでもロールバックしない
-            // ここでのエラーはログに記録するが、ユーザー作成は成功として扱う
-        })
-        .ok();
+    // 招待コードを使用済みにする（atomic conditional update: WHERE status = 'active'）。
+    // 失敗（並行登録で既に消費済み＝rows_affected 0、または DB エラー）の場合は、
+    // 作成済みユーザーを補償削除して登録を拒否する。これにより招待コードの再利用や
+    // 「招待が消費されたのにユーザーだけ残る」孤立を防ぐ。
+    if let Err(e) =
+        crate::db::invitations::mark_as_used(&app_state.db_pool, invitation.id, user.id).await
+    {
+        tracing::warn!(
+            "Failed to consume invitation {} for user {}: {}; rolling back user creation",
+            invitation.id,
+            user.id,
+            e
+        );
+        if let Err(del) = crate::db::users::delete(&app_state.db_pool, user.id).await {
+            tracing::error!(
+                "Failed to roll back user {} after invitation consume failure: {}",
+                user.id,
+                del
+            );
+        }
+        return Err(AppError(LbError::Conflict(
+            "Invitation code is no longer valid".to_string(),
+        ))
+        .into_response());
+    }
 
     tracing::info!(
         "User registered via invitation: {} (id={})",
@@ -489,19 +496,16 @@ pub async fn register(
 pub async fn change_password(
     Extension(claims): Extension<Claims>,
     State(app_state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<ChangePasswordRequest>,
 ) -> Result<impl IntoResponse, Response> {
     let user_id: uuid::Uuid = claims.sub.parse().map_err(|_| {
         AppError(LbError::Authentication("Invalid user ID".to_string())).into_response()
     })?;
 
-    // パスワード長バリデーション（6文字以上）
-    if request.new_password.len() < 6 {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Password must be at least 6 characters".to_string(),
-        )))
-        .into_response());
-    }
+    // パスワード要件を検証（register と同一ポリシー: 8文字以上・大文字・数字）
+    crate::auth::password::validate_password(&request.new_password)
+        .map_err(|e| AppError(e).into_response())?;
 
     // 新パスワードをハッシュ化
     let password_hash =
@@ -514,8 +518,8 @@ pub async fn change_password(
             .into_response()
         })?;
 
-    // パスワードを更新
-    crate::db::users::update(
+    // パスワードを更新（password_changed_at が bump され、他の既存セッションは無効化される）
+    let updated_user = crate::db::users::update(
         &app_state.db_pool,
         user_id,
         None,
@@ -546,166 +550,37 @@ pub async fn change_password(
 
     tracing::info!("Password changed for user: {}", user_id);
 
-    Ok(StatusCode::OK)
-}
-
-/// POST /api/admin/invitations - 招待キー生成（T-0009）
-///
-/// admin ロールのユーザーが招待キーを生成
-///
-/// # Arguments
-/// * `Extension(claims)` - JWT クレーム（admin ロール確認用）
-/// * `State(app_state)` - アプリケーション状態
-/// * `Json(request)` - リクエスト（username, role）
-///
-/// # Returns
-/// * `200 OK` - 招待キー、QRコード、有効期限
-/// * `401 Unauthorized` - 認証失敗
-/// * `403 Forbidden` - admin ロール権限がない
-pub async fn create_invitation(
-    Extension(claims): Extension<Claims>,
-    State(app_state): State<AppState>,
-    Json(request): Json<CreateInvitationRequest>,
-) -> Result<impl IntoResponse, Response> {
-    // admin ロール確認
-    if claims.role != UserRole::Admin {
-        return Err(AppError(LbError::Authorization(
-            "Only admin can create invitations".to_string(),
-        ))
-        .into_response());
-    }
-
-    // ロール値検証
-    if request.role != "admin" && request.role != "viewer" {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Role must be 'admin' or 'viewer'".to_string(),
-        )))
-        .into_response());
-    }
-
-    // 招待キー生成（DB に保存）
-    let invitation =
-        crate::db::users::create_invitation(&app_state.db_pool, &request.username, &request.role)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to create invitation: {}", e);
-                AppError(e).into_response()
-            })?;
-
-    // QRコード生成
-    let qr_code = generate_qr_code(&invitation.key).map_err(|e| {
-        tracing::error!("Failed to generate QR code: {}", e);
-        AppError(LbError::Common(CommonError::Config(format!(
-            "Failed to generate QR code: {}",
-            e
-        ))))
-        .into_response()
-    })?;
-
-    let response = CreateInvitationResponse {
-        invitation_key: invitation.key,
-        qr_code,
-        expires_at: invitation.expires_at.to_rfc3339(),
-    };
-
-    tracing::info!(
-        "Invitation created for user: {} by admin: {}",
-        request.username,
-        claims.sub
-    );
-
-    Ok((StatusCode::OK, Json(response)))
-}
-
-/// POST /api/auth/accept-invitation - 招待受け入れ（T-0011）
-///
-/// ユーザーが招待キーで招待を受け入れ、setup_token を取得
-///
-/// # Arguments
-/// * `State(app_state)` - アプリケーション状態
-/// * `Json(request)` - リクエスト（invitation_key, biometric_verified）
-///
-/// # Returns
-/// * `200 OK` - username, setup_token
-/// * `400 Bad Request` - 無効な招待キー、期限切れ、2回目使用
-pub async fn accept_invitation(
-    State(app_state): State<AppState>,
-    Json(request): Json<AcceptInvitationRequest>,
-) -> Result<impl IntoResponse, Response> {
-    // 招待キー検索
-    let invitation =
-        crate::db::users::get_invitation_by_key(&app_state.db_pool, &request.invitation_key)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch invitation: {}", e);
-                AppError(e).into_response()
-            })?
-            .ok_or_else(|| {
-                AppError(LbError::Common(CommonError::Validation(
-                    "Invalid invitation key".to_string(),
-                )))
-                .into_response()
-            })?;
-
-    // 既に使用されているか確認
-    if invitation.is_used {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Invitation key already used".to_string(),
-        )))
-        .into_response());
-    }
-
-    // 有効期限確認
-    if Utc::now() > invitation.expires_at {
-        return Err(AppError(LbError::Common(CommonError::Validation(
-            "Invitation key expired".to_string(),
-        )))
-        .into_response());
-    }
-
-    // setup_token 生成（1時間有効期限）
-    // 一時的に user_id は新規ユーザー生成用のプレースホルダーUUID を使用
-    let temp_user_id = uuid::Uuid::new_v4().to_string();
-    let setup_token = crate::auth::jwt::create_jwt_with_expiration(
-        &temp_user_id,
-        UserRole::Admin, // 一時的
+    // 自分自身のセッションが無効化されないよう、新しい password_changed_at を持つ
+    // 新JWTを発行してレスポンスで返す（旧トークンは以降 401 になる）。
+    let expires_in = 86400;
+    let token = crate::auth::jwt::create_jwt(
+        &user_id.to_string(),
+        claims.role,
         &app_state.jwt_secret,
         false,
-        3600, // 1時間
+        updated_user.password_changed_at,
     )
     .map_err(|e| {
-        tracing::error!("Failed to generate setup token: {}", e);
-        AppError(e).into_response()
+        tracing::error!("Failed to create JWT: {}", e);
+        AppError(LbError::Jwt(format!("Failed to create JWT: {}", e))).into_response()
     })?;
 
-    // 招待キーを使用済みにマーク
-    crate::db::users::mark_invitation_used(&app_state.db_pool, invitation.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to mark invitation as used: {}", e);
-            AppError(e).into_response()
-        })?;
+    let is_secure = is_request_secure(&headers);
+    let cookie = crate::auth::build_jwt_cookie(&token, expires_in, is_secure);
+    let csrf_cookie = crate::auth::build_csrf_cookie(
+        &crate::auth::generate_random_token(32),
+        expires_in,
+        is_secure,
+    );
+    let mut response_headers = HeaderMap::new();
+    response_headers.append(header::SET_COOKIE, cookie.parse().unwrap());
+    response_headers.append(header::SET_COOKIE, csrf_cookie.parse().unwrap());
 
-    let response = AcceptInvitationResponse {
-        username: invitation.username,
-        setup_token,
-    };
-
-    tracing::info!("Invitation accepted: key={}", request.invitation_key);
-
-    Ok((StatusCode::OK, Json(response)))
-}
-
-/// QRコード生成（招待キーを含む）
-fn generate_qr_code(key: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // qrcode クレートを使用してQRコードを生成
-    use qrcode::QrCode;
-
-    let _qr = QrCode::new(key)?;
-
-    // NOTE: 簡易版 - テキストベースのプレースホルダーSVGを返す
-    // 本実装ではqrcode-svgなどでSVG形式に変換するのが望ましい
-    Ok("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect fill=\"white\" width=\"200\" height=\"200\"/></svg>".to_string())
+    Ok((
+        StatusCode::OK,
+        response_headers,
+        Json(serde_json::json!({ "token": token, "expires_in": expires_in })),
+    ))
 }
 
 #[cfg(test)]

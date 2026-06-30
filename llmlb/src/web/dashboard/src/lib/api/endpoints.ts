@@ -3,6 +3,7 @@
 
 import { createApiErrorFromResponse, fetchWithAuth, getCsrfToken, API_BASE } from './client'
 import type { TpsApiKind, TpsSource } from './dashboard'
+import { splitAssistantDelta, type AssistantTextParts } from '../reasoning'
 
 /**
  * SPEC-e8e9326e: Router-Driven Endpoint Registration System
@@ -89,18 +90,6 @@ export interface DownloadTask {
 }
 
 /**
- * SPEC-e8e9326e: Model metadata from endpoint
- */
-export interface ModelMetadata {
-  model: string
-  context_length?: number
-  size_bytes?: number
-  quantization?: string
-  family?: string
-  parameter_size?: string
-}
-
-/**
  * SPEC-8c32349f: Endpoint today stats (daily summary for a single day)
  */
 export interface EndpointTodayStats {
@@ -141,77 +130,9 @@ export interface ModelTpsEntry {
   average_duration_ms: number | null
 }
 
-export interface TpsBenchmarkRequest {
-  model: string
-  api_kind?: TpsApiKind
-  total_requests?: number
-  concurrency?: number
-  max_tokens?: number
-  temperature?: number
-}
-
-export interface TpsBenchmarkEndpointSummary {
-  endpoint_id: string
-  endpoint_name: string
-  requests: number
-  successful_requests: number
-  measured_requests: number
-  success_rate: number
-  mean_tps: number | null
-  p50_tps: number | null
-  p95_tps: number | null
-}
-
-export interface TpsBenchmarkResult {
-  api_kind: TpsApiKind
-  source: TpsSource
-  total_requests: number
-  successful_requests: number
-  measured_requests: number
-  success_rate: number
-  mean_tps: number | null
-  p50_tps: number | null
-  p95_tps: number | null
-  per_endpoint: TpsBenchmarkEndpointSummary[]
-}
-
-export interface TpsBenchmarkRun {
-  run_id: string
-  status: 'running' | 'completed' | 'failed'
-  requested_at: string
-  completed_at: string | null
-  request: TpsBenchmarkRequest
-  result: TpsBenchmarkResult | null
-  error: string | null
-}
-
-export interface TpsBenchmarkAccepted {
-  run_id: string
-  status: 'running'
-}
-
-function extractAssistantDeltaText(parsed: {
-  choices?: Array<{
-    delta?: {
-      content?: string
-      reasoning?: string
-      reasoning_content?: string
-    }
-  }>
-}): string {
-  const delta = parsed.choices?.[0]?.delta
-  return delta?.content || delta?.reasoning_content || delta?.reasoning || ''
-}
-
 export const endpointsApi = {
   /** List endpoints for dashboard */
   list: () => fetchWithAuth<DashboardEndpoint[]>('/api/dashboard/endpoints'),
-
-  /** SPEC-e8e9326e: List endpoints by type */
-  listByType: (type: EndpointType) =>
-    fetchWithAuth<DashboardEndpoint[]>('/api/endpoints', {
-      params: { type },
-    }),
 
   /** Create endpoint */
   create: (data: {
@@ -299,12 +220,6 @@ export const endpointsApi = {
       `/api/endpoints/${id}/download/progress`
     ),
 
-  /** SPEC-e8e9326e: Get model metadata */
-  getModelInfo: (id: string, model: string) =>
-    fetchWithAuth<ModelMetadata>(
-      `/api/endpoints/${id}/models/${encodeURIComponent(model)}/info`
-    ),
-
   /** SPEC-8c32349f: Get today's request statistics for an endpoint */
   getTodayStats: (id: string) =>
     fetchWithAuth<EndpointTodayStats>(`/api/endpoints/${id}/today-stats`),
@@ -333,7 +248,8 @@ export const endpointsApi = {
       temperature?: number
       max_tokens?: number
     },
-    onChunk?: (chunk: string) => void
+    onDelta?: (delta: AssistantTextParts) => void,
+    signal?: AbortSignal
   ) => {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -348,13 +264,14 @@ export const endpointsApi = {
       headers,
       body: JSON.stringify(request),
       credentials: 'include',
+      signal,
     })
 
     if (!response.ok) {
       throw await createApiErrorFromResponse(response)
     }
 
-    if (request.stream && onChunk) {
+    if (request.stream && onDelta) {
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No response body')
 
@@ -375,9 +292,9 @@ export const endpointsApi = {
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data)
-              const content = extractAssistantDeltaText(parsed)
-              if (content) {
-                onChunk(content)
+              const delta = splitAssistantDelta(parsed)
+              if (delta.content || delta.reasoning) {
+                onDelta(delta)
               }
             } catch {
               // Ignore parse errors
@@ -391,15 +308,4 @@ export const endpointsApi = {
 
     return response.json()
   },
-}
-
-export const benchmarkApi = {
-  startTpsBenchmark: (request: TpsBenchmarkRequest) =>
-    fetchWithAuth<TpsBenchmarkAccepted>('/api/benchmarks/tps', {
-      method: 'POST',
-      body: JSON.stringify(request),
-    }),
-
-  getTpsBenchmark: (runId: string) =>
-    fetchWithAuth<TpsBenchmarkRun>(`/api/benchmarks/tps/${runId}`),
 }
