@@ -2278,56 +2278,9 @@ impl LoadManager {
         outcome: RequestOutcome,
         duration: StdDuration,
     ) -> RouterResult<()> {
-        if self.endpoint_registry.get(endpoint_id).await.is_none() {
-            return Err(LbError::EndpointNotFound(endpoint_id));
-        }
-
-        let mut state = self.state.write().await;
-        let entry = state.entry(endpoint_id).or_default();
-
-        if let RequestOutcome::Queued = outcome {
-        } else {
-            if entry.assigned_active > 0 {
-                entry.assigned_active -= 1;
-            }
-
-            match outcome {
-                RequestOutcome::Success => {
-                    entry.success_count = entry.success_count.saturating_add(1)
-                }
-                RequestOutcome::Error => entry.error_count = entry.error_count.saturating_add(1),
-                RequestOutcome::Queued => {}
-            }
-
-            entry.total_latency_ms = entry.total_latency_ms.saturating_add(duration.as_millis());
-        }
-
-        let updated_average = entry.average_latency_ms();
-
-        if let Some(metrics) = entry.last_metrics.as_mut() {
-            metrics.total_requests = entry.total_assigned;
-            if updated_average.is_some() {
-                metrics.average_response_time_ms = updated_average;
-            }
-            if let Some(latest) = entry.metrics_history.back_mut() {
-                latest.total_requests = metrics.total_requests;
-                if let Some(avg) = metrics.average_response_time_ms {
-                    latest.average_response_time_ms = Some(avg);
-                }
-                latest.gpu_usage = metrics.gpu_usage;
-                latest.gpu_memory_usage = metrics.gpu_memory_usage;
-            }
-        }
-
-        let should_notify_idle = entry.combined_active() == 0;
-
-        drop(state);
-        if should_notify_idle {
-            self.queue_notify.notify_waiters();
-        }
-        self.record_request_history(outcome, Utc::now()).await;
-
-        Ok(())
+        // token_usage=None のとき finish_request_with_tokens と挙動が完全一致するため委譲。
+        self.finish_request_with_tokens(endpoint_id, outcome, duration, None)
+            .await
     }
 
     /// リクエスト完了を記録（トークン使用量含む）
