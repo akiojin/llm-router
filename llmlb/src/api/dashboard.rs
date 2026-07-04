@@ -1330,13 +1330,21 @@ pub async fn get_models(
     let mut endpoint_model_ids: HashMap<String, HashSet<String>> = HashMap::new();
     let mut ready_models: HashSet<String> = HashSet::new();
 
-    // canonical name解決マップを構築
-    let mut all_models_raw: Vec<(String, Option<String>)> = Vec::new();
-    for endpoint in &endpoints {
+    // 各エンドポイントのモデルを一度だけ取得する。
+    // 従来は canonical 構築ループと表示構築ループで list_endpoint_models を
+    // エンドポイントごとに2回問い合わせていた（2N クエリ）。ここで N クエリに削減する。
+    let mut endpoints_with_models = Vec::with_capacity(endpoints.len());
+    for endpoint in endpoints {
         let endpoint_models =
             crate::db::endpoints::list_endpoint_models(&state.db_pool, endpoint.id)
                 .await
                 .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
+        endpoints_with_models.push((endpoint, endpoint_models));
+    }
+
+    // canonical name解決マップを構築（取得済みキャッシュから）
+    let mut all_models_raw: Vec<(String, Option<String>)> = Vec::new();
+    for (_, endpoint_models) in &endpoints_with_models {
         for model in endpoint_models {
             all_models_raw.push((model.model_id.clone(), model.canonical_name.clone()));
         }
@@ -1347,12 +1355,7 @@ pub async fn get_models(
             .map(|(id, cn)| (id.as_str(), cn.as_deref())),
     );
 
-    for endpoint in endpoints {
-        let endpoint_models =
-            crate::db::endpoints::list_endpoint_models(&state.db_pool, endpoint.id)
-                .await
-                .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
-
+    for (endpoint, endpoint_models) in endpoints_with_models {
         for model in endpoint_models {
             // 表示用キーの決定（US-029）:
             // canonical 表示は一次配布元 canonical へ集約、detail 表示は model_id 単位で個別列挙。
