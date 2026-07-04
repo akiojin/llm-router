@@ -2,7 +2,7 @@
 
 use crate::common::auth::{Claims, UserRole};
 use crate::common::error::LbError;
-use crate::AppState;
+use crate::UpdateApiState;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -51,7 +51,7 @@ pub async fn get_version() -> Response {
 }
 
 /// GET /api/system
-pub async fn get_system(State(state): State<AppState>) -> Response {
+pub async fn get_system(State(state): State<UpdateApiState>) -> Response {
     let update = state.update_manager.state().await;
     let in_flight = state.inference_gate.in_flight();
     let schedule = state.update_manager.get_schedule().ok().flatten();
@@ -74,7 +74,7 @@ pub async fn get_system(State(state): State<AppState>) -> Response {
 ///
 /// Admin only (JWT middleware applied in create_app).
 pub async fn check_update(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
 ) -> Response {
     if claims.role != UserRole::Admin {
@@ -127,7 +127,7 @@ pub async fn check_update(
 ///
 /// Admin only (JWT middleware applied in create_app).
 pub async fn apply_update(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
 ) -> Response {
     if claims.role != UserRole::Admin {
@@ -150,7 +150,7 @@ pub async fn apply_update(
 ///
 /// Admin only (JWT middleware applied in create_app).
 pub async fn apply_force_update(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
 ) -> Response {
     if claims.role != UserRole::Admin {
@@ -216,7 +216,7 @@ fn parse_scheduled_at(value: &str) -> Option<DateTime<Utc>> {
 ///
 /// Admin only.
 pub async fn create_schedule(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
     Json(body): Json<CreateScheduleRequest>,
 ) -> Response {
@@ -284,7 +284,7 @@ pub async fn create_schedule(
 ///
 /// Admin only.
 pub async fn get_schedule(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
 ) -> Response {
     if claims.role != UserRole::Admin {
@@ -303,7 +303,7 @@ pub async fn get_schedule(
 ///
 /// Admin only.
 pub async fn cancel_schedule(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
 ) -> Response {
     if claims.role != UserRole::Admin {
@@ -330,7 +330,7 @@ pub async fn cancel_schedule(
 ///
 /// Admin only. Restores the previous version from `.bak` if available.
 pub async fn rollback(
-    State(state): State<AppState>,
+    State(state): State<UpdateApiState>,
     Extension(claims): Extension<Claims>,
 ) -> Response {
     if claims.role != UserRole::Admin {

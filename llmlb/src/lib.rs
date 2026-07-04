@@ -158,6 +158,32 @@ impl axum::extract::FromRef<AppState> for AuditState {
     }
 }
 
+/// システム/自己更新 API ハンドラ用のサブ State。
+///
+/// arch-review [H6]: `api/system.rs` の更新系ハンドラは update_manager /
+/// inference_gate / event_bus のみを使う。`FromRef` でこの 3 依存を抽出し、
+/// ハンドラは 14 フィールドの `AppState` ではなく本サブ State を受け取る。
+/// フィールド名は `AppState` と同一にして、ハンドラ本体の変更を署名のみに留める。
+#[derive(Clone)]
+pub struct UpdateApiState {
+    /// 自己更新マネージャー
+    pub update_manager: update::UpdateManager,
+    /// 推論ゲート（ドレイン制御）
+    pub inference_gate: inference_gate::InferenceGate,
+    /// ダッシュボードイベントバス
+    pub event_bus: events::SharedEventBus,
+}
+
+impl axum::extract::FromRef<AppState> for UpdateApiState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            update_manager: state.update_manager.clone(),
+            inference_gate: state.inference_gate.clone(),
+            event_bus: state.event_bus.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
