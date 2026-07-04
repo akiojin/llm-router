@@ -54,6 +54,23 @@ use axum::{
 use include_dir::{include_dir, Dir, File};
 use mime_guess::MimeGuess;
 
+/// JWT クレームが Admin ロールかを検証する共有ヘルパー。
+///
+/// Admin 専用ルートの多くは router 層で `jwt_required_role: Admin` を強制済みだが、
+/// ハンドラ内の多層防御としても使う。users.rs / invitations.rs で逐語重複していたものを一本化。
+#[allow(clippy::result_large_err)]
+pub(crate) fn check_admin(claims: &crate::common::auth::Claims) -> Result<(), Response> {
+    if claims.role != UserRole::Admin {
+        return Err(
+            crate::api::error::AppError(crate::common::error::LbError::Authorization(
+                "Admin access required".to_string(),
+            ))
+            .into_response(),
+        );
+    }
+    Ok(())
+}
+
 static DASHBOARD_ASSETS: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/web/static");
 const DASHBOARD_INDEX: &str = "index.html";
 const OPENAI_BODY_LIMIT_BYTES: usize = 20 * 1024 * 1024;
@@ -730,6 +747,32 @@ mod tests {
 
     async fn test_state() -> AppState {
         TestAppStateBuilder::new().await.build().await
+    }
+
+    #[test]
+    fn check_admin_allows_admin_role() {
+        use crate::common::auth::Claims;
+        let claims = Claims {
+            sub: uuid::Uuid::new_v4().to_string(),
+            role: UserRole::Admin,
+            exp: 9999999999,
+            must_change_password: false,
+            password_changed_at: 0,
+        };
+        assert!(check_admin(&claims).is_ok());
+    }
+
+    #[test]
+    fn check_admin_rejects_viewer_role() {
+        use crate::common::auth::Claims;
+        let claims = Claims {
+            sub: uuid::Uuid::new_v4().to_string(),
+            role: UserRole::Viewer,
+            exp: 9999999999,
+            must_change_password: false,
+            password_changed_at: 0,
+        };
+        assert!(check_admin(&claims).is_err());
     }
 
     #[tokio::test]

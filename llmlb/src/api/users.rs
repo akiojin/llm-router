@@ -79,17 +79,6 @@ impl From<User> for UserResponse {
     }
 }
 
-/// Admin権限チェックヘルパー
-#[allow(clippy::result_large_err)]
-fn check_admin(claims: &Claims) -> Result<(), Response> {
-    if claims.role != UserRole::Admin {
-        return Err(
-            AppError(LbError::Authorization("Admin access required".to_string())).into_response(),
-        );
-    }
-    Ok(())
-}
-
 /// GET /api/users - ユーザー一覧取得
 ///
 /// Admin専用。全ユーザーの一覧を返す（パスワードハッシュは除外）
@@ -106,7 +95,7 @@ pub async fn list_users(
     Extension(claims): Extension<Claims>,
     State(app_state): State<AppState>,
 ) -> Result<Json<ListUsersResponse>, Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     let users = crate::db::users::list(&app_state.db_pool)
         .await
@@ -139,7 +128,7 @@ pub async fn create_user(
     State(app_state): State<AppState>,
     Json(request): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<CreateUserResponse>), Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     // ユーザー名の重複チェック
     let existing = crate::db::users::find_by_username(&app_state.db_pool, &request.username)
@@ -217,7 +206,7 @@ pub async fn update_user(
     Path(user_id): Path<Uuid>,
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>, Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     // ユーザーの存在確認
     crate::db::users::find_by_id(&app_state.db_pool, user_id)
@@ -303,7 +292,7 @@ pub async fn delete_user(
     State(app_state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     // ユーザーの存在確認
     crate::db::users::find_by_id(&app_state.db_pool, user_id)
@@ -608,32 +597,6 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("alice"));
         assert!(json.contains("bob"));
-    }
-
-    // --- check_admin ---
-
-    #[test]
-    fn check_admin_allows_admin_role() {
-        let claims = Claims {
-            sub: Uuid::new_v4().to_string(),
-            role: UserRole::Admin,
-            exp: 9999999999,
-            must_change_password: false,
-            password_changed_at: 0,
-        };
-        assert!(check_admin(&claims).is_ok());
-    }
-
-    #[test]
-    fn check_admin_rejects_viewer_role() {
-        let claims = Claims {
-            sub: Uuid::new_v4().to_string(),
-            role: UserRole::Viewer,
-            exp: 9999999999,
-            must_change_password: false,
-            password_changed_at: 0,
-        };
-        assert!(check_admin(&claims).is_err());
     }
 
     // --- UserRole serde in context of requests ---

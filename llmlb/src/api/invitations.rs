@@ -2,7 +2,7 @@
 //!
 //! Admin専用の招待コードCRUD操作
 
-use crate::common::auth::{Claims, UserRole};
+use crate::common::auth::Claims;
 use crate::common::error::LbError;
 use crate::AppState;
 use axum::{
@@ -62,17 +62,6 @@ pub struct ListInvitationsResponse {
     pub invitations: Vec<InvitationResponse>,
 }
 
-/// Admin権限チェックヘルパー
-#[allow(clippy::result_large_err)]
-fn check_admin(claims: &Claims) -> Result<(), Response> {
-    if claims.role != UserRole::Admin {
-        return Err(
-            AppError(LbError::Authorization("Admin access required".to_string())).into_response(),
-        );
-    }
-    Ok(())
-}
-
 /// POST /api/invitations - 招待コード発行
 ///
 /// Admin専用。新しい招待コードを発行する。平文コードは発行時のみ返却
@@ -91,7 +80,7 @@ pub async fn create_invitation(
     State(app_state): State<AppState>,
     Json(request): Json<CreateInvitationRequest>,
 ) -> Result<(StatusCode, Json<CreateInvitationResponse>), Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     // ユーザーIDをパース
     let user_id = claims.sub.parse::<Uuid>().map_err(|e| {
@@ -139,7 +128,7 @@ pub async fn list_invitations(
     Extension(claims): Extension<Claims>,
     State(app_state): State<AppState>,
 ) -> Result<Json<ListInvitationsResponse>, Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     let invitations = crate::db::invitations::list(&app_state.db_pool)
         .await
@@ -187,7 +176,7 @@ pub async fn revoke_invitation(
     State(app_state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, Response> {
-    check_admin(&claims)?;
+    super::check_admin(&claims)?;
 
     let revoked = crate::db::invitations::revoke(&app_state.db_pool, id)
         .await
@@ -465,32 +454,6 @@ mod tests {
         assert_eq!(arr[0]["status"], "active");
         assert_eq!(arr[1]["status"], "used");
         assert_eq!(arr[2]["status"], "revoked");
-    }
-
-    // --- check_admin helper tests ---
-
-    #[test]
-    fn test_check_admin_allows_admin() {
-        let claims = crate::common::auth::Claims {
-            sub: "user-id".to_string(),
-            role: crate::common::auth::UserRole::Admin,
-            exp: 9999999999,
-            must_change_password: false,
-            password_changed_at: 0,
-        };
-        assert!(check_admin(&claims).is_ok());
-    }
-
-    #[test]
-    fn test_check_admin_rejects_viewer() {
-        let claims = crate::common::auth::Claims {
-            sub: "user-id".to_string(),
-            role: crate::common::auth::UserRole::Viewer,
-            exp: 9999999999,
-            must_change_password: false,
-            password_changed_at: 0,
-        };
-        assert!(check_admin(&claims).is_err());
     }
 
     // --- serde roundtrip tests ---
