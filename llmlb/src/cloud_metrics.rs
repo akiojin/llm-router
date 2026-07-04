@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use prometheus::{
     Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry, TextEncoder,
 };
+use std::sync::Once;
 
 static REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
 static COUNTER: Lazy<IntCounterVec> = Lazy::new(|| {
@@ -18,9 +19,16 @@ static HISTO: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Register cloud metrics (idempotent).
+///
+/// arch-review [L18]: 従来は毎回の `record()` から呼ばれるたびに
+/// `Box::new(clone())` と（初回以降は必ず失敗する）register を実行していた。
+/// `Once` で初回のみ登録し、ホットパスのオーバーヘッドを排除する。
 pub fn init_metrics() {
-    REGISTRY.register(Box::new(COUNTER.clone())).ok();
-    REGISTRY.register(Box::new(HISTO.clone())).ok();
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        REGISTRY.register(Box::new(COUNTER.clone())).ok();
+        REGISTRY.register(Box::new(HISTO.clone())).ok();
+    });
 }
 
 /// Record a cloud provider request with status and latency (ms).
