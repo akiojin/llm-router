@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { queryKeys } from '@/lib/query-keys';
+import {
+  getStatusBadgeVariant,
+  getStatusLabel,
+  getTypeLabel,
+  getTypeBadgeVariant,
+} from '@/lib/endpoint-display'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
-  type EndpointType,
   endpointsApi,
   getRecommendedInferenceTimeout,
   getRecommendedInferenceTimeoutLabel,
@@ -50,79 +55,6 @@ interface EndpointDetailModalProps {
   endpoint: DashboardEndpoint | null
   open: boolean
   onOpenChange: (open: boolean) => void
-}
-
-function getStatusBadgeVariant(
-  status: DashboardEndpoint['status']
-): 'online' | 'pending' | 'offline' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'online':
-      return 'online'
-    case 'pending':
-      return 'pending'
-    case 'offline':
-      return 'offline'
-    case 'error':
-      return 'destructive'
-    default:
-      return 'outline'
-  }
-}
-
-function getStatusLabel(
-  status: DashboardEndpoint['status']
-): string {
-  switch (status) {
-    case 'online':
-      return 'Online'
-    case 'pending':
-      return 'Pending'
-    case 'offline':
-      return 'Offline'
-    case 'error':
-      return 'Error'
-    default:
-      return status
-  }
-}
-
-function getTypeLabel(
-  type: EndpointType | undefined
-): string {
-  switch (type) {
-    case 'xllm':
-      return 'xLLM'
-    case 'ollama':
-      return 'Ollama'
-    case 'vllm':
-      return 'vLLM'
-    case 'lm_studio':
-      return 'LM Studio'
-    case 'llamacpp':
-      return 'llama.cpp'
-    case 'openai_compatible':
-      return 'OpenAI Compatible'
-    case 'unknown':
-      return 'Unknown'
-    default:
-      return '-'
-  }
-}
-
-function getTypeBadgeVariant(
-  type: EndpointType | undefined
-): 'default' | 'secondary' | 'outline' {
-  switch (type) {
-    case 'xllm':
-      return 'default'
-    case 'ollama':
-    case 'vllm':
-    case 'lm_studio':
-    case 'llamacpp':
-      return 'secondary'
-    default:
-      return 'outline'
-  }
 }
 
 export function EndpointDetailModal({ endpoint, open, onOpenChange }: EndpointDetailModalProps) {

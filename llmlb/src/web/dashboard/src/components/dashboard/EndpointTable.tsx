@@ -1,5 +1,11 @@
 import { useState, useMemo } from 'react'
 import { queryKeys } from '@/lib/query-keys';
+import {
+  getStatusBadgeVariant,
+  getStatusLabel,
+  getTypeLabel,
+  getTypeBadgeVariant,
+} from '@/lib/endpoint-display'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
@@ -79,89 +85,6 @@ interface EndpointTableProps {
 }
 
 const PAGE_SIZE = 10
-
-function getStatusBadgeVariant(
-  status: DashboardEndpoint['status']
-): 'online' | 'pending' | 'offline' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'online':
-      return 'online'
-    case 'pending':
-      return 'pending'
-    case 'offline':
-      return 'offline'
-    case 'error':
-      return 'destructive'
-    default:
-      return 'outline'
-  }
-}
-
-function getStatusLabel(
-  status: DashboardEndpoint['status']
-): string {
-  switch (status) {
-    case 'online':
-      return 'Online'
-    case 'pending':
-      return 'Pending'
-    case 'offline':
-      return 'Offline'
-    case 'error':
-      return 'Error'
-    default:
-      return status
-  }
-}
-
-/** SPEC-e8e9326e: Get display label for endpoint type */
-function getTypeLabel(
-  type: EndpointType
-): string {
-  switch (type) {
-    case 'xllm':
-      return 'xLLM'
-    case 'ollama':
-      return 'Ollama'
-    case 'vllm':
-      return 'vLLM'
-    case 'lm_studio':
-      return 'LM Studio'
-    case 'llamacpp':
-      return 'llama.cpp'
-    case 'openai_compatible':
-      return 'OpenAI Compatible'
-    case 'unknown':
-      return 'Unknown'
-    default:
-      return type
-  }
-}
-
-
-/** SPEC-e8e9326e: Get badge variant for endpoint type */
-function getTypeBadgeVariant(
-  type: EndpointType
-): 'default' | 'destructive' | 'outline' | 'secondary' {
-  switch (type) {
-    case 'xllm':
-      return 'default'
-    case 'ollama':
-      return 'secondary'
-    case 'vllm':
-      return 'secondary'
-    case 'lm_studio':
-      return 'secondary'
-    case 'llamacpp':
-      return 'secondary'
-    case 'openai_compatible':
-      return 'outline'
-    case 'unknown':
-      return 'outline'
-    default:
-      return 'outline'
-  }
-}
 
 export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
   const queryClient = useQueryClient()

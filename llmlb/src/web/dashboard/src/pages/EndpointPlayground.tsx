@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { queryKeys } from '@/lib/query-keys';
+import {
+  getStatusBadgeVariant,
+  getStatusIndicatorColor,
+  getStatusLabel,
+} from '@/lib/endpoint-display'
 import { useQuery } from '@tanstack/react-query'
-import { endpointsApi, ApiError, type DashboardEndpoint } from '@/lib/api'
+import { endpointsApi, ApiError } from '@/lib/api'
 import { cn, isAbortError } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 import { usePlayground } from '@/hooks/usePlayground'
@@ -21,55 +26,6 @@ import { Cpu, CircleDot, Loader2, Code } from 'lucide-react'
 interface EndpointPlaygroundProps {
   endpointId: string
   onBack: () => void
-}
-
-function getStatusBadgeVariant(
-  status: DashboardEndpoint['status'] | undefined
-): 'online' | 'pending' | 'offline' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'online':
-      return 'online'
-    case 'pending':
-      return 'pending'
-    case 'offline':
-      return 'offline'
-    case 'error':
-      return 'destructive'
-    default:
-      return 'outline'
-  }
-}
-
-function getStatusIndicatorColor(status: DashboardEndpoint['status'] | undefined): string {
-  switch (status) {
-    case 'online':
-      return 'text-success'
-    case 'pending':
-      return 'text-warning'
-    case 'offline':
-      return 'text-destructive/70'
-    case 'error':
-      return 'text-destructive'
-    default:
-      return 'text-muted-foreground'
-  }
-}
-
-function getStatusLabel(
-  status: DashboardEndpoint['status'] | undefined
-): string {
-  switch (status) {
-    case 'online':
-      return 'Online'
-    case 'pending':
-      return 'Pending'
-    case 'offline':
-      return 'Offline'
-    case 'error':
-      return 'Error'
-    default:
-      return 'Unknown'
-  }
 }
 
 export default function EndpointPlayground({ endpointId, onBack }: EndpointPlaygroundProps) {
