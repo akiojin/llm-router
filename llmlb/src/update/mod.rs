@@ -8,8 +8,10 @@
 //! - Update scheduling (immediate / idle / time-based)
 //! - Update history recording
 
+mod github;
 pub mod history;
 pub mod schedule;
+use github::{fetch_latest_release, parse_tag_to_version, GitHubAsset, GitHubRelease};
 
 use crate::{inference_gate::InferenceGate, shutdown::ShutdownController};
 use anyhow::{anyhow, Context, Result};
@@ -1466,63 +1468,6 @@ fn save_cache(path: &Path, cache: UpdateCacheFile) -> Result<()> {
     fs::write(&tmp, serde_json::to_vec_pretty(&cache)?)?;
     fs::rename(tmp, path)?;
     Ok(())
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct GitHubReleaseResponse {
-    tag_name: String,
-    html_url: String,
-    assets: Vec<GitHubAsset>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct GitHubAsset {
-    name: String,
-    browser_download_url: String,
-}
-
-#[derive(Debug, Clone)]
-struct GitHubRelease {
-    tag_name: String,
-    html_url: String,
-    assets: Vec<GitHubAsset>,
-}
-
-async fn fetch_latest_release(
-    client: &reqwest::Client,
-    owner: &str,
-    repo: &str,
-    timeout: Duration,
-    api_base_url: Option<&str>,
-) -> Result<GitHubRelease> {
-    let base = api_base_url.unwrap_or("https://api.github.com");
-    let url = format!("{base}/repos/{owner}/{repo}/releases/latest");
-    let user_agent = format!("llmlb/{}", env!("CARGO_PKG_VERSION"));
-    let res = client
-        .get(url)
-        .header("accept", "application/vnd.github+json")
-        .header("user-agent", user_agent)
-        .timeout(timeout)
-        .send()
-        .await
-        .context("Failed to call GitHub Releases API")?;
-    if !res.status().is_success() {
-        return Err(anyhow!("GitHub API returned {}", res.status().as_u16()));
-    }
-    let parsed: GitHubReleaseResponse = res
-        .json()
-        .await
-        .context("Failed to parse GitHub release JSON")?;
-    Ok(GitHubRelease {
-        tag_name: parsed.tag_name,
-        html_url: parsed.html_url,
-        assets: parsed.assets,
-    })
-}
-
-fn parse_tag_to_version(tag: &str) -> Result<Version> {
-    let normalized = tag.strip_prefix('v').unwrap_or(tag);
-    Version::parse(normalized).map_err(|e| anyhow!("Invalid tag semver: {e}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
