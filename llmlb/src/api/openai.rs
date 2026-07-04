@@ -88,7 +88,6 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::auth::middleware::ApiKeyAuthContext;
-use crate::common::ip::{normalize_ip, normalize_socket_ip};
 
 use crate::{
     api::{
@@ -150,75 +149,6 @@ fn add_queue_headers(response: &mut Response, wait_ms: u128) {
     }
 }
 
-/// クライアントIPとAPIキーIDを抽出するヘルパー
-///
-/// responses.rs 等の他プロキシ経路からも同一取得口を共有するため pub(crate)。
-pub(crate) fn extract_client_info(
-    addr: &SocketAddr,
-    headers: &HeaderMap,
-    auth_ctx: &Option<axum::Extension<ApiKeyAuthContext>>,
-) -> (Option<IpAddr>, Option<Uuid>) {
-    let client_ip =
-        Some(extract_client_ip_from_headers(headers).unwrap_or_else(|| normalize_socket_ip(addr)));
-    let api_key_id = auth_ctx.as_ref().map(|ext| ext.0.id);
-    (client_ip, api_key_id)
-}
-
-fn extract_client_ip_from_headers(headers: &HeaderMap) -> Option<IpAddr> {
-    extract_x_forwarded_for(headers).or_else(|| extract_forwarded_for(headers))
-}
-
-fn extract_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
-    let value = headers.get("x-forwarded-for")?.to_str().ok()?;
-    value
-        .split(',')
-        .map(str::trim)
-        .find_map(parse_client_ip_from_forwarded_value)
-}
-
-fn extract_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
-    let value = headers.get("forwarded")?.to_str().ok()?;
-    value.split(',').find_map(|entry| {
-        entry
-            .split(';')
-            .filter_map(|pair| pair.split_once('='))
-            .find_map(|(key, value)| {
-                if key.trim().eq_ignore_ascii_case("for") {
-                    parse_client_ip_from_forwarded_value(value.trim())
-                } else {
-                    None
-                }
-            })
-    })
-}
-
-fn parse_client_ip_from_forwarded_value(value: &str) -> Option<IpAddr> {
-    let trimmed = value.trim().trim_matches('"');
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") || trimmed.starts_with('_') {
-        return None;
-    }
-
-    let host = if let Some(stripped) = trimmed.strip_prefix('[') {
-        stripped.split(']').next().unwrap_or_default().trim()
-    } else {
-        trimmed
-    };
-
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        return Some(normalize_ip(ip));
-    }
-
-    if let Some((ip_candidate, _port)) = host.rsplit_once(':') {
-        if !ip_candidate.contains(':') {
-            if let Ok(ip) = ip_candidate.parse::<IpAddr>() {
-                return Some(normalize_ip(ip));
-            }
-        }
-    }
-
-    None
-}
-
 /// POST /v1/chat/completions - OpenAI互換チャットAPI
 pub async fn chat_completions(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -227,7 +157,8 @@ pub async fn chat_completions(
     auth_ctx: Option<axum::Extension<ApiKeyAuthContext>>,
     Json(payload): Json<Value>,
 ) -> Result<Response, AppError> {
-    let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &auth_ctx);
+    let (client_ip, api_key_id) =
+        crate::common::http::extract_client_info(&addr, &headers, &auth_ctx);
     let model = extract_model(&payload)?;
     let parsed = if parse_cloud_model(&model).is_some() {
         ParsedModelName {
@@ -298,7 +229,8 @@ pub async fn completions(
     auth_ctx: Option<axum::Extension<ApiKeyAuthContext>>,
     Json(payload): Json<Value>,
 ) -> Result<Response, AppError> {
-    let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &auth_ctx);
+    let (client_ip, api_key_id) =
+        crate::common::http::extract_client_info(&addr, &headers, &auth_ctx);
     let model = extract_model(&payload)?;
     if parse_cloud_model(&model).is_none() {
         parse_quantized_model_name(&model).map_err(AppError::from)?;
@@ -325,7 +257,8 @@ pub async fn embeddings(
     auth_ctx: Option<axum::Extension<ApiKeyAuthContext>>,
     Json(payload): Json<Value>,
 ) -> Result<Response, AppError> {
-    let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &auth_ctx);
+    let (client_ip, api_key_id) =
+        crate::common::http::extract_client_info(&addr, &headers, &auth_ctx);
     let model = extract_model_with_default(&payload, crate::config::get_default_embedding_model());
     if parse_cloud_model(&model).is_none() {
         parse_quantized_model_name(&model).map_err(AppError::from)?;
@@ -1400,9 +1333,10 @@ fn validation_error(message: impl Into<String>) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        extract_client_ip_from_headers, parse_client_ip_from_forwarded_value, parse_cloud_model,
-        proxy_openai_cloud_post, proxy_openai_post,
+    use super::{parse_cloud_model, proxy_openai_cloud_post, proxy_openai_post};
+    use crate::common::ip::{
+        extract_client_ip_from_headers,
+        parse_forwarded_ip_candidate as parse_client_ip_from_forwarded_value,
     };
     use crate::common::protocol::{RecordStatus, RequestType};
     use crate::{
@@ -3421,7 +3355,7 @@ mod tests {
 
     #[test]
     fn extract_x_forwarded_for_multiple_ips() {
-        use super::extract_x_forwarded_for;
+        use crate::common::ip::extract_x_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-forwarded-for",
@@ -3433,21 +3367,21 @@ mod tests {
 
     #[test]
     fn extract_x_forwarded_for_missing_header_returns_none() {
-        use super::extract_x_forwarded_for;
+        use crate::common::ip::extract_x_forwarded_for;
         let headers = HeaderMap::new();
         assert!(extract_x_forwarded_for(&headers).is_none());
     }
 
     #[test]
     fn extract_forwarded_for_missing_header_returns_none() {
-        use super::extract_forwarded_for;
+        use crate::common::ip::extract_forwarded_for;
         let headers = HeaderMap::new();
         assert!(extract_forwarded_for(&headers).is_none());
     }
 
     #[test]
     fn extract_forwarded_for_multiple_entries() {
-        use super::extract_forwarded_for;
+        use crate::common::ip::extract_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert(
             "forwarded",
@@ -3459,7 +3393,7 @@ mod tests {
 
     #[test]
     fn extract_forwarded_for_case_insensitive_key() {
-        use super::extract_forwarded_for;
+        use crate::common::ip::extract_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert(
             "forwarded",
@@ -3473,14 +3407,14 @@ mod tests {
 
     #[test]
     fn extract_client_info_with_forwarded_header() {
-        use super::extract_client_info;
         use std::net::SocketAddr;
 
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.50"));
 
-        let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &None);
+        let (client_ip, api_key_id) =
+            crate::common::http::extract_client_info(&addr, &headers, &None);
         assert_eq!(
             client_ip.unwrap(),
             "203.0.113.50".parse::<IpAddr>().unwrap()
@@ -3490,13 +3424,13 @@ mod tests {
 
     #[test]
     fn extract_client_info_without_forwarded_falls_back_to_socket() {
-        use super::extract_client_info;
         use std::net::SocketAddr;
 
         let addr: SocketAddr = "10.0.0.5:9999".parse().unwrap();
         let headers = HeaderMap::new();
 
-        let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &None);
+        let (client_ip, api_key_id) =
+            crate::common::http::extract_client_info(&addr, &headers, &None);
         assert_eq!(client_ip.unwrap(), "10.0.0.5".parse::<IpAddr>().unwrap());
         assert!(api_key_id.is_none());
     }
@@ -3744,7 +3678,7 @@ mod tests {
 
     #[test]
     fn extract_x_forwarded_for_all_unknown() {
-        use super::extract_x_forwarded_for;
+        use crate::common::ip::extract_x_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-forwarded-for",
@@ -3755,7 +3689,7 @@ mod tests {
 
     #[test]
     fn extract_x_forwarded_for_single_valid_ip() {
-        use super::extract_x_forwarded_for;
+        use crate::common::ip::extract_x_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", HeaderValue::from_static("172.16.0.1"));
         let ip = extract_x_forwarded_for(&headers).unwrap();
@@ -3764,7 +3698,7 @@ mod tests {
 
     #[test]
     fn extract_x_forwarded_for_with_ipv6() {
-        use super::extract_x_forwarded_for;
+        use crate::common::ip::extract_x_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-forwarded-for",
@@ -3778,7 +3712,7 @@ mod tests {
 
     #[test]
     fn extract_forwarded_for_no_for_key() {
-        use super::extract_forwarded_for;
+        use crate::common::ip::extract_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert(
             "forwarded",
@@ -3789,7 +3723,7 @@ mod tests {
 
     #[test]
     fn extract_forwarded_for_empty_value() {
-        use super::extract_forwarded_for;
+        use crate::common::ip::extract_forwarded_for;
         let mut headers = HeaderMap::new();
         headers.insert("forwarded", HeaderValue::from_static(""));
         assert!(extract_forwarded_for(&headers).is_none());
@@ -3872,26 +3806,24 @@ mod tests {
 
     #[test]
     fn extract_client_info_client_ip_is_always_some() {
-        use super::extract_client_info;
         use std::net::SocketAddr;
 
         let addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
         let headers = HeaderMap::new();
 
-        let (client_ip, _) = extract_client_info(&addr, &headers, &None);
+        let (client_ip, _) = crate::common::http::extract_client_info(&addr, &headers, &None);
         assert!(client_ip.is_some());
     }
 
     #[test]
     fn extract_client_info_prefers_x_forwarded_for_over_socket() {
-        use super::extract_client_info;
         use std::net::SocketAddr;
 
         let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", HeaderValue::from_static("1.2.3.4"));
 
-        let (client_ip, _) = extract_client_info(&addr, &headers, &None);
+        let (client_ip, _) = crate::common::http::extract_client_info(&addr, &headers, &None);
         assert_eq!(client_ip.unwrap(), "1.2.3.4".parse::<IpAddr>().unwrap());
     }
 

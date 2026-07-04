@@ -25,7 +25,6 @@ use crate::{
         error::AppError,
         model_name::rewrite_payload_model_for_endpoint,
         models::load_registered_model,
-        openai::extract_client_info,
         openai_util::{sanitize_openai_payload_for_history, upstream_error_message_from_bytes},
         proxy::{
             forward_streaming_response, forward_streaming_response_with_tps_tracking,
@@ -129,7 +128,8 @@ pub async fn post_responses(
     let stream = extract_stream(&payload);
     let tps_api_kind = Some(TpsApiKind::Responses);
     let request_type = RequestType::Responses;
-    let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &auth_ctx);
+    let (client_ip, api_key_id) =
+        crate::common::http::extract_client_info(&addr, &headers, &auth_ctx);
     // payload は rewrite で move されるため、履歴用ボディを先に確保する。
     let request_body = sanitize_openai_payload_for_history(&payload);
 

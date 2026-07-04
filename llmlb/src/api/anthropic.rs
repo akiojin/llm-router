@@ -118,7 +118,8 @@ async fn handle_messages(
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
 
-    let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &auth_ctx);
+    let (client_ip, api_key_id) =
+        crate::common::http::extract_client_info(&addr, &headers, &auth_ctx);
     let request_body = payload.clone();
     let model = match extract_model(&payload) {
         Ok(model) => model,
@@ -1918,74 +1919,6 @@ fn add_queue_headers(response: &mut Response, wait_ms: u128) {
             .headers_mut()
             .insert(HeaderName::from_static("x-queue-wait-ms"), value);
     }
-}
-
-fn extract_client_info(
-    addr: &SocketAddr,
-    headers: &HeaderMap,
-    auth_ctx: &Option<axum::Extension<ApiKeyAuthContext>>,
-) -> (Option<IpAddr>, Option<Uuid>) {
-    let client_ip = Some(
-        extract_client_ip_from_headers(headers)
-            .unwrap_or_else(|| crate::common::ip::normalize_socket_ip(addr)),
-    );
-    let api_key_id = auth_ctx.as_ref().map(|ext| ext.0.id);
-    (client_ip, api_key_id)
-}
-
-fn extract_client_ip_from_headers(headers: &HeaderMap) -> Option<IpAddr> {
-    extract_x_forwarded_for(headers).or_else(|| extract_forwarded_for(headers))
-}
-
-fn extract_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
-    let value = headers.get("x-forwarded-for")?.to_str().ok()?;
-    value
-        .split(',')
-        .map(str::trim)
-        .find_map(parse_client_ip_from_forwarded_value)
-}
-
-fn extract_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
-    let value = headers.get("forwarded")?.to_str().ok()?;
-    value.split(',').find_map(|entry| {
-        entry
-            .split(';')
-            .filter_map(|pair| pair.split_once('='))
-            .find_map(|(key, value)| {
-                if key.trim().eq_ignore_ascii_case("for") {
-                    parse_client_ip_from_forwarded_value(value.trim())
-                } else {
-                    None
-                }
-            })
-    })
-}
-
-fn parse_client_ip_from_forwarded_value(value: &str) -> Option<IpAddr> {
-    let trimmed = value.trim().trim_matches('"');
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") || trimmed.starts_with('_') {
-        return None;
-    }
-
-    let host = if let Some(stripped) = trimmed.strip_prefix('[') {
-        stripped.split(']').next().unwrap_or_default().trim()
-    } else {
-        trimmed
-    };
-
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        return Some(crate::common::ip::normalize_ip(ip));
-    }
-
-    if let Some((ip_candidate, _port)) = host.rsplit_once(':') {
-        if !ip_candidate.contains(':') {
-            if let Ok(ip) = ip_candidate.parse::<IpAddr>() {
-                return Some(crate::common::ip::normalize_ip(ip));
-            }
-        }
-    }
-
-    None
 }
 
 fn update_inference_latency(

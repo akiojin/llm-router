@@ -1,8 +1,76 @@
 //! IPアドレス正規化ユーティリティ
 //!
-//! IPv4-mapped IPv6アドレスをIPv4に正規化する
+//! IPv4-mapped IPv6アドレスをIPv4に正規化する。
+//! あわせて X-Forwarded-For / Forwarded ヘッダからのクライアント IP 抽出も提供する。
 
+use axum::http::HeaderMap;
 use std::net::{IpAddr, SocketAddr};
+
+/// X-Forwarded-For / Forwarded ヘッダからクライアント IP を抽出する。
+///
+/// X-Forwarded-For を優先し、無ければ RFC7239 の Forwarded ヘッダを見る。
+/// リバースプロキシ配下でのクライアント IP 帰属（監査ログ・リクエスト履歴）に使う。
+/// 以前は api/{openai,anthropic,images,audio}.rs に逐語重複していた唯一の実装。
+pub(crate) fn extract_client_ip_from_headers(headers: &HeaderMap) -> Option<IpAddr> {
+    extract_x_forwarded_for(headers).or_else(|| extract_forwarded_for(headers))
+}
+
+/// X-Forwarded-For ヘッダの最初の有効な IP を返す。
+pub(crate) fn extract_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
+    let value = headers.get("x-forwarded-for")?.to_str().ok()?;
+    value
+        .split(',')
+        .map(str::trim)
+        .find_map(parse_forwarded_ip_candidate)
+}
+
+/// RFC7239 Forwarded ヘッダの `for=` から最初の有効な IP を返す。
+pub(crate) fn extract_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
+    let value = headers.get("forwarded")?.to_str().ok()?;
+    value.split(',').find_map(|entry| {
+        entry
+            .split(';')
+            .filter_map(|pair| pair.split_once('='))
+            .find_map(|(key, value)| {
+                if key.trim().eq_ignore_ascii_case("for") {
+                    parse_forwarded_ip_candidate(value.trim())
+                } else {
+                    None
+                }
+            })
+    })
+}
+
+/// Forwarded / X-Forwarded-For の1候補文字列を IP へパースする。
+///
+/// 引用符・角括弧付き IPv6・末尾ポートに対応し、`unknown` や難読化識別子
+/// （`_` 始まり）は `None` を返す。
+pub(crate) fn parse_forwarded_ip_candidate(value: &str) -> Option<IpAddr> {
+    let trimmed = value.trim().trim_matches('"');
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") || trimmed.starts_with('_') {
+        return None;
+    }
+
+    let host = if let Some(stripped) = trimmed.strip_prefix('[') {
+        stripped.split(']').next().unwrap_or_default().trim()
+    } else {
+        trimmed
+    };
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Some(normalize_ip(ip));
+    }
+
+    if let Some((ip_candidate, _port)) = host.rsplit_once(':') {
+        if !ip_candidate.contains(':') {
+            if let Ok(ip) = ip_candidate.parse::<IpAddr>() {
+                return Some(normalize_ip(ip));
+            }
+        }
+    }
+
+    None
+}
 
 /// IPアドレスを正規化する
 ///
