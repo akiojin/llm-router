@@ -5,6 +5,9 @@
 use super::error::AppError;
 use crate::audit::hash_chain::{self, ChainVerificationResult};
 use crate::audit::types::{AuditLogEntry, AuditLogFilter};
+use crate::AuditState;
+// AppState はテスト補助(create_test_state)でのみ使用する。
+#[cfg(test)]
 use crate::AppState;
 use axum::{
     extract::{Query, State},
@@ -131,7 +134,7 @@ pub struct ActorTypeCount {
 
 /// GET /api/dashboard/audit-logs - 監査ログ一覧取得
 pub async fn list_audit_logs(
-    State(state): State<AppState>,
+    State(state): State<AuditState>,
     Query(params): Query<AuditLogQueryParams>,
 ) -> Result<Json<AuditLogListResponse>, AppError> {
     // フォーマット検証（現在はJSONのみ対応）
@@ -152,9 +155,9 @@ pub async fn list_audit_logs(
     let per_page = filter.per_page.unwrap_or(50);
     let include_archive = filter.include_archive.unwrap_or(false);
     let search_text = filter.search_text.clone();
-    let storage = &state.audit_log_storage;
+    let storage = &state.storage;
 
-    let (items, total) = match (include_archive, state.audit_archive_pool.as_ref()) {
+    let (items, total) = match (include_archive, state.archive_pool.as_ref()) {
         (true, Some(archive_pool)) => {
             query_with_archive(storage, archive_pool, &filter, search_text.as_deref()).await?
         }
@@ -234,9 +237,9 @@ async fn query_with_archive(
 
 /// GET /api/dashboard/audit-logs/stats - 監査ログ統計取得
 pub async fn get_audit_log_stats(
-    State(state): State<AppState>,
+    State(state): State<AuditState>,
 ) -> Result<Json<AuditLogStatsResponse>, AppError> {
-    let storage = &state.audit_log_storage;
+    let storage = &state.storage;
 
     let total_entries = storage.count(&AuditLogFilter::default()).await?;
 
@@ -265,9 +268,9 @@ pub async fn get_audit_log_stats(
 
 /// POST /api/dashboard/audit-logs/verify - ハッシュチェーン検証
 pub async fn verify_hash_chain(
-    State(state): State<AppState>,
+    State(state): State<AuditState>,
 ) -> Result<Json<ChainVerificationResult>, AppError> {
-    let result = hash_chain::verify_chain(&state.audit_log_storage).await?;
+    let result = hash_chain::verify_chain(&state.storage).await?;
     Ok(Json(result))
 }
 

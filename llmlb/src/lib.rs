@@ -135,6 +135,29 @@ pub struct AppState {
     pub audit_archive_pool: Option<sqlx::SqlitePool>,
 }
 
+/// 監査ログハンドラ用のドメイン別サブ State。
+///
+/// arch-review [H6]: `AppState` は 7 ドメイン・14 フィールドを束ねる暗黙結合ハブで、
+/// ハンドラが不要な依存まで推移的に抱えていた。axum の [`axum::extract::FromRef`] で
+/// 監査ドメインのみを抽出できるようにし、監査ハンドラは `State<AuditState>` で必要な
+/// 依存だけを受け取る。`AppState` の構造は不変で、他ハンドラや構築サイトに影響しない。
+#[derive(Clone)]
+pub struct AuditState {
+    /// 監査ログストレージ
+    pub storage: std::sync::Arc<db::audit_log::AuditLogStorage>,
+    /// 監査ログアーカイブDBプール
+    pub archive_pool: Option<sqlx::SqlitePool>,
+}
+
+impl axum::extract::FromRef<AppState> for AuditState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            storage: state.audit_log_storage.clone(),
+            archive_pool: state.audit_archive_pool.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
