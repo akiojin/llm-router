@@ -41,19 +41,18 @@ impl AuditLogStorage {
         let mut rows = Vec::new();
 
         // バッチ未割当（主に移行データ）も保持期限対象ならアーカイブする
-        let mut unbatched_rows = sqlx::query_as::<_, AuditLogRow>(
-            "SELECT id, timestamp, http_method, request_path, status_code, \
-             actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
-             duration_ms, input_tokens, output_tokens, total_tokens, \
-             model_name, endpoint_id, detail, batch_id, is_migrated \
-             FROM audit_log_entries \
-             WHERE timestamp < ? AND batch_id IS NULL \
-             ORDER BY timestamp ASC",
-        )
-        .bind(&cutoff_str)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to fetch old unbatched entries: {}", e)))?;
+        let unbatched_sql = format!(
+            "SELECT {} FROM audit_log_entries \
+             WHERE timestamp < ? AND batch_id IS NULL ORDER BY timestamp ASC",
+            super::AUDIT_LOG_SELECT_COLUMNS
+        );
+        let mut unbatched_rows = sqlx::query_as::<_, AuditLogRow>(&unbatched_sql)
+            .bind(&cutoff_str)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| {
+                LbError::Database(format!("Failed to fetch old unbatched entries: {}", e))
+            })?;
         rows.append(&mut unbatched_rows);
 
         if !archivable_batches.is_empty() {
@@ -255,11 +254,8 @@ impl AuditLogStorage {
         let offset = page.saturating_sub(1).saturating_mul(per_page);
 
         let sql = format!(
-            "SELECT id, timestamp, http_method, request_path, status_code, \
-             actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
-             duration_ms, input_tokens, output_tokens, total_tokens, \
-             model_name, endpoint_id, detail, batch_id, is_migrated \
-             FROM audit_log_entries {} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            "SELECT {} FROM audit_log_entries {} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            super::AUDIT_LOG_SELECT_COLUMNS,
             where_clause
         );
 

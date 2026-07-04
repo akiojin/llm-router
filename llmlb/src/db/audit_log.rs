@@ -151,6 +151,15 @@ struct AuditLogRow {
     is_migrated: i64,
 }
 
+/// `AuditLogRow` に対応する SELECT カラムリスト（順序は構造体フィールドと一致）。
+///
+/// カラムを増減する際はこの定数と [`AuditLogRow`] の双方を更新すること。
+/// 従来は同一リストを 6 箇所の SQL 文へ逐語コピーしていた（arch-review [L4]）。
+pub(super) const AUDIT_LOG_SELECT_COLUMNS: &str = "id, timestamp, http_method, request_path, \
+     status_code, actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
+     duration_ms, input_tokens, output_tokens, total_tokens, model_name, endpoint_id, \
+     detail, batch_id, is_migrated";
+
 /// トークン全体統計
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenStatistics {
@@ -383,12 +392,8 @@ impl AuditLogStorage {
         let offset = page.saturating_sub(1).saturating_mul(per_page);
 
         let sql = format!(
-            "SELECT id, timestamp, http_method, request_path, status_code, \
-             actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
-             duration_ms, input_tokens, output_tokens, total_tokens, \
-             model_name, endpoint_id, detail, batch_id, is_migrated \
-             FROM audit_log_entries {} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
-            where_clause
+            "SELECT {} FROM audit_log_entries {} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            AUDIT_LOG_SELECT_COLUMNS, where_clause
         );
 
         let mut query = sqlx::query_as::<_, AuditLogRow>(&sql);
@@ -428,17 +433,15 @@ impl AuditLogStorage {
 
     /// IDで監査ログを取得
     pub async fn get_by_id(&self, id: i64) -> RouterResult<Option<AuditLogEntry>> {
-        let row = sqlx::query_as::<_, AuditLogRow>(
-            "SELECT id, timestamp, http_method, request_path, status_code, \
-             actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
-             duration_ms, input_tokens, output_tokens, total_tokens, \
-             model_name, endpoint_id, detail, batch_id, is_migrated \
-             FROM audit_log_entries WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to get audit log by id: {}", e)))?;
+        let sql = format!(
+            "SELECT {} FROM audit_log_entries WHERE id = ?",
+            AUDIT_LOG_SELECT_COLUMNS
+        );
+        let row = sqlx::query_as::<_, AuditLogRow>(&sql)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| LbError::Database(format!("Failed to get audit log by id: {}", e)))?;
 
         match row {
             Some(r) => Ok(Some(AuditLogEntry::try_from(r)?)),
@@ -630,17 +633,15 @@ impl AuditLogStorage {
 
     /// バッチ内エントリを取得
     pub async fn get_entries_for_batch(&self, batch_id: i64) -> RouterResult<Vec<AuditLogEntry>> {
-        let rows = sqlx::query_as::<_, AuditLogRow>(
-            "SELECT id, timestamp, http_method, request_path, status_code, \
-             actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
-             duration_ms, input_tokens, output_tokens, total_tokens, \
-             model_name, endpoint_id, detail, batch_id, is_migrated \
-             FROM audit_log_entries WHERE batch_id = ? ORDER BY timestamp ASC",
-        )
-        .bind(batch_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to get entries for batch: {}", e)))?;
+        let sql = format!(
+            "SELECT {} FROM audit_log_entries WHERE batch_id = ? ORDER BY timestamp ASC",
+            AUDIT_LOG_SELECT_COLUMNS
+        );
+        let rows = sqlx::query_as::<_, AuditLogRow>(&sql)
+            .bind(batch_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LbError::Database(format!("Failed to get entries for batch: {}", e)))?;
 
         rows.into_iter()
             .map(AuditLogEntry::try_from)
@@ -820,17 +821,15 @@ impl AuditLogStorage {
 
     /// バッチ未割当のエントリを取得（batch_id IS NULL AND is_migrated = 0）
     pub async fn get_unbatched_entries(&self) -> RouterResult<Vec<AuditLogEntry>> {
-        let rows = sqlx::query_as::<_, AuditLogRow>(
-            "SELECT id, timestamp, http_method, request_path, status_code, \
-             actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
-             duration_ms, input_tokens, output_tokens, total_tokens, \
-             model_name, endpoint_id, detail, batch_id, is_migrated \
-             FROM audit_log_entries WHERE batch_id IS NULL AND is_migrated = 0 \
-             ORDER BY timestamp ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to get unbatched entries: {}", e)))?;
+        let sql = format!(
+            "SELECT {} FROM audit_log_entries \
+             WHERE batch_id IS NULL AND is_migrated = 0 ORDER BY timestamp ASC",
+            AUDIT_LOG_SELECT_COLUMNS
+        );
+        let rows = sqlx::query_as::<_, AuditLogRow>(&sql)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LbError::Database(format!("Failed to get unbatched entries: {}", e)))?;
 
         rows.into_iter()
             .map(AuditLogEntry::try_from)
