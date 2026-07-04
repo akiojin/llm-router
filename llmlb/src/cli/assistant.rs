@@ -470,10 +470,7 @@ fn safe_pathname(url: &str) -> String {
 }
 
 fn inject_auth_headers(command: &str, url: &str, config: &AssistantConfig) -> String {
-    if command.contains("Authorization:")
-        || command.contains("X-API-Key:")
-        || command.contains("X-Node-Token:")
-    {
+    if command.contains("Authorization:") || command.contains("X-API-Key:") {
         return command.to_string();
     }
 
@@ -637,16 +634,11 @@ fn mask_sensitive(command: &str) -> String {
         Lazy::new(|| Regex::new(r#"Bearer\s+[^\s"']+"#).expect("valid regex"));
     static API_KEY_HEADER_RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r#"X-API-Key:\s*[^\s"']+"#).expect("valid regex"));
-    static NODE_TOKEN_HEADER_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r#"X-Node-Token:\s*[^\s"']+"#).expect("valid regex"));
     static SK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"sk_[A-Za-z0-9]+").expect("valid regex"));
-    static NT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"nt_[A-Za-z0-9-]+").expect("valid regex"));
 
     let masked = BEARER_RE.replace_all(command, "Bearer ***");
     let masked = API_KEY_HEADER_RE.replace_all(&masked, "X-API-Key: ***");
-    let masked = NODE_TOKEN_HEADER_RE.replace_all(&masked, "X-Node-Token: ***");
-    let masked = SK_RE.replace_all(&masked, "sk_***");
-    NT_RE.replace_all(&masked, "nt_***").to_string()
+    SK_RE.replace_all(&masked, "sk_***").to_string()
 }
 
 fn load_openapi_value(path: Option<&PathBuf>, env_path: Option<&PathBuf>) -> Value {
@@ -1324,23 +1316,6 @@ paths: {}
         let cmd = "curl -H \"Authorization: Bearer my_token\" http://localhost:32768/v1/models";
         let out = inject_auth_headers(cmd, "http://localhost:32768/v1/models", &cfg);
         assert_eq!(out, cmd);
-    }
-
-    #[test]
-    fn inject_auth_skips_if_node_token_header_present() {
-        let cfg = test_config(|c| c.api_key = Some("sk_api".to_string()));
-        let cmd = "curl -H \"X-Node-Token: nt_abc\" http://localhost:32768/v1/models";
-        let out = inject_auth_headers(cmd, "http://localhost:32768/v1/models", &cfg);
-        assert_eq!(out, cmd);
-    }
-
-    #[test]
-    fn mask_sensitive_replaces_node_token() {
-        let cmd = "curl -H \"X-Node-Token: nt_abc-123\" http://localhost:32768";
-        let masked = mask_sensitive(cmd);
-        // NODE_TOKEN_HEADER_RE replaces the whole header value first
-        assert!(masked.contains("X-Node-Token: ***"));
-        assert!(!masked.contains("nt_abc-123"));
     }
 
     #[test]
