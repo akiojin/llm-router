@@ -223,82 +223,8 @@ impl EndpointHealthChecker {
         endpoint: &Endpoint,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let status_before = endpoint.status;
-        let is_xllm = matches!(endpoint.endpoint_type, EndpointType::Xllm);
-        let (success, error_message, new_status, gpu_info, latency_ms) = if is_xllm {
-            let start = Instant::now();
-            match self.try_v0_health(endpoint).await {
-                Ok(gpu_info) => (
-                    true,
-                    None,
-                    EndpointStatus::Online,
-                    Some(gpu_info),
-                    start.elapsed().as_millis() as u32,
-                ),
-                Err(_v0_error) => {
-                    debug!(
-                        endpoint_id = %endpoint.id,
-                        endpoint_name = %endpoint.name,
-                        "/api/health failed, falling back to /v1/models"
-                    );
-
-                    let start = Instant::now();
-                    match self.try_v1_models(endpoint).await {
-                        Ok(()) => {
-                            // /v1/models 成功 → online、GPU情報なし
-                            (
-                                true,
-                                None,
-                                EndpointStatus::Online,
-                                None,
-                                start.elapsed().as_millis() as u32,
-                            )
-                        }
-                        Err(e) => {
-                            // 両方失敗
-                            let error = e.to_string();
-                            let new_status = self.determine_failure_status(endpoint, status_before);
-                            (
-                                false,
-                                Some(error),
-                                new_status,
-                                None,
-                                start.elapsed().as_millis() as u32,
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            debug!(
-                endpoint_id = %endpoint.id,
-                endpoint_name = %endpoint.name,
-                "non-xLLM endpoint, using /v1/models directly"
-            );
-            let start = Instant::now();
-            match self.try_v1_models(endpoint).await {
-                Ok(()) => {
-                    // /v1/models 成功 → online、GPU情報なし
-                    (
-                        true,
-                        None,
-                        EndpointStatus::Online,
-                        None,
-                        start.elapsed().as_millis() as u32,
-                    )
-                }
-                Err(e) => {
-                    let error = e.to_string();
-                    let new_status = self.determine_failure_status(endpoint, status_before);
-                    (
-                        false,
-                        Some(error),
-                        new_status,
-                        None,
-                        start.elapsed().as_millis() as u32,
-                    )
-                }
-            }
-        };
+        let (success, error_message, new_status, gpu_info, latency_ms) =
+            self.probe_endpoint(endpoint, status_before).await;
 
         // ステータス更新
         if success {
@@ -332,50 +258,9 @@ impl EndpointHealthChecker {
         }
 
         // SPEC-e8e9326e: offline→online遷移時にタイプ再検出
-        let mut endpoint_type_for_auto_sync = endpoint.endpoint_type;
-        let was_offline = matches!(
-            status_before,
-            EndpointStatus::Offline | EndpointStatus::Error
-        );
-        if success && was_offline {
-            match detect_endpoint_type_with_client(
-                &self.client,
-                &endpoint.base_url,
-                endpoint.api_key.as_deref(),
-            )
-            .await
-            {
-                Ok(result) => {
-                    endpoint_type_for_auto_sync = result.endpoint_type;
-                    if result.endpoint_type != endpoint.endpoint_type {
-                        info!(
-                            endpoint_id = %endpoint.id,
-                            endpoint_name = %endpoint.name,
-                            detected_type = %result.endpoint_type.as_str(),
-                            "Endpoint type re-detected on health check"
-                        );
-                        if let Err(e) = self
-                            .registry
-                            .update_endpoint_type(endpoint.id, result.endpoint_type)
-                            .await
-                        {
-                            warn!(
-                                endpoint_id = %endpoint.id,
-                                error = %e,
-                                "Failed to update endpoint type"
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        endpoint_id = %endpoint.id,
-                        error = %e,
-                        "Endpoint type re-detection failed; keeping previous type"
-                    );
-                }
-            }
-        }
+        let endpoint_type_for_auto_sync = self
+            .redetect_type_on_recovery(endpoint, status_before, success)
+            .await;
 
         if success {
             self.maybe_auto_sync_models(endpoint, new_status, endpoint_type_for_auto_sync)
@@ -422,6 +307,143 @@ impl EndpointHealthChecker {
                 .unwrap_or_else(|| "Unknown error".to_string())
                 .into())
         }
+    }
+
+    /// エンドポイントへ health プローブを実行し、結果タプルを返す。
+    ///
+    /// arch-review [M7]: check_endpoint の 205 行オーケストレーションから、
+    /// レジストリ更新などの副作用を伴わないプローブ（xLLM は /api/health →
+    /// /v1/models フォールバック、それ以外は /v1/models 直接）を切り出した。
+    async fn probe_endpoint(
+        &self,
+        endpoint: &Endpoint,
+        status_before: EndpointStatus,
+    ) -> (bool, Option<String>, EndpointStatus, Option<GpuInfo>, u32) {
+        let is_xllm = matches!(endpoint.endpoint_type, EndpointType::Xllm);
+        if is_xllm {
+            let start = Instant::now();
+            match self.try_v0_health(endpoint).await {
+                Ok(gpu_info) => (
+                    true,
+                    None,
+                    EndpointStatus::Online,
+                    Some(gpu_info),
+                    start.elapsed().as_millis() as u32,
+                ),
+                Err(_v0_error) => {
+                    debug!(
+                        endpoint_id = %endpoint.id,
+                        endpoint_name = %endpoint.name,
+                        "/api/health failed, falling back to /v1/models"
+                    );
+
+                    let start = Instant::now();
+                    match self.try_v1_models(endpoint).await {
+                        Ok(()) => (
+                            true,
+                            None,
+                            EndpointStatus::Online,
+                            None,
+                            start.elapsed().as_millis() as u32,
+                        ),
+                        Err(e) => {
+                            let error = e.to_string();
+                            let new_status = self.determine_failure_status(endpoint, status_before);
+                            (
+                                false,
+                                Some(error),
+                                new_status,
+                                None,
+                                start.elapsed().as_millis() as u32,
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            debug!(
+                endpoint_id = %endpoint.id,
+                endpoint_name = %endpoint.name,
+                "non-xLLM endpoint, using /v1/models directly"
+            );
+            let start = Instant::now();
+            match self.try_v1_models(endpoint).await {
+                Ok(()) => (
+                    true,
+                    None,
+                    EndpointStatus::Online,
+                    None,
+                    start.elapsed().as_millis() as u32,
+                ),
+                Err(e) => {
+                    let error = e.to_string();
+                    let new_status = self.determine_failure_status(endpoint, status_before);
+                    (
+                        false,
+                        Some(error),
+                        new_status,
+                        None,
+                        start.elapsed().as_millis() as u32,
+                    )
+                }
+            }
+        }
+    }
+
+    /// offline→online 復帰時にエンドポイントタイプを再検出し、auto-sync に用いるタイプを返す。
+    ///
+    /// arch-review [M7]: 型再検出フェーズを check_endpoint から分離。
+    async fn redetect_type_on_recovery(
+        &self,
+        endpoint: &Endpoint,
+        status_before: EndpointStatus,
+        success: bool,
+    ) -> EndpointType {
+        let mut endpoint_type_for_auto_sync = endpoint.endpoint_type;
+        let was_offline = matches!(
+            status_before,
+            EndpointStatus::Offline | EndpointStatus::Error
+        );
+        if success && was_offline {
+            match detect_endpoint_type_with_client(
+                &self.client,
+                &endpoint.base_url,
+                endpoint.api_key.as_deref(),
+            )
+            .await
+            {
+                Ok(result) => {
+                    endpoint_type_for_auto_sync = result.endpoint_type;
+                    if result.endpoint_type != endpoint.endpoint_type {
+                        info!(
+                            endpoint_id = %endpoint.id,
+                            endpoint_name = %endpoint.name,
+                            detected_type = %result.endpoint_type.as_str(),
+                            "Endpoint type re-detected on health check"
+                        );
+                        if let Err(e) = self
+                            .registry
+                            .update_endpoint_type(endpoint.id, result.endpoint_type)
+                            .await
+                        {
+                            warn!(
+                                endpoint_id = %endpoint.id,
+                                error = %e,
+                                "Failed to update endpoint type"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        endpoint_id = %endpoint.id,
+                        error = %e,
+                        "Endpoint type re-detection failed; keeping previous type"
+                    );
+                }
+            }
+        }
+        endpoint_type_for_auto_sync
     }
 
     async fn maybe_auto_sync_models(
