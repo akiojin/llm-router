@@ -31,12 +31,6 @@ impl LoadManager {
         Ok(endpoints)
     }
 
-    /// エンドポイントを直接選択（ラウンドロビン）
-    pub async fn select_endpoint_direct(&self) -> RouterResult<crate::types::endpoint::Endpoint> {
-        let endpoints = self.collect_online_endpoints(None).await?;
-        self.select_endpoint_round_robin_from_endpoints(endpoints)
-    }
-
     /// エンドポイントをTPS優先で直接選択する。
     ///
     /// `api_kind` を指定した場合、そのAPI種別の集計TPSを優先度に用いる。
@@ -48,15 +42,6 @@ impl LoadManager {
         let endpoints = self.collect_online_endpoints(None).await?;
         self.select_endpoint_by_tps_from_endpoints(endpoints, None, api_kind)
             .await
-    }
-
-    /// 指定モデルに対応するエンドポイントを直接選択（ラウンドロビン）
-    pub async fn select_endpoint_direct_for_model(
-        &self,
-        model_id: &str,
-    ) -> RouterResult<crate::types::endpoint::Endpoint> {
-        let endpoints = self.collect_online_endpoints(Some(model_id)).await?;
-        self.select_endpoint_round_robin_from_endpoints(endpoints)
     }
 
     /// 指定モデルに対応する初期化完了エンドポイントをラウンドロビンで選択

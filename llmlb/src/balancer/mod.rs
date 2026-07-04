@@ -1605,66 +1605,6 @@ mod tests {
         assert_eq!(total_error, 1);
     }
 
-    // ===== select_endpoint_direct テスト =====
-
-    #[tokio::test]
-    async fn select_endpoint_direct_no_online_returns_error() {
-        let _lock = TEST_LOCK.lock().await;
-        let pool = SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("Failed to create test database");
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .expect("Failed to run migrations");
-        let registry = EndpointRegistry::new(pool)
-            .await
-            .expect("Failed to create endpoint registry");
-        let load_manager = LoadManager::new(Arc::new(registry));
-
-        let result = load_manager.select_endpoint_direct().await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn select_endpoint_direct_selects_online() {
-        let _lock = TEST_LOCK.lock().await;
-        let pool = SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("Failed to create test database");
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .expect("Failed to run migrations");
-        let registry = EndpointRegistry::new(pool)
-            .await
-            .expect("Failed to create endpoint registry");
-        let mut ep = Endpoint::new(
-            "online-ep".to_string(),
-            "http://localhost:11434".to_string(),
-            EndpointType::OpenaiCompatible,
-        );
-        ep.status = EndpointStatus::Online;
-        registry.add(ep).await.expect("Failed to add endpoint");
-
-        let load_manager = LoadManager::new(Arc::new(registry));
-        let result = load_manager.select_endpoint_direct().await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().name, "online-ep");
-    }
-
-    // ===== select_endpoint_direct_for_model テスト =====
-
-    #[tokio::test]
-    async fn select_endpoint_direct_for_model_no_match() {
-        let _lock = TEST_LOCK.lock().await;
-        let (load_manager, _) = setup_test_load_manager().await;
-        let result = load_manager
-            .select_endpoint_direct_for_model("nonexistent-model")
-            .await;
-        assert!(result.is_err());
-    }
-
     // ===== wait_for_idle_node_with_timeout テスト =====
 
     #[tokio::test]
