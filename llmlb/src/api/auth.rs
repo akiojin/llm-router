@@ -96,7 +96,7 @@ pub async fn login(
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, Response> {
-    let is_secure = is_request_secure(&headers);
+    let is_secure = crate::auth::request_is_secure(&headers);
 
     // 開発モード: admin/test で固定ログイン可能
     #[cfg(debug_assertions)]
@@ -240,34 +240,13 @@ pub async fn login(
 /// # Returns
 /// * `204 No Content` - ログアウト成功
 pub async fn logout(headers: HeaderMap) -> impl IntoResponse {
-    let is_secure = is_request_secure(&headers);
+    let is_secure = crate::auth::request_is_secure(&headers);
     let cookie = crate::auth::clear_jwt_cookie(is_secure);
     let csrf_cookie = crate::auth::clear_csrf_cookie(is_secure);
     let mut response_headers = HeaderMap::new();
     response_headers.append(header::SET_COOKIE, cookie.parse().unwrap());
     response_headers.append(header::SET_COOKIE, csrf_cookie.parse().unwrap());
     (StatusCode::NO_CONTENT, response_headers)
-}
-
-fn is_request_secure(headers: &HeaderMap) -> bool {
-    if let Some(proto) = headers
-        .get("x-forwarded-proto")
-        .and_then(|value| value.to_str().ok())
-    {
-        if proto.eq_ignore_ascii_case("https") {
-            return true;
-        }
-    }
-    if let Some(forwarded) = headers
-        .get("forwarded")
-        .and_then(|value| value.to_str().ok())
-    {
-        let lowered = forwarded.to_ascii_lowercase();
-        if lowered.contains("proto=https") {
-            return true;
-        }
-    }
-    false
 }
 
 /// GET /api/auth/me - 認証情報確認
@@ -565,7 +544,7 @@ pub async fn change_password(
         AppError(LbError::Jwt(format!("Failed to create JWT: {}", e))).into_response()
     })?;
 
-    let is_secure = is_request_secure(&headers);
+    let is_secure = crate::auth::request_is_secure(&headers);
     let cookie = crate::auth::build_jwt_cookie(&token, expires_in, is_secure);
     let csrf_cookie = crate::auth::build_csrf_cookie(
         &crate::auth::generate_random_token(32),
@@ -646,63 +625,6 @@ mod tests {
         assert!(json.contains("id-456"));
         assert!(json.contains("bob"));
         assert!(json.contains("admin"));
-    }
-
-    // =========================================================================
-    // is_request_secure tests
-    // =========================================================================
-
-    #[test]
-    fn is_request_secure_returns_false_for_empty_headers() {
-        let headers = HeaderMap::new();
-        assert!(!is_request_secure(&headers));
-    }
-
-    #[test]
-    fn is_request_secure_returns_true_for_x_forwarded_proto_https() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-proto", "https".parse().unwrap());
-        assert!(is_request_secure(&headers));
-    }
-
-    #[test]
-    fn is_request_secure_returns_false_for_x_forwarded_proto_http() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-proto", "http".parse().unwrap());
-        assert!(!is_request_secure(&headers));
-    }
-
-    #[test]
-    fn is_request_secure_case_insensitive_https() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-proto", "HTTPS".parse().unwrap());
-        assert!(is_request_secure(&headers));
-    }
-
-    #[test]
-    fn is_request_secure_forwarded_header_proto_https() {
-        let mut headers = HeaderMap::new();
-        headers.insert("forwarded", "proto=https".parse().unwrap());
-        assert!(is_request_secure(&headers));
-    }
-
-    #[test]
-    fn is_request_secure_forwarded_header_proto_http() {
-        let mut headers = HeaderMap::new();
-        headers.insert("forwarded", "proto=http".parse().unwrap());
-        assert!(!is_request_secure(&headers));
-    }
-
-    #[test]
-    fn is_request_secure_forwarded_complex_header() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "forwarded",
-            "for=192.0.2.60;proto=https;by=203.0.113.43"
-                .parse()
-                .unwrap(),
-        );
-        assert!(is_request_secure(&headers));
     }
 
     // =========================================================================

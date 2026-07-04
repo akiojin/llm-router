@@ -229,27 +229,6 @@ fn default_port_for_scheme(scheme: &str) -> Option<u16> {
     }
 }
 
-fn request_is_secure(headers: &HeaderMap) -> bool {
-    if let Some(proto) = headers
-        .get("x-forwarded-proto")
-        .and_then(|value| value.to_str().ok())
-    {
-        if proto.eq_ignore_ascii_case("https") {
-            return true;
-        }
-    }
-    if let Some(forwarded) = headers
-        .get("forwarded")
-        .and_then(|value| value.to_str().ok())
-    {
-        let lowered = forwarded.to_ascii_lowercase();
-        if lowered.contains("proto=https") {
-            return true;
-        }
-    }
-    false
-}
-
 fn response_sets_csrf_cookie(response: &Response) -> bool {
     response
         .headers()
@@ -528,7 +507,7 @@ pub async fn csrf_protect_middleware(request: Request, next: Next) -> Result<Res
     let mut response = next.run(request).await;
     if response.status().is_success() && !response_sets_csrf_cookie(&response) {
         let new_token = crate::auth::generate_random_token(32);
-        let secure = request_is_secure(&headers_snapshot);
+        let secure = super::request_is_secure(&headers_snapshot);
         let cookie = crate::auth::build_csrf_cookie(&new_token, 86400, secure);
         response
             .headers_mut()
@@ -1391,44 +1370,6 @@ mod tests {
     fn default_port_unknown_scheme() {
         assert_eq!(default_port_for_scheme("ftp"), None);
         assert_eq!(default_port_for_scheme("ws"), None);
-    }
-
-    // =========================================================================
-    // request_is_secure tests
-    // =========================================================================
-
-    #[test]
-    fn request_is_secure_with_x_forwarded_proto_https() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-proto", "https".parse().unwrap());
-        assert!(request_is_secure(&headers));
-    }
-
-    #[test]
-    fn request_is_secure_with_x_forwarded_proto_http() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-proto", "http".parse().unwrap());
-        assert!(!request_is_secure(&headers));
-    }
-
-    #[test]
-    fn request_is_secure_with_forwarded_proto_https() {
-        let mut headers = HeaderMap::new();
-        headers.insert("forwarded", "proto=https".parse().unwrap());
-        assert!(request_is_secure(&headers));
-    }
-
-    #[test]
-    fn request_is_secure_false_without_headers() {
-        let headers = HeaderMap::new();
-        assert!(!request_is_secure(&headers));
-    }
-
-    #[test]
-    fn request_is_secure_case_insensitive() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-proto", "HTTPS".parse().unwrap());
-        assert!(request_is_secure(&headers));
     }
 
     // =========================================================================

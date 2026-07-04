@@ -77,3 +77,85 @@ pub fn generate_random_token(length: usize) -> String {
         })
         .collect()
 }
+
+/// リクエストが HTTPS 経由かを判定する（リバースプロキシの x-forwarded-proto /
+/// forwarded ヘッダを考慮）。Secure cookie 属性の付与要否判定に使う。
+/// api/auth.rs と auth/middleware.rs で共有する唯一の実装。
+pub(crate) fn request_is_secure(headers: &axum::http::HeaderMap) -> bool {
+    if let Some(proto) = headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+    {
+        if proto.eq_ignore_ascii_case("https") {
+            return true;
+        }
+    }
+    if let Some(forwarded) = headers
+        .get("forwarded")
+        .and_then(|value| value.to_str().ok())
+    {
+        let lowered = forwarded.to_ascii_lowercase();
+        if lowered.contains("proto=https") {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod request_is_secure_tests {
+    use super::request_is_secure;
+    use axum::http::HeaderMap;
+
+    #[test]
+    fn returns_false_for_empty_headers() {
+        assert!(!request_is_secure(&HeaderMap::new()));
+    }
+
+    #[test]
+    fn returns_true_for_x_forwarded_proto_https() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        assert!(request_is_secure(&headers));
+    }
+
+    #[test]
+    fn returns_false_for_x_forwarded_proto_http() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", "http".parse().unwrap());
+        assert!(!request_is_secure(&headers));
+    }
+
+    #[test]
+    fn case_insensitive_https() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", "HTTPS".parse().unwrap());
+        assert!(request_is_secure(&headers));
+    }
+
+    #[test]
+    fn forwarded_header_proto_https() {
+        let mut headers = HeaderMap::new();
+        headers.insert("forwarded", "proto=https".parse().unwrap());
+        assert!(request_is_secure(&headers));
+    }
+
+    #[test]
+    fn forwarded_header_proto_http() {
+        let mut headers = HeaderMap::new();
+        headers.insert("forwarded", "proto=http".parse().unwrap());
+        assert!(!request_is_secure(&headers));
+    }
+
+    #[test]
+    fn forwarded_complex_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "forwarded",
+            "for=192.0.2.60;proto=https;by=203.0.113.43"
+                .parse()
+                .unwrap(),
+        );
+        assert!(request_is_secure(&headers));
+    }
+}
