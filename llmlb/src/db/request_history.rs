@@ -729,7 +729,6 @@ struct RequestHistoryRow {
     duration_ms: i64,
     status: String,
     error_message: Option<String>,
-    #[allow(dead_code)]
     completed_at: String,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
