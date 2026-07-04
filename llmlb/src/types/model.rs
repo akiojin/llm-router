@@ -17,6 +17,26 @@
 //!   フィールド。列名変更には DB マイグレーションを要するため据え置き。
 //! - `gpu_model_name`: エンドポイント健全性メトリクス（`HealthMetrics`）の wire
 //!   フィールドで、エンドポイントが報告する GPU 名。プロトコル互換のため据え置き。
+//!
+//! # Capability 系型の分類（arch-review [M13]）
+//!
+//! 能力（capability）を表す型が 5 つ併存するが、これは重複ではなく、それぞれ別の
+//! バウンデッドコンテキストと wire 表現に属する意図的な区別である。単一型へ統合すると
+//! 下記の異なる wire 文字列・ドメイン境界が壊れるため、統合せず、変換が必要な箇所は
+//! [`ModelCapability::supported_apis`] のような明示的な橋渡しメソッドで接続する。
+//!
+//! - [`ModelCapability`]（本モジュール）: モデル自身が持つ能力
+//!   （`text_generation` / `embedding` / `image_input` 等）。`ModelType` から導出。
+//! - `ModelCapabilities`（本モジュール, struct）: Azure 互換の wire 専用フラグ集合。
+//! - `crate::types::endpoint::EndpointCapability`: エンドポイントが広告する機能
+//!   （wire 文字列 `chat_completion` / `audio_transcription` 等）。
+//! - `crate::types::endpoint::SupportedAPI`: 実際に叩ける API ルート面
+//!   （`chat_completions` / `responses` / `embeddings` 等）。ルーティング用。
+//! - `crate::sync::capabilities::Capability`: モデル同期時の判定用
+//!   （wire 文字列 `chat` / `embeddings` / `image_input`）。
+//!
+//! 変換例: `ModelCapability::TextGeneration` は `supported_apis()` を介して
+//! `SupportedAPI::{ChatCompletions, Responses}` へ写像される。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
