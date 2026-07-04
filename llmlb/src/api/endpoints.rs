@@ -8,6 +8,7 @@ use crate::api::openai_util::{
 };
 use crate::common::auth::{Claims, UserRole};
 use crate::common::error::{CommonError, LbError};
+use crate::common::http::RequestBuilderBearerExt;
 use crate::db::{download_tasks as tasks_db, endpoints as db};
 use crate::detection::{detect_endpoint_type_with_client, DetectionError};
 use crate::sync::{self, SyncError};
@@ -367,9 +368,7 @@ async fn run_connection_test(state: &AppState, endpoint: &Endpoint) -> TestConne
     let start = std::time::Instant::now();
 
     let mut request = state.http_client.get(&url);
-    if let Some(ref api_key) = endpoint.api_key {
-        request = request.header("Authorization", format!("Bearer {}", api_key));
-    }
+    request = request.bearer_opt(endpoint.api_key.as_ref());
 
     let result = request
         .timeout(std::time::Duration::from_secs(
@@ -1087,9 +1086,7 @@ pub async fn proxy_chat_completions(
         .body(body.to_vec());
     let started_at = Instant::now();
 
-    if let Some(ref api_key) = endpoint.api_key {
-        request = request.header("Authorization", format!("Bearer {}", api_key));
-    }
+    request = request.bearer_opt(endpoint.api_key.as_ref());
 
     let result = request
         .timeout(Duration::from_secs(endpoint.inference_timeout_secs as u64))

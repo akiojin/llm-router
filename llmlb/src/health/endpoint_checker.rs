@@ -7,6 +7,7 @@
 //! - xLLMエンドポイントでは`/api/health`を優先的に呼び出し、GPU情報を取得
 //! - `/api/health`が失敗した場合、またはxLLM以外のエンドポイントでは`/v1/models`をフォールバック
 
+use crate::common::http::RequestBuilderBearerExt;
 use crate::db::endpoints as db;
 use crate::detection::detect_endpoint_type_with_client;
 use crate::registry::endpoints::EndpointRegistry;
@@ -519,9 +520,7 @@ impl EndpointHealthChecker {
         let url = format!("{}/api/health", endpoint.base_url.trim_end_matches('/'));
 
         let mut request = self.client.get(&url);
-        if let Some(ref api_key) = endpoint.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
-        }
+        request = request.bearer_opt(endpoint.api_key.as_ref());
 
         let response = request.send().await?;
         if !response.status().is_success() {
@@ -564,9 +563,7 @@ impl EndpointHealthChecker {
         let url = format!("{}/v1/models", endpoint.base_url.trim_end_matches('/'));
 
         let mut request = self.client.get(&url);
-        if let Some(ref api_key) = endpoint.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
-        }
+        request = request.bearer_opt(endpoint.api_key.as_ref());
 
         let response = request.send().await?;
         if response.status().is_success() {

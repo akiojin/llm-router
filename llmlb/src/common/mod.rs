@@ -21,3 +21,6 @@ pub mod auth;
 
 /// IPアドレス正規化ユーティリティ
 pub mod ip;
+
+/// HTTP クライアント共通ユーティリティ
+pub mod http;

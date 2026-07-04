@@ -11,6 +11,7 @@ pub use capabilities::{
 };
 pub use parser::{parse_models_response, ParsedModel, ResponseFormat};
 
+use crate::common::http::RequestBuilderBearerExt;
 use crate::db::endpoints as db;
 use crate::metadata;
 use crate::types::endpoint::{EndpointModel, EndpointType, SupportedAPI};
@@ -277,9 +278,7 @@ async fn fetch_models_json(
     timeout_secs: u64,
 ) -> Result<serde_json::Value, SyncError> {
     let mut request = client.get(url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
+    request = request.bearer_opt(api_key);
 
     let response = request
         .timeout(Duration::from_secs(timeout_secs))

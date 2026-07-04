@@ -10,6 +10,7 @@ mod ollama;
 mod vllm;
 mod xllm;
 
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use tracing::{debug, warn};
 
@@ -182,9 +183,7 @@ async fn detect_openai_compatible(
     let url = format!("{}/v1/models", base_url);
 
     let mut request = client.get(&url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
+    request = request.bearer_opt(api_key);
 
     match request.send().await {
         Ok(response) if response.status().is_success() => {

@@ -5,6 +5,7 @@
 //! vLLM endpoints typically include "vllm" in the Server response header
 //! or respond to /v1/models in a specific way.
 
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use tracing::debug;
 
@@ -17,9 +18,7 @@ pub async fn detect_vllm(client: &Client, base_url: &str, api_key: Option<&str>)
     let url = format!("{}/v1/models", base_url);
 
     let mut request = client.get(&url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
+    request = request.bearer_opt(api_key);
 
     match request.send().await {
         Ok(response) => {

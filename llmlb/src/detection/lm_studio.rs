@@ -6,6 +6,7 @@
 //! (publisher, arch, state) and may include "lm-studio" in Server header
 //! or owned_by fields on /v1/models.
 
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use tracing::debug;
 
@@ -24,9 +25,7 @@ pub async fn detect_lm_studio(
     let api_url = format!("{}/api/v1/models", base_url);
 
     let mut request = client.get(&api_url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
+    request = request.bearer_opt(api_key);
 
     match request.send().await {
         Ok(response) if response.status().is_success() => {
@@ -52,9 +51,7 @@ pub async fn detect_lm_studio(
     let v1_url = format!("{}/v1/models", base_url);
 
     let mut request = client.get(&v1_url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
+    request = request.bearer_opt(api_key);
 
     match request.send().await {
         Ok(response) => {

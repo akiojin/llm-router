@@ -2,6 +2,7 @@
 //!
 //! SPEC-e8e9326e: Model download request and progress tracking for xLLM endpoints
 
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -107,9 +108,7 @@ pub async fn download_model(
         .json(request)
         .timeout(Duration::from_secs(30));
 
-    if let Some(key) = api_key {
-        req_builder = req_builder.header("Authorization", format!("Bearer {}", key));
-    }
+    req_builder = req_builder.bearer_opt(api_key);
 
     let response = req_builder.send().await?;
     let status = response.status();
@@ -158,9 +157,7 @@ pub async fn get_download_progress(
 
     let mut req_builder = client.get(&url).timeout(Duration::from_secs(10));
 
-    if let Some(key) = api_key {
-        req_builder = req_builder.header("Authorization", format!("Bearer {}", key));
-    }
+    req_builder = req_builder.bearer_opt(api_key);
 
     let response = req_builder.send().await?;
     let status = response.status();

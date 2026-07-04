@@ -5,6 +5,7 @@
 //! xLLM endpoints expose a /api/system endpoint that returns
 //! system information including `xllm_version` field.
 
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use serde::Deserialize;
 use tracing::debug;
@@ -28,9 +29,7 @@ pub async fn detect_xllm(client: &Client, base_url: &str, api_key: Option<&str>)
     let url = format!("{}/api/system", base_url);
 
     let mut request = client.get(&url);
-    if let Some(key) = api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
-    }
+    request = request.bearer_opt(api_key);
 
     match request.send().await {
         Ok(response) if response.status().is_success() => {

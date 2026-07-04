@@ -3,6 +3,7 @@
 //! SPEC-e8e9326e: Fetch model metadata from xLLM endpoints via GET /api/models/:model/info
 
 use super::{MetadataError, ModelMetadata};
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -65,9 +66,7 @@ pub async fn get_xllm_model_metadata(
 
     let mut req_builder = client.get(&url).timeout(Duration::from_secs(10));
 
-    if let Some(key) = api_key {
-        req_builder = req_builder.header("Authorization", format!("Bearer {}", key));
-    }
+    req_builder = req_builder.bearer_opt(api_key);
 
     let response = req_builder.send().await?;
     let status = response.status();

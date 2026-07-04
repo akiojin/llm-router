@@ -5,6 +5,7 @@
 //! NOTE: LM Studio (0.4.6) does not provide a progress API.
 //! The download is fire-and-forget; model availability can be polled via /v1/models.
 
+use crate::common::http::RequestBuilderBearerExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -68,9 +69,7 @@ pub async fn download_model(
         .json(&request)
         .timeout(Duration::from_secs(30)); // Just the request timeout, not the download itself
 
-    if let Some(key) = api_key {
-        req_builder = req_builder.header("Authorization", format!("Bearer {}", key));
-    }
+    req_builder = req_builder.bearer_opt(api_key);
 
     let response = req_builder.send().await.map_err(DownloadError::Http)?;
 
