@@ -134,4 +134,29 @@ impl LoadManager {
 
         map.into_values().collect()
     }
+
+    /// 起動時にDBからTPS状態をseedする
+    pub async fn seed_tps_from_db(
+        &self,
+        entries: Vec<crate::db::endpoint_daily_stats::TpsSeedEntry>,
+    ) {
+        let mut tracker = self.tps_tracker.write().await;
+        for entry in entries {
+            if entry.total_duration_ms <= 0 || entry.total_output_tokens <= 0 {
+                continue;
+            }
+            let tps = entry.total_output_tokens as f64 / (entry.total_duration_ms as f64 / 1000.0);
+            let api_kind = match entry.api_kind.as_str() {
+                "completions" => TpsApiKind::Completions,
+                "responses" => TpsApiKind::Responses,
+                _ => TpsApiKind::ChatCompletions,
+            };
+            let key = (entry.endpoint_id, entry.model_id, api_kind);
+            let state = tracker.entry(key).or_default();
+            state.tps_ema = Some(tps);
+            state.request_count = entry.successful_requests as u64;
+            state.total_output_tokens = entry.total_output_tokens as u64;
+            state.total_duration_ms = entry.total_duration_ms as u64;
+        }
+    }
 }
