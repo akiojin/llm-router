@@ -1,6 +1,22 @@
 //! モデル関連型定義
 //!
 //! モデルタイプ、モデル能力などの定義
+//!
+//! # モデル識別子のフィールド命名規約（arch-review [L22]）
+//!
+//! コード上に `model` / `model_id` / `model_name` の 3 系統が併存するが、これは
+//! 不整合ではなく、それぞれ別の外部契約に固定された意図的な使い分けである。
+//! いずれかへ統一すると下記の契約が破壊されるため、名称は据え置きとする。
+//!
+//! - `model`: OpenAI 互換プロトコル（`common/protocol.rs`）およびダウンロード
+//!   リクエスト（`DownloadModelRequest` 等）の **wire フィールド名**。OpenAI API
+//!   仕様がフィールド名 `model` を要求するため変更不可。
+//! - `model_id`: エンドポイントで発見済みのモデルやカタログモデルを参照する
+//!   **内部識別子**（`EndpointModel`, `EndpointDailyStats` 等）。
+//! - `model_name`: 監査ログ（`audit_log` テーブルの列 `model_name`）へ永続化する
+//!   フィールド。列名変更には DB マイグレーションを要するため据え置き。
+//! - `gpu_model_name`: エンドポイント健全性メトリクス（`HealthMetrics`）の wire
+//!   フィールドで、エンドポイントが報告する GPU 名。プロトコル互換のため据え置き。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
