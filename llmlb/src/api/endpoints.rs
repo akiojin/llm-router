@@ -555,95 +555,9 @@ pub async fn create_endpoint(
             // EndpointRegistryキャッシュも更新（DBは既に保存済みなのでキャッシュのみ）
             state.endpoint_registry.add_to_cache(endpoint.clone()).await;
 
-            // SPEC-f8e3a1b7, SPEC-e8e9326e: エンドポイント固有の方法でデバイス情報を取得
-            let endpoint_id = endpoint.id;
-            let base_url = endpoint.base_url.clone();
-            let api_key = endpoint.api_key.clone();
-            let endpoint_type = endpoint.endpoint_type;
-            let registry = state.endpoint_registry.clone();
-            let http_client = state.http_client.clone();
-
-            // Fire-and-forget: デバイス情報取得は非同期で行う（レスポンスをブロックしない）
-            tokio::spawn(async move {
-                if let Some(device_info) =
-                    fetch_system_info(&http_client, &base_url, api_key.as_deref(), &endpoint_type)
-                        .await
-                {
-                    tracing::info!(
-                        endpoint_id = %endpoint_id,
-                        device_type = ?device_info.device_type,
-                        gpu_count = device_info.gpu_devices.len(),
-                        endpoint_type = ?endpoint_type,
-                        "Retrieved device info via endpoint-specific method"
-                    );
-                    if let Err(e) = registry
-                        .update_device_info(endpoint_id, Some(device_info))
-                        .await
-                    {
-                        tracing::warn!(
-                            endpoint_id = %endpoint_id,
-                            error = %e,
-                            "Failed to save device info"
-                        );
-                    }
-                }
-            });
-
-            // 登録直後に接続チェック＆モデル同期（バックグラウンド実行）
-            let state_clone = state.clone();
-            let endpoint_clone = endpoint.clone();
-            tokio::spawn(async move {
-                let test_result = run_connection_test(&state_clone, &endpoint_clone).await;
-                if !test_result.success {
-                    tracing::warn!(
-                        endpoint_id = %endpoint_clone.id,
-                        endpoint_name = %endpoint_clone.name,
-                        error = ?test_result.error,
-                        "Auto connection test failed"
-                    );
-                    return;
-                }
-
-                match sync::sync_models_with_type(
-                    &state_clone.db_pool,
-                    &state_clone.http_client,
-                    endpoint_clone.id,
-                    &endpoint_clone.base_url,
-                    endpoint_clone.api_key.as_deref(),
-                    endpoint_clone.inference_timeout_secs as u64,
-                    Some(endpoint_clone.endpoint_type),
-                )
-                .await
-                {
-                    Ok(result) => {
-                        if let Err(e) = state_clone
-                            .endpoint_registry
-                            .refresh_model_mappings(endpoint_clone.id)
-                            .await
-                        {
-                            tracing::warn!(
-                                endpoint_id = %endpoint_clone.id,
-                                error = %e,
-                                "Failed to refresh model mappings"
-                            );
-                        }
-                        tracing::info!(
-                            endpoint_id = %endpoint_clone.id,
-                            added = result.added,
-                            removed = result.removed,
-                            updated = result.updated,
-                            "Auto model sync completed"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            endpoint_id = %endpoint_clone.id,
-                            error = %e,
-                            "Auto model sync failed"
-                        );
-                    }
-                }
-            });
+            // arch-review [L2]: 登録直後のバックグラウンドタスク（デバイス情報取得・
+            // 接続チェック＋モデル同期）を関数へ抽出し、単体で検証しやすくする。
+            spawn_post_registration_tasks(&state, &endpoint);
 
             (StatusCode::CREATED, Json(EndpointResponse::from(endpoint))).into_response()
         }
@@ -660,6 +574,102 @@ pub async fn create_endpoint(
             }
         }
     }
+}
+
+/// エンドポイント登録直後のバックグラウンドタスクを起動する。
+///
+/// arch-review [L2]: create_endpoint 内に inline 展開されていた 2 つの fire-and-forget
+/// spawn を関数へ抽出した。デバイス情報取得と接続チェック＋モデル同期は互いに独立で、
+/// レスポンスをブロックしないよう並行に spawn する。
+fn spawn_post_registration_tasks(state: &AppState, endpoint: &Endpoint) {
+    // SPEC-f8e3a1b7, SPEC-e8e9326e: エンドポイント固有の方法でデバイス情報を取得
+    let endpoint_id = endpoint.id;
+    let base_url = endpoint.base_url.clone();
+    let api_key = endpoint.api_key.clone();
+    let endpoint_type = endpoint.endpoint_type;
+    let registry = state.endpoint_registry.clone();
+    let http_client = state.http_client.clone();
+
+    // Fire-and-forget: デバイス情報取得は非同期で行う（レスポンスをブロックしない）
+    tokio::spawn(async move {
+        if let Some(device_info) =
+            fetch_system_info(&http_client, &base_url, api_key.as_deref(), &endpoint_type).await
+        {
+            tracing::info!(
+                endpoint_id = %endpoint_id,
+                device_type = ?device_info.device_type,
+                gpu_count = device_info.gpu_devices.len(),
+                endpoint_type = ?endpoint_type,
+                "Retrieved device info via endpoint-specific method"
+            );
+            if let Err(e) = registry
+                .update_device_info(endpoint_id, Some(device_info))
+                .await
+            {
+                tracing::warn!(
+                    endpoint_id = %endpoint_id,
+                    error = %e,
+                    "Failed to save device info"
+                );
+            }
+        }
+    });
+
+    // 登録直後に接続チェック＆モデル同期（バックグラウンド実行）
+    let state_clone = state.clone();
+    let endpoint_clone = endpoint.clone();
+    tokio::spawn(async move {
+        let test_result = run_connection_test(&state_clone, &endpoint_clone).await;
+        if !test_result.success {
+            tracing::warn!(
+                endpoint_id = %endpoint_clone.id,
+                endpoint_name = %endpoint_clone.name,
+                error = ?test_result.error,
+                "Auto connection test failed"
+            );
+            return;
+        }
+
+        match sync::sync_models_with_type(
+            &state_clone.db_pool,
+            &state_clone.http_client,
+            endpoint_clone.id,
+            &endpoint_clone.base_url,
+            endpoint_clone.api_key.as_deref(),
+            endpoint_clone.inference_timeout_secs as u64,
+            Some(endpoint_clone.endpoint_type),
+        )
+        .await
+        {
+            Ok(result) => {
+                if let Err(e) = state_clone
+                    .endpoint_registry
+                    .refresh_model_mappings(endpoint_clone.id)
+                    .await
+                {
+                    tracing::warn!(
+                        endpoint_id = %endpoint_clone.id,
+                        error = %e,
+                        "Failed to refresh model mappings"
+                    );
+                }
+                tracing::info!(
+                    endpoint_id = %endpoint_clone.id,
+                    added = result.added,
+                    removed = result.removed,
+                    updated = result.updated,
+                    "Auto model sync completed"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    endpoint_id = %endpoint_clone.id,
+                    error = %e,
+                    "Auto model sync failed"
+                );
+            }
+        }
+    });
 }
 
 /// GET /api/endpoints - エンドポイント一覧
