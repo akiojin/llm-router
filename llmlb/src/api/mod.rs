@@ -22,6 +22,7 @@ pub mod endpoints;
 pub mod error;
 pub mod health;
 pub mod images;
+pub mod inference_backend;
 pub mod invitations;
 pub mod logs;
 /// モデル名のパース（量子化サフィックス対応）

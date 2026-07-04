@@ -24,13 +24,14 @@ use std::net::{IpAddr, SocketAddr};
 use crate::{
     api::{
         error::AppError,
+        inference_backend::InferenceBackend,
         model_name::parse_quantized_model_name,
         models::load_registered_model,
         proxy::{forward_streaming_response, save_request_record},
     },
     auth::middleware::ApiKeyAuthContext,
     common::ip::{normalize_ip, normalize_socket_ip},
-    types::endpoint::{Endpoint, EndpointCapability},
+    types::endpoint::EndpointCapability,
     AppState,
 };
 
@@ -116,57 +117,9 @@ fn parse_forwarded_ip_candidate(value: &str) -> Option<IpAddr> {
     None
 }
 
-/// 音声処理対応バックエンド
-/// EndpointRegistry経由でのみ取得（NodeRegistryフォールバック廃止）
-struct AudioBackend(Endpoint);
-
-impl AudioBackend {
-    /// リクエスト送信用のURLを取得
-    fn url(&self, path: &str) -> String {
-        format!("{}{}", self.0.base_url.trim_end_matches('/'), path)
-    }
-
-    /// リクエスト履歴用のID
-    fn id(&self) -> Uuid {
-        self.0.id
-    }
-
-    /// リクエスト履歴用の名前
-    fn name(&self) -> String {
-        self.0.name.clone()
-    }
-
-    /// リクエスト履歴用のIPアドレス
-    fn ip(&self) -> IpAddr {
-        // フォールバック用のローカルホストアドレス
-        const LOCALHOST: IpAddr = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
-
-        // base_urlからホスト部分を抽出してパース
-        // 例: "http://192.168.1.100:11434" -> "192.168.1.100"
-        let host = self
-            .0
-            .base_url
-            .trim_start_matches("http://")
-            .trim_start_matches("https://")
-            .split(':')
-            .next()
-            .unwrap_or("127.0.0.1");
-        host.parse::<IpAddr>().unwrap_or(LOCALHOST)
-    }
-
-    /// 上流転送リクエストの全体タイムアウト
-    ///
-    /// 共有 http_client には全体タイムアウトが無いため、応答しないエンドポイントで
-    /// 無期限ハングするのを防ぐ。音声認識/合成は単一の有界レスポンス（トークン
-    /// ストリームではない）のため全体タイムアウトを付与しても問題ない。
-    fn inference_timeout(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(self.0.inference_timeout_secs as u64)
-    }
-}
-
 /// 音声認識対応バックエンドを選択
 /// EndpointRegistry経由でのみ取得（NodeRegistryフォールバック廃止）
-async fn select_transcription_backend(state: &AppState) -> Result<AudioBackend, LbError> {
+async fn select_transcription_backend(state: &AppState) -> Result<InferenceBackend, LbError> {
     let endpoints = state
         .endpoint_registry
         .list_online_by_capability(EndpointCapability::AudioTranscription)
@@ -178,12 +131,12 @@ async fn select_transcription_backend(state: &AppState) -> Result<AudioBackend, 
         )
     })?;
 
-    Ok(AudioBackend(endpoint))
+    Ok(InferenceBackend(endpoint))
 }
 
 /// 音声合成対応バックエンドを選択
 /// EndpointRegistry経由でのみ取得（NodeRegistryフォールバック廃止）
-async fn select_speech_backend(state: &AppState) -> Result<AudioBackend, LbError> {
+async fn select_speech_backend(state: &AppState) -> Result<InferenceBackend, LbError> {
     let endpoints = state
         .endpoint_registry
         .list_online_by_capability(EndpointCapability::AudioSpeech)
@@ -195,7 +148,7 @@ async fn select_speech_backend(state: &AppState) -> Result<AudioBackend, LbError
         )
     })?;
 
-    Ok(AudioBackend(endpoint))
+    Ok(InferenceBackend(endpoint))
 }
 
 /// POST /v1/audio/transcriptions - 音声認識（ASR）
@@ -605,114 +558,6 @@ mod tests {
         let model_name = "vibevoice-v1";
         let expected_error = format!("Model '{}' does not support speech-to-text", model_name);
         assert!(expected_error.contains("does not support speech-to-text"));
-    }
-
-    // --- AudioBackend helper tests ---
-
-    #[test]
-    fn audio_backend_url_strips_trailing_slash() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "http://localhost:8080/".to_string(),
-            EndpointType::Xllm,
-        );
-        let backend = AudioBackend(ep);
-        assert_eq!(
-            backend.url("/v1/audio/transcriptions"),
-            "http://localhost:8080/v1/audio/transcriptions"
-        );
-    }
-
-    #[test]
-    fn audio_backend_url_no_trailing_slash() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "http://10.0.0.1:11434".to_string(),
-            EndpointType::Ollama,
-        );
-        let backend = AudioBackend(ep);
-        assert_eq!(
-            backend.url("/v1/audio/speech"),
-            "http://10.0.0.1:11434/v1/audio/speech"
-        );
-    }
-
-    #[test]
-    fn audio_backend_id_returns_endpoint_id() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "http://localhost:8080".to_string(),
-            EndpointType::Xllm,
-        );
-        let expected_id = ep.id;
-        let backend = AudioBackend(ep);
-        assert_eq!(backend.id(), expected_id);
-    }
-
-    #[test]
-    fn audio_backend_name_returns_endpoint_name() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "my-audio-node".to_string(),
-            "http://localhost:8080".to_string(),
-            EndpointType::Xllm,
-        );
-        let backend = AudioBackend(ep);
-        assert_eq!(backend.name(), "my-audio-node");
-    }
-
-    #[test]
-    fn audio_backend_ip_extracts_from_http_url() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "http://192.168.1.100:11434".to_string(),
-            EndpointType::Ollama,
-        );
-        let backend = AudioBackend(ep);
-        assert_eq!(backend.ip(), "192.168.1.100".parse::<IpAddr>().unwrap());
-    }
-
-    #[test]
-    fn audio_backend_ip_extracts_from_https_url() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "https://10.0.0.5:443".to_string(),
-            EndpointType::Vllm,
-        );
-        let backend = AudioBackend(ep);
-        assert_eq!(backend.ip(), "10.0.0.5".parse::<IpAddr>().unwrap());
-    }
-
-    #[test]
-    fn audio_backend_ip_falls_back_to_localhost_for_invalid() {
-        use super::AudioBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let mut ep = Endpoint::new(
-            "test".to_string(),
-            "http://not-a-valid-ip:8080".to_string(),
-            EndpointType::Xllm,
-        );
-        ep.base_url = "http://not-a-valid-ip:8080".to_string();
-        let backend = AudioBackend(ep);
-        assert_eq!(backend.ip(), "127.0.0.1".parse::<IpAddr>().unwrap());
     }
 
     // --- error_response tests ---

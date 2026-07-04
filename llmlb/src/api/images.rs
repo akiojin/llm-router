@@ -22,13 +22,14 @@ use uuid::Uuid;
 use crate::{
     api::{
         error::AppError,
+        inference_backend::InferenceBackend,
         model_name::parse_quantized_model_name,
         models::load_registered_model,
         proxy::{forward_streaming_response, save_request_record},
     },
     auth::middleware::ApiKeyAuthContext,
     common::ip::{normalize_ip, normalize_socket_ip},
-    types::endpoint::{Endpoint, EndpointCapability},
+    types::endpoint::EndpointCapability,
     AppState,
 };
 
@@ -114,57 +115,9 @@ fn parse_forwarded_ip_candidate(value: &str) -> Option<IpAddr> {
     None
 }
 
-/// 画像生成対応バックエンド
-/// EndpointRegistry経由でのみ取得（NodeRegistryフォールバック廃止）
-struct ImageBackend(Endpoint);
-
-impl ImageBackend {
-    /// リクエスト送信用のURLを取得
-    fn url(&self, path: &str) -> String {
-        format!("{}{}", self.0.base_url.trim_end_matches('/'), path)
-    }
-
-    /// リクエスト履歴用のID
-    fn id(&self) -> Uuid {
-        self.0.id
-    }
-
-    /// リクエスト履歴用の名前
-    fn name(&self) -> String {
-        self.0.name.clone()
-    }
-
-    /// リクエスト履歴用のIPアドレス
-    fn ip(&self) -> IpAddr {
-        // フォールバック用のローカルホストアドレス
-        const LOCALHOST: IpAddr = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
-
-        // base_urlからホスト部分を抽出してパース
-        // 例: "http://192.168.1.100:11434" -> "192.168.1.100"
-        let host = self
-            .0
-            .base_url
-            .trim_start_matches("http://")
-            .trim_start_matches("https://")
-            .split(':')
-            .next()
-            .unwrap_or("127.0.0.1");
-        host.parse::<IpAddr>().unwrap_or(LOCALHOST)
-    }
-
-    /// 上流転送リクエストの全体タイムアウト
-    ///
-    /// 共有 http_client には全体タイムアウトが無いため、応答しないエンドポイントで
-    /// 無期限ハングするのを防ぐ。画像生成/編集/バリエーションは単一の有界レスポンス
-    /// （トークンストリームではない）のため全体タイムアウトを付与しても問題ない。
-    fn inference_timeout(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(self.0.inference_timeout_secs as u64)
-    }
-}
-
 /// 画像生成対応バックエンドを選択
 /// EndpointRegistry経由でのみ検索（NodeRegistryフォールバック廃止）
-async fn select_image_backend(state: &AppState) -> Result<ImageBackend, LbError> {
+async fn select_image_backend(state: &AppState) -> Result<InferenceBackend, LbError> {
     // EndpointRegistry経由で検索（SPEC-e8e9326e: 新方式のみ）
     let endpoints = state
         .endpoint_registry
@@ -177,7 +130,7 @@ async fn select_image_backend(state: &AppState) -> Result<ImageBackend, LbError>
         )
     })?;
 
-    Ok(ImageBackend(endpoint))
+    Ok(InferenceBackend(endpoint))
 }
 
 /// POST /v1/images/generations - 画像生成（Text-to-Image）
@@ -803,131 +756,6 @@ mod tests {
         let model_name = "llama-3.1-8b";
         let expected_error = format!("Model '{}' does not support image generation", model_name);
         assert!(expected_error.contains("does not support image generation"));
-    }
-
-    // --- ImageBackend helper tests ---
-
-    #[test]
-    fn image_backend_url_strips_trailing_slash() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "img-node".to_string(),
-            "http://localhost:9090/".to_string(),
-            EndpointType::Xllm,
-        );
-        let backend = ImageBackend(ep);
-        assert_eq!(
-            backend.url("/v1/images/generations"),
-            "http://localhost:9090/v1/images/generations"
-        );
-    }
-
-    #[test]
-    fn image_backend_url_no_trailing_slash() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "img-node".to_string(),
-            "http://10.0.0.2:8080".to_string(),
-            EndpointType::Vllm,
-        );
-        let backend = ImageBackend(ep);
-        assert_eq!(
-            backend.url("/v1/images/edits"),
-            "http://10.0.0.2:8080/v1/images/edits"
-        );
-    }
-
-    #[test]
-    fn image_backend_url_variations_path() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "img-node".to_string(),
-            "http://192.168.0.1:7860".to_string(),
-            EndpointType::Xllm,
-        );
-        let backend = ImageBackend(ep);
-        assert_eq!(
-            backend.url("/v1/images/variations"),
-            "http://192.168.0.1:7860/v1/images/variations"
-        );
-    }
-
-    #[test]
-    fn image_backend_id_returns_endpoint_id() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "http://localhost:8080".to_string(),
-            EndpointType::Xllm,
-        );
-        let expected_id = ep.id;
-        let backend = ImageBackend(ep);
-        assert_eq!(backend.id(), expected_id);
-    }
-
-    #[test]
-    fn image_backend_name_returns_endpoint_name() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "sd-xl-backend".to_string(),
-            "http://localhost:8080".to_string(),
-            EndpointType::Xllm,
-        );
-        let backend = ImageBackend(ep);
-        assert_eq!(backend.name(), "sd-xl-backend");
-    }
-
-    #[test]
-    fn image_backend_ip_extracts_from_http_url() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "http://192.168.1.200:7860".to_string(),
-            EndpointType::Xllm,
-        );
-        let backend = ImageBackend(ep);
-        assert_eq!(backend.ip(), "192.168.1.200".parse::<IpAddr>().unwrap());
-    }
-
-    #[test]
-    fn image_backend_ip_extracts_from_https_url() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let ep = Endpoint::new(
-            "test".to_string(),
-            "https://10.0.0.10:443".to_string(),
-            EndpointType::Vllm,
-        );
-        let backend = ImageBackend(ep);
-        assert_eq!(backend.ip(), "10.0.0.10".parse::<IpAddr>().unwrap());
-    }
-
-    #[test]
-    fn image_backend_ip_falls_back_to_localhost() {
-        use super::ImageBackend;
-        use crate::types::endpoint::{Endpoint, EndpointType};
-
-        let mut ep = Endpoint::new(
-            "test".to_string(),
-            "http://my-hostname:8080".to_string(),
-            EndpointType::Xllm,
-        );
-        ep.base_url = "http://my-hostname:8080".to_string();
-        let backend = ImageBackend(ep);
-        assert_eq!(backend.ip(), "127.0.0.1".parse::<IpAddr>().unwrap());
     }
 
     // --- error_response tests ---
