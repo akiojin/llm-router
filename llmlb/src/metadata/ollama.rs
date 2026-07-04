@@ -154,7 +154,7 @@ fn extract_hf_repo(info: &OllamaShowResponse) -> Option<String> {
                     || key_lower == "general.base_model.repo_url"
                 {
                     if let Some(url) = value.as_str() {
-                        let repo = crate::registry::models::extract_repo_id(url);
+                        let repo = crate::models::mapping::extract_repo_id(url);
                         if repo.contains('/') {
                             return Some(repo);
                         }
