@@ -161,9 +161,9 @@ async fn test_dashboard_receives_node_registration_event() {
     let endpoint_id = uuid::Uuid::new_v4();
     state
         .event_bus
-        .publish(llmlb::events::DashboardEvent::NodeRegistered {
-            runtime_id: endpoint_id,
-            machine_name: "test-node".to_string(),
+        .publish(llmlb::events::DashboardEvent::EndpointRegistered {
+            endpoint_id,
+            endpoint_name: "test-node".to_string(),
             ip_address: "127.0.0.1".to_string(),
             status: llmlb::types::endpoint::EndpointStatus::Online,
         });
@@ -215,7 +215,7 @@ async fn test_dashboard_receives_node_status_change() {
     state
         .event_bus
         .publish(llmlb::events::DashboardEvent::EndpointStatusChanged {
-            runtime_id: endpoint_id,
+            endpoint_id,
             old_status: llmlb::types::endpoint::EndpointStatus::Online,
             new_status: llmlb::types::endpoint::EndpointStatus::Offline,
         });

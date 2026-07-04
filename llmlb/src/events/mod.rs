@@ -16,23 +16,30 @@ const EVENT_CHANNEL_CAPACITY: usize = 1024;
 ///
 /// WebSocketクライアントに送信されるイベントの種類
 #[derive(Debug, Clone, Serialize)]
+// arch-review [M15]: 内部語彙を endpoint_* / Endpoint* に統一する。
+// JSON ワイヤ契約（type タグ・フィールド名）は SPA 互換のため `#[serde(rename)]` で
+// 従来値（NodeRegistered / NodeRemoved / endpoint_id / endpoint_name）を厳密に維持する。
 #[serde(tag = "type", content = "data")]
 pub enum DashboardEvent {
-    /// ノード登録イベント
-    NodeRegistered {
-        /// ランタイムID
-        runtime_id: Uuid,
-        /// マシン名
-        machine_name: String,
+    /// エンドポイント登録イベント
+    #[serde(rename = "NodeRegistered")]
+    EndpointRegistered {
+        /// エンドポイントID
+        #[serde(rename = "runtime_id")]
+        endpoint_id: Uuid,
+        /// エンドポイント名
+        #[serde(rename = "machine_name")]
+        endpoint_name: String,
         /// IPアドレス
         ip_address: String,
         /// ステータス
         status: EndpointStatus,
     },
-    /// ノード状態変化イベント
+    /// エンドポイント状態変化イベント
     EndpointStatusChanged {
-        /// ランタイムID
-        runtime_id: Uuid,
+        /// エンドポイントID
+        #[serde(rename = "runtime_id")]
+        endpoint_id: Uuid,
         /// 旧ステータス
         old_status: EndpointStatus,
         /// 新ステータス
@@ -40,8 +47,9 @@ pub enum DashboardEvent {
     },
     /// メトリクス更新イベント
     MetricsUpdated {
-        /// ランタイムID
-        runtime_id: Uuid,
+        /// エンドポイントID
+        #[serde(rename = "runtime_id")]
+        endpoint_id: Uuid,
         /// CPU使用率
         cpu_usage: Option<f32>,
         /// メモリ使用率
@@ -49,10 +57,12 @@ pub enum DashboardEvent {
         /// GPU使用率
         gpu_usage: Option<f32>,
     },
-    /// ノード削除イベント
-    NodeRemoved {
-        /// ランタイムID
-        runtime_id: Uuid,
+    /// エンドポイント削除イベント
+    #[serde(rename = "NodeRemoved")]
+    EndpointRemoved {
+        /// エンドポイントID
+        #[serde(rename = "runtime_id")]
+        endpoint_id: Uuid,
     },
     /// アップデート状態変更イベント
     ///
@@ -132,9 +142,9 @@ mod tests {
         let bus = DashboardEventBus::new();
         let mut receiver = bus.subscribe();
 
-        let event = DashboardEvent::NodeRegistered {
-            runtime_id: Uuid::new_v4(),
-            machine_name: "test-node".to_string(),
+        let event = DashboardEvent::EndpointRegistered {
+            endpoint_id: Uuid::new_v4(),
+            endpoint_name: "test-node".to_string(),
             ip_address: "127.0.0.1".to_string(),
             status: EndpointStatus::Online,
         };
@@ -143,8 +153,8 @@ mod tests {
 
         let received = receiver.recv().await.unwrap();
         match received {
-            DashboardEvent::NodeRegistered { machine_name, .. } => {
-                assert_eq!(machine_name, "test-node");
+            DashboardEvent::EndpointRegistered { endpoint_name, .. } => {
+                assert_eq!(endpoint_name, "test-node");
             }
             _ => panic!("Unexpected event type"),
         }
@@ -155,8 +165,8 @@ mod tests {
         let bus = DashboardEventBus::new();
 
         // 購読者がいなくてもパニックしないことを確認
-        bus.publish(DashboardEvent::NodeRemoved {
-            runtime_id: Uuid::new_v4(),
+        bus.publish(DashboardEvent::EndpointRemoved {
+            endpoint_id: Uuid::new_v4(),
         });
     }
 
@@ -287,9 +297,9 @@ mod tests {
     #[test]
     fn test_node_registered_event_serialization() {
         let id = Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap();
-        let event = DashboardEvent::NodeRegistered {
-            runtime_id: id,
-            machine_name: "gpu-server-01".to_string(),
+        let event = DashboardEvent::EndpointRegistered {
+            endpoint_id: id,
+            endpoint_name: "gpu-server-01".to_string(),
             ip_address: "192.168.1.100".to_string(),
             status: EndpointStatus::Online,
         };
@@ -306,7 +316,7 @@ mod tests {
     fn test_endpoint_status_changed_event_serialization() {
         let id = Uuid::parse_str("abcdef12-3456-7890-abcd-ef1234567890").unwrap();
         let event = DashboardEvent::EndpointStatusChanged {
-            runtime_id: id,
+            endpoint_id: id,
             old_status: EndpointStatus::Online,
             new_status: EndpointStatus::Offline,
         };
@@ -321,7 +331,7 @@ mod tests {
     fn test_metrics_updated_event_serialization_full() {
         let id = Uuid::new_v4();
         let event = DashboardEvent::MetricsUpdated {
-            runtime_id: id,
+            endpoint_id: id,
             cpu_usage: Some(75.5),
             memory_usage: Some(60.0),
             gpu_usage: Some(90.0),
@@ -338,7 +348,7 @@ mod tests {
     fn test_metrics_updated_event_serialization_with_nulls() {
         let id = Uuid::new_v4();
         let event = DashboardEvent::MetricsUpdated {
-            runtime_id: id,
+            endpoint_id: id,
             cpu_usage: None,
             memory_usage: None,
             gpu_usage: None,
@@ -354,7 +364,7 @@ mod tests {
     #[test]
     fn test_node_removed_event_serialization() {
         let id = Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap();
-        let event = DashboardEvent::NodeRemoved { runtime_id: id };
+        let event = DashboardEvent::EndpointRemoved { endpoint_id: id };
         let json = serde_json::to_value(&event).unwrap();
         assert_eq!(json["type"], "NodeRemoved");
         assert_eq!(
@@ -391,18 +401,18 @@ mod tests {
         let id1 = Uuid::new_v4();
         let id2 = Uuid::new_v4();
 
-        bus.publish(DashboardEvent::NodeRemoved { runtime_id: id1 });
-        bus.publish(DashboardEvent::NodeRemoved { runtime_id: id2 });
+        bus.publish(DashboardEvent::EndpointRemoved { endpoint_id: id1 });
+        bus.publish(DashboardEvent::EndpointRemoved { endpoint_id: id2 });
 
         let e1 = receiver.recv().await.unwrap();
         let e2 = receiver.recv().await.unwrap();
 
         match e1 {
-            DashboardEvent::NodeRemoved { runtime_id } => assert_eq!(runtime_id, id1),
+            DashboardEvent::EndpointRemoved { endpoint_id } => assert_eq!(endpoint_id, id1),
             _ => panic!("Expected NodeRemoved"),
         }
         match e2 {
-            DashboardEvent::NodeRemoved { runtime_id } => assert_eq!(runtime_id, id2),
+            DashboardEvent::EndpointRemoved { endpoint_id } => assert_eq!(endpoint_id, id2),
             _ => panic!("Expected NodeRemoved"),
         }
     }
@@ -413,23 +423,23 @@ mod tests {
         let mut receiver = bus.subscribe();
 
         let id = Uuid::new_v4();
-        bus.publish(DashboardEvent::NodeRegistered {
-            runtime_id: id,
-            machine_name: "test-machine".to_string(),
+        bus.publish(DashboardEvent::EndpointRegistered {
+            endpoint_id: id,
+            endpoint_name: "test-machine".to_string(),
             ip_address: "10.0.0.1".to_string(),
             status: EndpointStatus::Pending,
         });
 
         let received = receiver.recv().await.unwrap();
         match received {
-            DashboardEvent::NodeRegistered {
-                runtime_id,
-                machine_name,
+            DashboardEvent::EndpointRegistered {
+                endpoint_id,
+                endpoint_name,
                 ip_address,
                 status,
             } => {
-                assert_eq!(runtime_id, id);
-                assert_eq!(machine_name, "test-machine");
+                assert_eq!(endpoint_id, id);
+                assert_eq!(endpoint_name, "test-machine");
                 assert_eq!(ip_address, "10.0.0.1");
                 assert_eq!(status, EndpointStatus::Pending);
             }
@@ -444,7 +454,7 @@ mod tests {
 
         let id = Uuid::new_v4();
         bus.publish(DashboardEvent::EndpointStatusChanged {
-            runtime_id: id,
+            endpoint_id: id,
             old_status: EndpointStatus::Pending,
             new_status: EndpointStatus::Online,
         });
@@ -469,7 +479,7 @@ mod tests {
         let mut receiver = bus.subscribe();
 
         bus.publish(DashboardEvent::MetricsUpdated {
-            runtime_id: Uuid::new_v4(),
+            endpoint_id: Uuid::new_v4(),
             cpu_usage: Some(42.0),
             memory_usage: Some(55.5),
             gpu_usage: None,
