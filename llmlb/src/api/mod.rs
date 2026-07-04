@@ -761,68 +761,10 @@ mod tests {
     // NOTE: test_playground_static_served は廃止
     // Playground機能はダッシュボード内のエンドポイント別Playgroundに移行 (#playground/:endpointId)
 
-    /// NodeRegistry廃止: EndpointRegistry経由のテストに移行が必要 (SPEC-e8e9326e)
-    #[tokio::test]
-    #[ignore = "NodeRegistry廃止: EndpointRegistry経由のテストに移行が必要 (SPEC-e8e9326e)"]
-    async fn test_dashboard_nodes_endpoint_returns_json() {
-        let state = test_state().await;
-        let mut app = create_app(state);
-        let response = app
-            .call(
-                Request::builder()
-                    .method(axum::http::Method::GET)
-                    .uri("/api/dashboard/endpoints")
-                    .header("x-api-key", "sk_debug")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    /// NodeRegistry廃止: EndpointRegistry経由のテストに移行が必要 (SPEC-e8e9326e)
-    #[tokio::test]
-    #[ignore = "NodeRegistry廃止: EndpointRegistry経由のテストに移行が必要 (SPEC-e8e9326e)"]
-    async fn test_dashboard_overview_endpoint_returns_all_sections() {
-        let state = test_state().await;
-        let mut app = create_app(state);
-        let response = app
-            .call(
-                Request::builder()
-                    .method(axum::http::Method::GET)
-                    .uri("/api/dashboard/overview")
-                    .header("x-api-key", "sk_debug")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    /// NodeRegistry廃止: EndpointRegistry経由のテストに移行が必要 (SPEC-e8e9326e)
-    #[tokio::test]
-    #[ignore = "NodeRegistry廃止: EndpointRegistry経由のテストに移行が必要 (SPEC-e8e9326e)"]
-    async fn test_dashboard_metrics_endpoint_returns_history() {
-        let state = test_state().await;
-        let mut app = create_app(state);
-        let response = app
-            .call(
-                Request::builder()
-                    .method(axum::http::Method::GET)
-                    .uri("/api/dashboard/request-history")
-                    .header("x-api-key", "sk_debug")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
+    // NOTE: 旧 NodeRegistry 前提の /api/dashboard/{endpoints,overview,request-history}
+    // 単体テスト3件は廃止。現行 EndpointRegistry ベースのカバレッジは
+    // tests/integration/dashboard_endpoints_type_test.rs・endpoint_auto_recovery_test.rs、
+    // tests/e2e/dashboard_flow_test.rs、tests/integration/api_key_scopes_test.rs が担う。
 
     #[tokio::test]
     async fn test_dashboard_audit_logs_requires_admin_role() {
