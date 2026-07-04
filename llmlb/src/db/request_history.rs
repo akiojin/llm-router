@@ -750,6 +750,7 @@ impl TryFrom<RequestHistoryRow> for RequestResponseRecord {
         let request_type = match row.request_type.as_str() {
             "AnthropicMessages" => RequestType::AnthropicMessages,
             "Chat" => RequestType::Chat,
+            "Responses" => RequestType::Responses,
             "Generate" => RequestType::Generate,
             "Embeddings" => RequestType::Embeddings,
             "Transcription" => RequestType::Transcription,

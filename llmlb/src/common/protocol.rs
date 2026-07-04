@@ -111,6 +111,8 @@ pub enum RequestType {
     AnthropicMessages,
     /// /v1/chat/completions エンドポイント
     Chat,
+    /// /v1/responses エンドポイント (Open Responses API)
+    Responses,
     /// /v1/completions エンドポイント
     Generate,
     /// /v1/embeddings エンドポイント
@@ -148,6 +150,7 @@ impl TpsApiKind {
     pub fn from_request_type(request_type: RequestType) -> Option<Self> {
         match request_type {
             RequestType::AnthropicMessages | RequestType::Chat => Some(Self::ChatCompletions),
+            RequestType::Responses => Some(Self::Responses),
             RequestType::Generate => Some(Self::Completions),
             RequestType::Embeddings
             | RequestType::Transcription

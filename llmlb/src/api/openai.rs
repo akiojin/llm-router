@@ -151,7 +151,9 @@ fn add_queue_headers(response: &mut Response, wait_ms: u128) {
 }
 
 /// クライアントIPとAPIキーIDを抽出するヘルパー
-fn extract_client_info(
+///
+/// responses.rs 等の他プロキシ経路からも同一取得口を共有するため pub(crate)。
+pub(crate) fn extract_client_info(
     addr: &SocketAddr,
     headers: &HeaderMap,
     auth_ctx: &Option<axum::Extension<ApiKeyAuthContext>>,

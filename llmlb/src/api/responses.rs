@@ -6,15 +6,16 @@
 //! Responses API対応バックエンド（Ollama、vLLM、xLLM等）にパススルーする。
 
 use crate::common::error::LbError;
-use crate::common::protocol::TpsApiKind;
+use crate::common::protocol::{RecordStatus, RequestResponseRecord, RequestType, TpsApiKind};
 use axum::{
     body::Body,
-    extract::State,
-    http::{HeaderName, HeaderValue, StatusCode},
+    extract::{ConnectInfo, State},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use serde_json::{json, Value};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Instant;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -24,16 +25,22 @@ use crate::{
         error::AppError,
         model_name::rewrite_payload_model_for_endpoint,
         models::load_registered_model,
+        openai::extract_client_info,
+        openai_util::{sanitize_openai_payload_for_history, upstream_error_message_from_bytes},
         proxy::{
             forward_streaming_response, forward_streaming_response_with_tps_tracking,
-            forward_to_endpoint, record_endpoint_request_stats,
+            forward_to_endpoint, record_endpoint_request_stats, save_request_record,
             select_available_endpoint_with_queue_for_model, QueueSelection,
         },
     },
+    auth::middleware::ApiKeyAuthContext,
     balancer::RequestOutcome,
     token::extract_usage_from_response,
     AppState,
 };
+
+/// 履歴記録でエンドポイントIPが未特定な場合（ストリーミング等）のフォールバック。
+const UNSPECIFIED_IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
 /// SPEC-f8e3a1b7: 推論リクエスト成功時にエンドポイントのレイテンシを更新（Fire-and-forget）
 fn update_inference_latency(
@@ -112,12 +119,19 @@ fn extract_stream(payload: &Value) -> bool {
 ///
 /// リクエストをバックエンドにパススルーする（判定/フラグは廃止）。
 pub async fn post_responses(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<AppState>,
+    auth_ctx: Option<axum::Extension<ApiKeyAuthContext>>,
     Json(payload): Json<Value>,
 ) -> Result<Response, AppError> {
     let model = extract_model(&payload)?;
     let stream = extract_stream(&payload);
     let tps_api_kind = Some(TpsApiKind::Responses);
+    let request_type = RequestType::Responses;
+    let (client_ip, api_key_id) = extract_client_info(&addr, &headers, &auth_ctx);
+    // payload は rewrite で move されるため、履歴用ボディを先に確保する。
+    let request_body = sanitize_openai_payload_for_history(&payload);
 
     info!(
         model = %model,
@@ -125,14 +139,28 @@ pub async fn post_responses(
         "Processing Responses API request"
     );
 
+    // モデル名統一化: エイリアス名が渡された場合、正規名に変換して検索（openai.rs と同一）。
+    let resolved_model = {
+        let found = state.endpoint_registry.find_by_model(&model).await;
+        if found.is_empty() {
+            if let Some(canonical) = crate::models::mapping::resolve_canonical_any(&model) {
+                let canonical_found = state.endpoint_registry.find_by_model(canonical).await;
+                if !canonical_found.is_empty() {
+                    canonical.to_string()
+                } else {
+                    model.clone()
+                }
+            } else {
+                model.clone()
+            }
+        } else {
+            model.clone()
+        }
+    };
+
     // モデルが未登録の場合は404、登録済みなら503（利用可能エンドポイントなし）
-    if state
-        .endpoint_registry
-        .find_by_model(&model)
-        .await
-        .is_empty()
-    {
-        let is_registered = load_registered_model(&state.db_pool, &model).await?;
+    if !state.endpoint_registry.has_model(&resolved_model).await {
+        let is_registered = load_registered_model(&state.db_pool, &resolved_model).await?;
         if is_registered.is_none() {
             let message = format!("The model '{}' does not exist", model);
             return Ok(openai_error_response(message, StatusCode::NOT_FOUND));
@@ -141,15 +169,40 @@ pub async fn post_responses(
 
     // モデル対応エンドポイントをキュー付きで選択（モデル集合内で分散）
     let (endpoint, queued_wait_ms) =
-        match select_available_endpoint_with_queue_for_model(&state, &model, tps_api_kind).await {
+        match select_available_endpoint_with_queue_for_model(&state, &resolved_model, tps_api_kind)
+            .await
+        {
             Ok(QueueSelection::Ready {
                 endpoint,
                 queued_wait_ms,
             }) => (*endpoint, queued_wait_ms),
             Err(e) => {
+                let error_message = if matches!(e, LbError::NoCapableEndpoints(_)) {
+                    format!("No available endpoints support model: {}", model)
+                } else {
+                    format!("Endpoint selection failed: {}", e)
+                };
+                error!(
+                    endpoint = "/v1/responses",
+                    model = %model,
+                    error = %e,
+                    "Failed to select available endpoint for Responses request"
+                );
+                // FR-004: エンドポイント選択失敗時もリクエスト履歴に記録する（openai.rs 準拠）。
+                save_request_record(
+                    state.request_history.clone(),
+                    RequestResponseRecord::error(
+                        model.clone(),
+                        request_type,
+                        request_body.clone(),
+                        error_message.clone(),
+                        0,
+                        client_ip,
+                        api_key_id,
+                    ),
+                );
                 if matches!(e, LbError::NoCapableEndpoints(_)) {
-                    let message = format!("No available endpoints support model: {}", model);
-                    return Ok(model_unavailable_response(message));
+                    return Ok(model_unavailable_response(error_message));
                 }
                 return Err(AppError::from(e));
             }
@@ -176,7 +229,7 @@ pub async fn post_responses(
     };
     let outbound_payload = rewrite_payload_model_for_endpoint(
         payload,
-        &model,
+        &resolved_model,
         &endpoint.endpoint_type,
         &endpoint_models,
     );
@@ -220,6 +273,22 @@ pub async fn post_responses(
                     state.load_manager.clone(),
                     state.event_bus.clone(),
                 );
+                let mut record = RequestResponseRecord::new(
+                    endpoint.id,
+                    endpoint.name.clone(),
+                    UNSPECIFIED_IP,
+                    model.clone(),
+                    request_type,
+                    request_body.clone(),
+                    StatusCode::BAD_GATEWAY,
+                    duration,
+                    client_ip,
+                    api_key_id,
+                );
+                record.status = RecordStatus::Error {
+                    message: format!("Failed to forward Responses request: {}", e),
+                };
+                save_request_record(state.request_history.clone(), record);
                 return Err(AppError::from(e));
             }
         };
@@ -232,6 +301,22 @@ pub async fn post_responses(
         let succeeded = response_status.is_success();
 
         let mut axum_response = if succeeded {
+            // ストリーミング成功はレスポンス本文を保持しないため、response_body/tokens を
+            // 付けずにリクエスト履歴を1件記録する（openai.rs 準拠。TPS/統計はストリーム
+            // 完走時に tracker が別途確定する）。
+            let record = RequestResponseRecord::new(
+                endpoint.id,
+                endpoint.name.clone(),
+                UNSPECIFIED_IP,
+                model.clone(),
+                request_type,
+                request_body.clone(),
+                StatusCode::from_u16(response_status.as_u16()).unwrap_or(StatusCode::OK),
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            save_request_record(state.request_history.clone(), record);
             // lease と推論レイテンシ更新は forwarder に移譲し、ストリーム完走時に
             // 実時間で確定する（ヘッダー受信時点での早期解放を避ける: lease-ttfb）。
             forward_streaming_response_with_tps_tracking(
@@ -265,6 +350,21 @@ pub async fn post_responses(
                 state.load_manager.clone(),
                 state.event_bus.clone(),
             );
+            // ストリーミング失敗も履歴を1件記録する。上流本文の passthrough を維持する
+            // ため本文は消費せず、非成功ステータスから Error を自動導出する（openai.rs 準拠）。
+            let record = RequestResponseRecord::new(
+                endpoint.id,
+                endpoint.name.clone(),
+                UNSPECIFIED_IP,
+                model.clone(),
+                request_type,
+                request_body.clone(),
+                StatusCode::from_u16(response_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            save_request_record(state.request_history.clone(), record);
             forward_streaming_response(response).map_err(AppError::from)?
         };
         if let Some(wait_ms) = queued_wait_ms {
@@ -296,6 +396,22 @@ pub async fn post_responses(
                 state.load_manager.clone(),
                 state.event_bus.clone(),
             );
+            let mut record = RequestResponseRecord::new(
+                endpoint.id,
+                endpoint.name.clone(),
+                UNSPECIFIED_IP,
+                model.clone(),
+                request_type,
+                request_body.clone(),
+                StatusCode::BAD_GATEWAY,
+                duration,
+                client_ip,
+                api_key_id,
+            );
+            record.status = RecordStatus::Error {
+                message: format!("Failed to read response body: {}", e),
+            };
+            save_request_record(state.request_history.clone(), record);
             return Err(AppError::from(LbError::Http(e.to_string())));
         }
     };
@@ -346,6 +462,40 @@ pub async fn post_responses(
         update_inference_latency(&state.endpoint_registry, endpoint.id, duration);
     }
 
+    // リクエスト履歴を1件記録する（openai.rs 準拠）。成功時は response_body と
+    // usage トークンを付与し、非2xx は上流本文から Error メッセージを導出する。
+    {
+        let record_status =
+            StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+        let mut record = RequestResponseRecord::new(
+            endpoint.id,
+            endpoint.name.clone(),
+            UNSPECIFIED_IP,
+            model.clone(),
+            request_type,
+            request_body.clone(),
+            record_status,
+            duration,
+            client_ip,
+            api_key_id,
+        );
+        if succeeded {
+            if let Ok(body) = serde_json::from_slice::<Value>(&body_bytes) {
+                if let Some(usage) = extract_usage_from_response(&body) {
+                    record.input_tokens = usage.input_tokens;
+                    record.output_tokens = usage.output_tokens;
+                    record.total_tokens = usage.total_tokens;
+                }
+                record.response_body = Some(body);
+            }
+        } else {
+            record.status = RecordStatus::Error {
+                message: upstream_error_message_from_bytes(record_status, &body_bytes),
+            };
+        }
+        save_request_record(state.request_history.clone(), record);
+    }
+
     // バックエンドのレスポンス（ステータス/ヘッダ/本文）をパススルー
     let mut axum_response = Response::new(Body::from(body_bytes));
     *axum_response.status_mut() = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK);
@@ -372,6 +522,7 @@ pub async fn post_responses(
 mod tests {
     use super::post_responses;
     use crate::{
+        common::protocol::{RecordStatus, RequestType},
         db::test_utils::TestAppStateBuilder,
         types::endpoint::{Endpoint, EndpointModel, EndpointStatus, EndpointType, SupportedAPI},
         AppState,
@@ -441,7 +592,10 @@ mod tests {
         let endpoint_id = register_vllm_endpoint(&state, server.uri(), "responses-tps-model").await;
 
         let response = post_responses(
+            axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 0))),
+            axum::http::HeaderMap::new(),
             State(state.clone()),
+            None,
             Json(json!({
                 "model": "responses-tps-model",
                 "input": "hello"
@@ -491,7 +645,10 @@ mod tests {
             register_vllm_endpoint(&state, server.uri(), "responses-stream-model").await;
 
         let response = post_responses(
+            axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 0))),
+            axum::http::HeaderMap::new(),
             State(state.clone()),
+            None,
             Json(json!({
                 "model": "responses-stream-model",
                 "input": "hello",
@@ -545,7 +702,10 @@ mod tests {
             register_vllm_endpoint(&state, server.uri(), "responses-stream-interrupted").await;
 
         let response = post_responses(
+            axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 0))),
+            axum::http::HeaderMap::new(),
             State(state.clone()),
+            None,
             Json(json!({
                 "model": "responses-stream-interrupted",
                 "input": "hello",
@@ -580,6 +740,152 @@ mod tests {
         assert_eq!(stat.total_requests, 1);
         assert_eq!(stat.successful_requests, 1);
         assert_eq!(stat.failed_requests, 0);
+    }
+
+    // --- request history recording tests (finding [C1]) ---
+
+    fn test_connect_info() -> axum::extract::ConnectInfo<std::net::SocketAddr> {
+        axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+    }
+
+    #[tokio::test]
+    async fn responses_non_stream_success_records_history() {
+        let state = create_local_state().await;
+        let server = MockServer::start().await;
+        let response_body = json!({
+            "id": "resp_1",
+            "object": "response",
+            "usage": {"input_tokens": 5, "output_tokens": 9, "total_tokens": 14}
+        });
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
+            .mount(&server)
+            .await;
+        register_vllm_endpoint(&state, server.uri(), "resp-hist-model").await;
+
+        let response = post_responses(
+            test_connect_info(),
+            axum::http::HeaderMap::new(),
+            State(state.clone()),
+            None,
+            Json(json!({"model": "resp-hist-model", "input": "hello"})),
+        )
+        .await
+        .expect("responses request should succeed");
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+
+        sleep(Duration::from_millis(150)).await;
+        let records = state
+            .request_history
+            .load_records()
+            .await
+            .expect("load records");
+        assert_eq!(records.len(), 1, "one history record expected");
+        let rec = &records[0];
+        assert_eq!(rec.model, "resp-hist-model");
+        assert_eq!(rec.request_type, RequestType::Responses);
+        assert!(matches!(rec.status, RecordStatus::Success));
+        assert!(
+            rec.response_body.is_some(),
+            "success should keep response_body"
+        );
+        assert_eq!(rec.output_tokens, Some(9));
+    }
+
+    #[tokio::test]
+    async fn responses_non_stream_error_records_error_history() {
+        let state = create_local_state().await;
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("upstream boom"))
+            .mount(&server)
+            .await;
+        register_vllm_endpoint(&state, server.uri(), "resp-err-model").await;
+
+        let response = post_responses(
+            test_connect_info(),
+            axum::http::HeaderMap::new(),
+            State(state.clone()),
+            None,
+            Json(json!({"model": "resp-err-model", "input": "x"})),
+        )
+        .await
+        .expect("passthrough should return a response");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let _ = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+
+        sleep(Duration::from_millis(150)).await;
+        let records = state.request_history.load_records().await.unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(matches!(records[0].status, RecordStatus::Error { .. }));
+        assert!(records[0].response_body.is_none());
+    }
+
+    #[tokio::test]
+    async fn responses_stream_success_records_history_without_body() {
+        let state = create_local_state().await;
+        let server = MockServer::start().await;
+        let stream_body = concat!(
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}\n\n",
+            "data: [DONE]\n\n"
+        );
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(stream_body, "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+        register_vllm_endpoint(&state, server.uri(), "resp-stream-hist").await;
+
+        let response = post_responses(
+            test_connect_info(),
+            axum::http::HeaderMap::new(),
+            State(state.clone()),
+            None,
+            Json(json!({"model": "resp-stream-hist", "input": "hi", "stream": true})),
+        )
+        .await
+        .expect("streaming responses request should succeed");
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+
+        sleep(Duration::from_millis(150)).await;
+        let records = state.request_history.load_records().await.unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(matches!(records[0].status, RecordStatus::Success));
+        assert_eq!(records[0].request_type, RequestType::Responses);
+        assert!(
+            records[0].response_body.is_none(),
+            "streaming success should not carry response_body"
+        );
+    }
+
+    #[tokio::test]
+    async fn responses_unregistered_model_records_nothing() {
+        let state = create_local_state().await;
+        let response = post_responses(
+            test_connect_info(),
+            axum::http::HeaderMap::new(),
+            State(state.clone()),
+            None,
+            Json(json!({"model": "totally-unknown-model", "input": "x"})),
+        )
+        .await
+        .expect("should return a 404 response");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        sleep(Duration::from_millis(100)).await;
+        let records = state.request_history.load_records().await.unwrap();
+        assert!(
+            records.is_empty(),
+            "404 (unregistered model) must not record history"
+        );
     }
 
     // --- extract_model tests ---
