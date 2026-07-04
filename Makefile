@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: quality-checks quality-checks-pre-commit fmt clippy test security-checks markdownlint specify-commits
+.PHONY: quality-checks quality-checks-pre-commit fmt clippy test dashboard-test security-checks markdownlint specify-commits
 .PHONY: openai-tests test-hooks e2e-tests e2e-playwright e2e-playwright-screenshots
 .PHONY: bench-local bench-openai bench-google bench-anthropic
 .PHONY: build-macos-x86_64 build-macos-aarch64 build-macos-all
@@ -17,6 +17,16 @@ clippy:
 test:
 	cargo test -- --test-threads=1
 
+# Dashboard (frontend) unit tests via vitest.
+# arch-review [H7]: 純粋関数・フックの回帰をフロントエンド自身のテストで担保する。
+dashboard-test:
+	@if [ -x "llmlb/src/web/dashboard/node_modules/.bin/vitest" ]; then \
+		pnpm --filter @llm/dashboard test; \
+	else \
+		echo "vitest is not installed. Run 'pnpm install' first."; \
+		exit 0; \
+	fi
+
 markdownlint:
 	pnpm dlx markdownlint-cli2 "**/*.md" "!**/node_modules" "!.git" "!.github" "!.worktrees" "!CHANGELOG.md" "!build" "!**/build/**" "!node/third_party" "!actions-runner"
 
@@ -31,7 +41,7 @@ specify-commits:
 		bash scripts/checks/check-commits.sh --from origin/main --to HEAD; \
 	fi
 
-quality-checks: fmt clippy test security-checks specify-commits markdownlint openai-tests test-hooks e2e-playwright
+quality-checks: fmt clippy test dashboard-test security-checks specify-commits markdownlint openai-tests test-hooks e2e-playwright
 
 quality-checks-pre-commit: fmt clippy
 

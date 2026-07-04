@@ -19,6 +19,7 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       e2e: ${{ steps.filter.outputs.e2e }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,7 +33,10 @@ jobs:
               - '.github/workflows/test.yml'
             e2e:
               - 'llmlb/tests/e2e-playwright/**'
-              - 'llmlb/src/dashboard/**'
+              - 'llmlb/src/web/dashboard/**'
+              - '.github/workflows/test.yml'
+            dashboard:
+              - 'llmlb/src/web/dashboard/**'
               - '.github/workflows/test.yml'
 
   rust-test:
@@ -214,3 +218,39 @@ jobs:
           name: playwright-report
           path: llmlb/tests/e2e-playwright/reports/
           retention-days: 7
+
+  dashboard-unit-test:
+    # 要件: arch-review [H7]
+    # 目的: ダッシュボードの純粋関数・フックを vitest でテスト
+    name: Dashboard Unit Tests (vitest)
+    needs: changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: No dashboard-relevant changes
+        if: needs.changes.outputs.dashboard != 'true'
+        run: echo "No dashboard changes; skipping dashboard unit tests."
+
+      - name: Checkout code
+        if: needs.changes.outputs.dashboard == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: needs.changes.outputs.dashboard == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        if: needs.changes.outputs.dashboard == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install dependencies
+        if: needs.changes.outputs.dashboard == 'true'
+        run: pnpm install
+
+      - name: Run dashboard unit tests
+        if: needs.changes.outputs.dashboard == 'true'
+        run: pnpm --filter @llm/dashboard test
