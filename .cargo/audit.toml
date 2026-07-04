@@ -5,9 +5,23 @@
 # - `cargo audit` can report RUSTSEC-2023-0071 (rsa) via `sqlx-mysql`, but
 #   `cargo tree -i rsa` shows it is not in the feature-resolved graph for llmlb.
 # - If MySQL support is enabled in the future, revisit this ignore.
+#
+# - RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml) are reachable only via
+#   winit's Wayland backend (winit -> smithay-client-toolkit -> wayland-scanner
+#   -> quick-xml). winit is a macOS/Windows-only dependency here (see llmlb
+#   Cargo.toml `cfg(any(target_os = "macos", target_os = "windows"))`), where the
+#   Cocoa/Win32 backends are used instead of Wayland. `cargo tree -i quick-xml`
+#   for the macOS/Windows targets prints "nothing to print", and llmlb does not
+#   depend on winit on Linux at all — so quick-xml is not in the feature-resolved
+#   graph for any real build target. wayland-scanner pins `quick-xml ^0.39`, so
+#   the fixed >=0.41 cannot be selected without upgrading the winit/smithay/
+#   wayland chain (winit only ships it in a pre-release). Revisit once a stable
+#   winit pulls a fixed wayland-scanner, or if a Wayland target is ever built.
 
 [advisories]
 ignore = [
   "RUSTSEC-2023-0071", # rsa: no fixed upgrade; unreachable unless sqlx-mysql feature is enabled
+  "RUSTSEC-2026-0194", # quick-xml: unreachable; only via winit Wayland backend (macOS/Windows use Cocoa/Win32)
+  "RUSTSEC-2026-0195", # quick-xml: unreachable; only via winit Wayland backend (macOS/Windows use Cocoa/Win32)
 ]
 
