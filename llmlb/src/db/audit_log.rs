@@ -921,7 +921,8 @@ fn build_extra_where(where_clause: &str) -> String {
         // "WHERE x = ? AND y = ?" -> "AND x = ? AND y = ?"
         // build_where_clauseでカラム名にテーブルプレフィックスがないので
         // JOINクエリ用にeプレフィックスを付与
-        let conditions = &where_clause[6..]; // "WHERE "を除去
+        // arch-review [L5]: バイト index [6..] は prefix 変更時に panic し得るため strip_prefix で堅牢化
+        let conditions = where_clause.strip_prefix("WHERE ").unwrap_or(where_clause);
         let prefixed = conditions
             .replace("actor_type", "e.actor_type")
             .replace("actor_id", "e.actor_id")
