@@ -893,20 +893,31 @@ pub async fn delete_endpoint(
         return e.into_response();
     }
 
-    // EndpointRegistry::remove を使用してDBとキャッシュ両方から削除
-    match state.endpoint_registry.remove(id).await {
-        Ok(true) => {
-            // EndpointRegistry::remove は LoadManager の状態までは掃除しないため、
-            // 負荷状態・TPS状態がリークしないよう明示的に破棄する。
-            state.load_manager.forget_endpoint(id).await;
-            StatusCode::NO_CONTENT.into_response()
-        }
+    // arch-review [L12]: 削除は registry と LoadManager の状態掃除を単一の調整メソッドに
+    // 集約した remove_endpoint_fully を通す。
+    match remove_endpoint_fully(&state, id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => AppError(LbError::EndpointNotFound(id)).into_response(),
         Err(e) => {
             tracing::error!("Failed to delete endpoint: {}", e);
             AppError(LbError::Database("Failed to delete endpoint".to_string())).into_response()
         }
     }
+}
+
+/// エンドポイントをレジストリ・DB・LoadManager 状態から一括削除する調整メソッド。
+///
+/// arch-review [L12]: エンドポイントの runtime 状態が EndpointRegistry と LoadManager に
+/// 分散し、削除時に呼び出し側が両方を手で掃除する必要があった。EndpointRegistry::remove
+/// は LoadManager の負荷/TPS 状態までは掃除しないため、両者の掃除を本メソッドへ集約し、
+/// 削除経路が LoadManager 状態の破棄を取りこぼさないようにする。
+async fn remove_endpoint_fully(state: &AppState, id: Uuid) -> Result<bool, sqlx::Error> {
+    let removed = state.endpoint_registry.remove(id).await?;
+    if removed {
+        // 負荷状態・TPS状態がリークしないよう明示的に破棄する。
+        state.load_manager.forget_endpoint(id).await;
+    }
+    Ok(removed)
 }
 
 /// POST /api/endpoints/:id/test - 接続テスト
