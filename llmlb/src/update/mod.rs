@@ -11,6 +11,8 @@
 mod download;
 mod github;
 pub mod history;
+#[cfg(target_os = "macos")]
+mod macos_installer;
 pub mod schedule;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod tray;
@@ -18,6 +20,8 @@ use download::{
     asset_name_from_url, download_to_path, extract_archive, find_extracted_binary, ProgressCallback,
 };
 use github::{fetch_latest_release, parse_tag_to_version, GitHubAsset, GitHubRelease};
+#[cfg(target_os = "macos")]
+use macos_installer::run_macos_pkg_installer_with_privileges;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tray::{
     notify_tray_available, notify_tray_failed, notify_tray_ready, notify_tray_up_to_date,
@@ -1694,20 +1698,6 @@ fn spawn_internal_run_installer(
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn sh_single_quote(s: &str) -> String {
-    if s.is_empty() {
-        return "''".to_string();
-    }
-    let escaped = s.replace('\'', "'\\''");
-    format!("'{escaped}'")
-}
-
-#[cfg(target_os = "macos")]
-fn escape_applescript_string(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
 fn wait_for_pid_exit(pid: u32, timeout: Duration) -> Result<()> {
     let started = std::time::Instant::now();
     while crate::lock::is_process_running(pid) {
@@ -2053,30 +2043,6 @@ fn restart_from_args_file(target: &Path, args_file: &Path) -> Result<()> {
         cmd.current_dir(parsed.cwd);
     }
     cmd.spawn().context("Failed to spawn restarted process")?;
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn run_macos_pkg_installer_with_privileges(installer: &Path) -> Result<()> {
-    let installer_path = installer.to_string_lossy().to_string();
-    // Run /usr/sbin/installer as admin via AppleScript. Keep this helper process non-root so restart
-    // happens under the invoking user account.
-    let shell_cmd = format!(
-        "/usr/sbin/installer -pkg {} -target /",
-        sh_single_quote(&installer_path)
-    );
-    let applescript_cmd = format!(
-        "do shell script \"{}\" with administrator privileges",
-        escape_applescript_string(&shell_cmd)
-    );
-    let status = Command::new("osascript")
-        .arg("-e")
-        .arg(applescript_cmd)
-        .status()
-        .context("Failed to run macOS installer via osascript")?;
-    if !status.success() {
-        return Err(anyhow!("osascript installer exited with {}", status));
-    }
     Ok(())
 }
 
