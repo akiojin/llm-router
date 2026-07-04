@@ -8,16 +8,18 @@
 //! - Update scheduling (immediate / idle / time-based)
 //! - Update history recording
 
+mod download;
 mod github;
 pub mod history;
 pub mod schedule;
+use download::{
+    asset_name_from_url, download_to_path, extract_archive, find_extracted_binary, ProgressCallback,
+};
 use github::{fetch_latest_release, parse_tag_to_version, GitHubAsset, GitHubRelease};
 
 use crate::{inference_gate::InferenceGate, shutdown::ShutdownController};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use flate2::read::GzDecoder;
-use futures::StreamExt;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1606,111 +1608,6 @@ fn is_dir_writable(dir: &Path) -> Result<bool> {
         let _ = fs::remove_file(&probe);
     }
     Ok(result)
-}
-
-fn asset_name_from_url(url: &str) -> Option<String> {
-    url.split('/').next_back().map(|s| s.to_string())
-}
-
-/// Progress callback for streaming downloads: `(downloaded_bytes, total_bytes)`.
-type ProgressCallback = Box<dyn Fn(u64, Option<u64>) + Send + Sync>;
-
-async fn download_to_path(
-    client: &reqwest::Client,
-    url: &str,
-    path: &Path,
-    on_progress: Option<ProgressCallback>,
-) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).ok();
-    }
-    let res = client
-        .get(url)
-        .timeout(Duration::from_secs(300))
-        .send()
-        .await?;
-    if !res.status().is_success() {
-        return Err(anyhow!("download failed with status {}", res.status()));
-    }
-    let total_bytes = res.content_length();
-    let tmp = path.with_extension("tmp");
-    let mut file = fs::File::create(&tmp)?;
-    let mut downloaded: u64 = 0;
-    let mut stream = res.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.context("Error reading download stream")?;
-        io::Write::write_all(&mut file, &chunk)?;
-        downloaded += chunk.len() as u64;
-        if let Some(ref cb) = on_progress {
-            cb(downloaded, total_bytes);
-        }
-    }
-    drop(file);
-    fs::rename(tmp, path)?;
-    Ok(())
-}
-
-fn extract_archive(archive_path: &Path, dest_dir: &Path) -> Result<()> {
-    let name = archive_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or_default()
-        .to_string();
-
-    if name.ends_with(".tar.gz") {
-        let file = fs::File::open(archive_path)?;
-        let decoder = GzDecoder::new(file);
-        let mut archive = tar::Archive::new(decoder);
-        archive.unpack(dest_dir)?;
-        return Ok(());
-    }
-
-    if name.ends_with(".zip") {
-        let file = fs::File::open(archive_path)?;
-        let mut zip = zip::ZipArchive::new(file)?;
-        zip.extract(dest_dir)?;
-        return Ok(());
-    }
-
-    Err(anyhow!("unsupported archive format: {name}"))
-}
-
-fn find_extracted_binary(extract_dir: &Path, binary_name: &str) -> Result<Option<PathBuf>> {
-    // Expected layout: dist/llmlb-<artifact>/<binary>
-    let mut candidates = Vec::<PathBuf>::new();
-    for entry in fs::read_dir(extract_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            candidates.push(path.join(binary_name));
-        } else if path.file_name().and_then(|n| n.to_str()) == Some(binary_name) {
-            candidates.push(path);
-        }
-    }
-
-    for c in candidates {
-        if c.exists() {
-            return Ok(Some(c));
-        }
-    }
-
-    // Fallback: deep search.
-    let mut stack = vec![extract_dir.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir)
-            .unwrap_or_else(|_| fs::read_dir(extract_dir).unwrap())
-            .flatten()
-        {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.file_name().and_then(|n| n.to_str()) == Some(binary_name) {
-                return Ok(Some(path));
-            }
-        }
-    }
-
-    Ok(None)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
