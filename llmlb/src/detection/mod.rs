@@ -61,8 +61,10 @@ pub async fn detect_endpoint_type_with_client(
 
     debug!(base_url = %base_url, "Starting endpoint type detection");
 
-    // Track whether at least one HTTP response was received
-    let mut got_any_response = false;
+    // arch-review [L16]: 優先度6の OpenAI 互換プローブ（/v1/models）が HTTP 応答を
+    // 返したか。この 1 プローブのみが本フラグを設定する（他プローブは成功時に early return
+    // し、失敗時は接続エラーと非対応を区別しないため）。到達可能だが型未特定を判定する。
+    let mut openai_probe_responded = false;
 
     // Priority 1: xLLM detection
     match detect_xllm(client, base_url, api_key).await {
@@ -128,7 +130,7 @@ pub async fn detect_endpoint_type_with_client(
             });
         }
         OpenAiDetectResult::NotMatched => {
-            got_any_response = true;
+            openai_probe_responded = true;
         }
         OpenAiDetectResult::ConnectionError => {
             // No HTTP response from this probe
@@ -136,32 +138,25 @@ pub async fn detect_endpoint_type_with_client(
     }
 
     // If we got any HTTP response but no type matched, it's unsupported
-    if got_any_response {
-        warn!(base_url = %base_url, "Endpoint responded but type could not be determined");
-        Err(DetectionError::UnsupportedType(format!(
-            "endpoint at {} responded but does not match any supported type",
-            base_url
-        )))
-    } else {
-        // Try a simple connectivity check to distinguish unreachable from unsupported
-        match client.get(format!("{}/v1/models", base_url)).send().await {
-            Ok(_) => {
-                // Got a response but nothing matched
-                warn!(base_url = %base_url, "Endpoint responded but type could not be determined");
-                Err(DetectionError::UnsupportedType(format!(
-                    "endpoint at {} responded but does not match any supported type",
-                    base_url
-                )))
-            }
-            Err(e) => {
-                warn!(base_url = %base_url, error = %e, "Endpoint is unreachable");
-                Err(DetectionError::Unreachable(format!(
-                    "could not connect to {}",
-                    base_url
-                )))
-            }
+    // arch-review [L16]: openai プローブが応答しなかった場合のみ、到達可否を素の
+    // GET /v1/models で確認し、接続不可なら Unreachable で early return する。
+    if !openai_probe_responded {
+        if let Err(e) = client.get(format!("{}/v1/models", base_url)).send().await {
+            warn!(base_url = %base_url, error = %e, "Endpoint is unreachable");
+            return Err(DetectionError::Unreachable(format!(
+                "could not connect to {}",
+                base_url
+            )));
         }
     }
+
+    // ここに到達 = エンドポイントは応答したが型を特定できなかった。
+    // 従来は openai プローブ経由と fallback 経由で UnsupportedType を二重に構築していた。
+    warn!(base_url = %base_url, "Endpoint responded but type could not be determined");
+    Err(DetectionError::UnsupportedType(format!(
+        "endpoint at {} responded but does not match any supported type",
+        base_url
+    )))
 }
 
 /// Internal result for OpenAI-compatible detection
