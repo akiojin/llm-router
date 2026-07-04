@@ -231,36 +231,7 @@ async fn initialize_inner(
     }
 
     // 24時間ごとの定期ハッシュチェーン検証タスク (SPEC-8301d106)
-    {
-        let periodic_storage = audit_log_storage.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-            // 最初のtickはスキップ（起動時検証は上で実施済み）
-            interval.tick().await;
-            loop {
-                interval.tick().await;
-                match crate::audit::hash_chain::verify_chain(&periodic_storage).await {
-                    Ok(result) => {
-                        if result.valid {
-                            info!(
-                                batches_checked = result.batches_checked,
-                                "Periodic audit log hash chain verification passed"
-                            );
-                        } else {
-                            warn!(
-                                tampered_batch = ?result.tampered_batch,
-                                message = ?result.message,
-                                "Periodic audit log hash chain verification FAILED"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Periodic audit log hash chain verification error: {}", e);
-                    }
-                }
-            }
-        });
-    }
+    crate::audit::start_periodic_verification_task(audit_log_storage.clone());
 
     // アーカイブDBプールの初期化 (SPEC-8301d106)
     let archive_path = std::env::var("LLMLB_AUDIT_ARCHIVE_PATH").unwrap_or_else(|_| {
@@ -287,32 +258,15 @@ async fn initialize_inner(
 
     // 24時間ごとの定期アーカイブタスク (SPEC-8301d106)
     if let Some(ref archive_pool) = audit_archive_pool {
-        let archive_storage = audit_log_storage.clone();
-        let archive_pool_clone = archive_pool.clone();
         let retention_days: i64 = std::env::var("LLMLB_AUDIT_RETENTION_DAYS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(90);
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-            interval.tick().await; // 最初のtickをスキップ
-            loop {
-                interval.tick().await;
-                match archive_storage
-                    .archive_old_entries(retention_days, &archive_pool_clone)
-                    .await
-                {
-                    Ok(count) => {
-                        if count > 0 {
-                            info!(count, retention_days, "Archived old audit log entries");
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Audit log archive task error: {}", e);
-                    }
-                }
-            }
-        });
+        crate::audit::start_archive_task(
+            audit_log_storage.clone(),
+            archive_pool.clone(),
+            retention_days,
+        );
     }
 
     let state = AppState {
