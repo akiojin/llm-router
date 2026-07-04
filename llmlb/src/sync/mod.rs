@@ -178,25 +178,13 @@ pub async fn sync_models_with_type(
     let mut synced_models = Vec::new();
 
     for model_id in &added_ids {
-        let (caps_vec, supported_apis) = build_endpoint_model_capability_view(
+        let model = build_synced_endpoint_model(
+            endpoint_id,
             model_id,
             parsed_by_id.get(model_id.as_str()).copied(),
+            endpoint_type,
+            now,
         );
-
-        // マッピングテーブルからcanonical_nameを解決
-        let canonical_name = endpoint_type
-            .and_then(|et| crate::models::mapping::resolve_canonical(model_id, &et))
-            .map(|s| s.to_string());
-
-        let model = EndpointModel {
-            endpoint_id,
-            model_id: (*model_id).clone(),
-            capabilities: caps_vec,
-            max_tokens: None,
-            last_checked: Some(now),
-            supported_apis,
-            canonical_name,
-        };
 
         if let Err(e) = db::add_endpoint_model(pool, &model).await {
             tracing::warn!(
@@ -211,24 +199,13 @@ pub async fn sync_models_with_type(
 
     // 既存モデルのlast_checkedを更新
     for model_id in &updated_ids {
-        let (caps_vec, supported_apis) = build_endpoint_model_capability_view(
+        let model = build_synced_endpoint_model(
+            endpoint_id,
             model_id,
             parsed_by_id.get(model_id.as_str()).copied(),
+            endpoint_type,
+            now,
         );
-
-        let canonical_name = endpoint_type
-            .and_then(|et| crate::models::mapping::resolve_canonical(model_id, &et))
-            .map(|s| s.to_string());
-
-        let model = EndpointModel {
-            endpoint_id,
-            model_id: (*model_id).clone(),
-            capabilities: caps_vec,
-            max_tokens: None,
-            last_checked: Some(now),
-            supported_apis,
-            canonical_name,
-        };
 
         if let Err(e) = db::update_endpoint_model(pool, &model).await {
             tracing::warn!(
@@ -323,6 +300,30 @@ async fn fetch_models_json(
         .json()
         .await
         .map_err(|e| SyncError::ParseError(e.to_string()))
+}
+
+/// sync 時の add / update 双方で使う EndpointModel を組み立てる（重複排除）。
+fn build_synced_endpoint_model(
+    endpoint_id: Uuid,
+    model_id: &str,
+    parsed: Option<&ParsedModel>,
+    endpoint_type: Option<EndpointType>,
+    now: chrono::DateTime<Utc>,
+) -> EndpointModel {
+    let (caps_vec, supported_apis) = build_endpoint_model_capability_view(model_id, parsed);
+    // マッピングテーブルからcanonical_nameを解決
+    let canonical_name = endpoint_type
+        .and_then(|et| crate::models::mapping::resolve_canonical(model_id, &et))
+        .map(|s| s.to_string());
+    EndpointModel {
+        endpoint_id,
+        model_id: model_id.to_string(),
+        capabilities: caps_vec,
+        max_tokens: None,
+        last_checked: Some(now),
+        supported_apis,
+        canonical_name,
+    }
 }
 
 fn build_endpoint_model_capability_view(

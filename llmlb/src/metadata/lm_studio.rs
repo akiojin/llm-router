@@ -93,12 +93,12 @@ fn parse_lm_studio_response(json: &serde_json::Value, model: &str) -> ModelMetad
 
     let supports_tool_use = json["capabilities"]["trained_for_tool_use"].as_bool();
 
-    // LM StudioのモデルIDは "publisher/model-name" 形式のため、HFリポ名として推測
-    let hf_repo = if model.contains('/') && !model.contains(':') {
-        Some(model.to_string())
-    } else {
-        None
-    };
+    // LM StudioのモデルIDは "publisher/model-name" 形式のため、HFリポ名として推測。
+    // 判定ロジックは models::mapping::guess_hf_repo に集約済み。
+    let hf_repo = crate::models::mapping::guess_hf_repo(
+        model,
+        &crate::types::endpoint::EndpointType::LmStudio,
+    );
 
     ModelMetadata {
         model: model_name,
