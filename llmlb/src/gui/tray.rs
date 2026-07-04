@@ -110,6 +110,48 @@ pub struct ScheduleInfo {
     pub scheduled_at: Option<DateTime<Utc>>,
 }
 
+/// Convert an update-domain schedule into tray display info.
+///
+/// arch-review [M8]: この変換は gui 側（表示形式）の関心事のため update から移設。
+fn schedule_to_tray_info(schedule: &crate::update::schedule::UpdateSchedule) -> ScheduleInfo {
+    use crate::update::schedule::ScheduleMode;
+    let mode = match schedule.mode {
+        ScheduleMode::Immediate => "Immediate",
+        ScheduleMode::Idle => "Idle",
+        ScheduleMode::Scheduled => "Scheduled",
+    }
+    .to_string();
+
+    ScheduleInfo {
+        mode,
+        scheduled_at: schedule.scheduled_at.as_ref().cloned(),
+    }
+}
+
+/// arch-review [M8]: update ドメインの [`crate::update::UpdateNotifier`] を実装し、
+/// gui → update の依存方向で通知を受け取る。各メソッドは既存の inherent メソッドへ委譲。
+impl crate::update::UpdateNotifier for TrayEventProxy {
+    fn notify_update_available(&self, latest: String) {
+        TrayEventProxy::notify_update_available(self, latest);
+    }
+
+    fn notify_update_ready(&self) {
+        TrayEventProxy::notify_update_ready(self);
+    }
+
+    fn notify_update_failed(&self, message: String) {
+        TrayEventProxy::notify_update_failed(self, message);
+    }
+
+    fn notify_update_up_to_date(&self) {
+        TrayEventProxy::notify_update_up_to_date(self);
+    }
+
+    fn notify_schedule(&self, schedule: Option<crate::update::schedule::UpdateSchedule>) {
+        TrayEventProxy::notify_schedule(self, schedule.map(|s| schedule_to_tray_info(&s)));
+    }
+}
+
 #[derive(Debug, Clone)]
 enum RuntimeEvent {
     Tray(TrayIconEvent),

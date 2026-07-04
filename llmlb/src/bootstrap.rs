@@ -188,7 +188,9 @@ async fn initialize_inner(
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     if let Some(proxy) = tray_proxy {
-        update_manager.set_tray_proxy(proxy).await;
+        update_manager
+            .set_tray_proxy(std::sync::Arc::new(proxy))
+            .await;
     }
     update_manager.start_background_tasks();
 

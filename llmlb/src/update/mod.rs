@@ -23,10 +23,26 @@ use github::{fetch_latest_release, parse_tag_to_version, GitHubAsset, GitHubRele
 #[cfg(target_os = "macos")]
 use macos_installer::run_macos_pkg_installer_with_privileges;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-use tray::{
-    notify_tray_available, notify_tray_failed, notify_tray_ready, notify_tray_up_to_date,
-    schedule_to_tray_info,
-};
+use tray::{notify_tray_available, notify_tray_failed, notify_tray_ready, notify_tray_up_to_date};
+
+/// 自己更新の状態を UI 層へ通知する抽象。
+///
+/// arch-review [M8]: update ドメインが `gui::tray::TrayEventProxy` へ直接依存して
+/// いたため、通知先を trait として逆転させた（依存方向は gui → update）。
+/// gui 側が本 trait を `TrayEventProxy` に実装する。
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+pub trait UpdateNotifier: Send + Sync {
+    /// 新しいバージョンが利用可能。
+    fn notify_update_available(&self, latest: String);
+    /// 更新ペイロードのダウンロードが完了し適用可能。
+    fn notify_update_ready(&self);
+    /// 更新フローが失敗。
+    fn notify_update_failed(&self, message: String);
+    /// 既に最新。
+    fn notify_update_up_to_date(&self);
+    /// 現在の更新スケジュール（`None` で表示クリア）。
+    fn notify_schedule(&self, schedule: Option<schedule::UpdateSchedule>);
+}
 
 use crate::{inference_gate::InferenceGate, shutdown::ShutdownController};
 use anyhow::{anyhow, Context, Result};
@@ -271,7 +287,7 @@ struct UpdateManagerInner {
     history_store: history::HistoryStore,
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
-    tray_proxy: RwLock<Option<crate::gui::tray::TrayEventProxy>>,
+    tray_proxy: RwLock<Option<Arc<dyn UpdateNotifier>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -418,11 +434,11 @@ impl UpdateManager {
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
-    /// Attach a tray event proxy to publish update state (best-effort).
-    pub async fn set_tray_proxy(&self, proxy: crate::gui::tray::TrayEventProxy) {
-        *self.inner.tray_proxy.write().await = Some(proxy.clone());
+    /// Attach an update notifier (typically the tray proxy) to publish update state.
+    pub async fn set_tray_proxy(&self, proxy: Arc<dyn UpdateNotifier>) {
         let schedule = self.inner.schedule_store.load().ok().flatten();
-        proxy.notify_schedule(schedule.map(|s| schedule_to_tray_info(&s)));
+        proxy.notify_schedule(schedule);
+        *self.inner.tray_proxy.write().await = Some(proxy);
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -433,7 +449,7 @@ impl UpdateManager {
         let mgr = self.clone();
         handle.spawn(async move {
             if let Some(proxy) = mgr.inner.tray_proxy.read().await.clone() {
-                proxy.notify_schedule(schedule.map(|s| schedule_to_tray_info(&s)));
+                proxy.notify_schedule(schedule);
             }
         });
     }
