@@ -703,6 +703,25 @@ pub struct JwtOrApiKeyPermissionConfig {
     pub api_key_role: UserRole,
 }
 
+impl JwtOrApiKeyPermissionConfig {
+    /// 設定を構築する。
+    ///
+    /// arch-review [L10]: create_app で 8 箇所繰り返されていた設定構築を集約する。
+    pub fn new(
+        app_state: AppState,
+        required_permission: ApiKeyPermission,
+        jwt_required_role: Option<UserRole>,
+        api_key_role: UserRole,
+    ) -> Self {
+        Self {
+            app_state,
+            required_permission,
+            jwt_required_role,
+            api_key_role,
+        }
+    }
+}
+
 /// `JwtOrApiKeyPermissionConfig` に従って、JWTまたはAPIキーで認証・認可を行う。
 pub async fn jwt_or_api_key_permission_middleware(
     State(config): State<JwtOrApiKeyPermissionConfig>,

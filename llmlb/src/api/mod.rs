@@ -119,12 +119,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::csrf_protect_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::UsersManage,
-                jwt_required_role: Some(UserRole::Admin),
-                api_key_role: UserRole::Admin,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::UsersManage,
+                Some(UserRole::Admin),
+                UserRole::Admin,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -162,12 +162,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::csrf_protect_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::InvitationsManage,
-                jwt_required_role: Some(UserRole::Admin),
-                api_key_role: UserRole::Admin,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::InvitationsManage,
+                Some(UserRole::Admin),
+                UserRole::Admin,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -178,12 +178,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::require_password_changed_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::LogsRead,
-                jwt_required_role: Some(UserRole::Admin),
-                api_key_role: UserRole::Admin,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::LogsRead,
+                Some(UserRole::Admin),
+                UserRole::Admin,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -198,12 +198,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::csrf_protect_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::ModelsManage,
-                jwt_required_role: Some(UserRole::Admin),
-                api_key_role: UserRole::Admin,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::ModelsManage,
+                Some(UserRole::Admin),
+                UserRole::Admin,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -214,12 +214,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::require_password_changed_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::MetricsRead,
-                jwt_required_role: Some(UserRole::Admin),
-                api_key_role: UserRole::Admin,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::MetricsRead,
+                Some(UserRole::Admin),
+                UserRole::Admin,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -475,12 +475,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::csrf_protect_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::EndpointsRead,
-                jwt_required_role: None,
-                api_key_role: UserRole::Viewer,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::EndpointsRead,
+                None,
+                UserRole::Viewer,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -507,12 +507,12 @@ pub fn create_app(state: AppState) -> Router {
             crate::auth::middleware::csrf_protect_middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-                app_state: state.clone(),
-                required_permission: ApiKeyPermission::EndpointsManage,
-                jwt_required_role: Some(UserRole::Admin),
-                api_key_role: UserRole::Admin,
-            },
+            crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+                state.clone(),
+                ApiKeyPermission::EndpointsManage,
+                Some(UserRole::Admin),
+                UserRole::Admin,
+            ),
             crate::auth::middleware::jwt_or_api_key_permission_middleware,
         ));
 
@@ -566,12 +566,12 @@ pub fn create_app(state: AppState) -> Router {
     // /api/models はランタイム同期用の登録済みモデル一覧
     // /api/models/hub はダッシュボード向けの対応モデル一覧 + ステータス
     let models_list_routes = {
-        let cfg = crate::auth::middleware::JwtOrApiKeyPermissionConfig {
-            app_state: state.clone(),
-            required_permission: ApiKeyPermission::RegistryRead,
-            jwt_required_role: Some(UserRole::Admin),
-            api_key_role: UserRole::Viewer,
-        };
+        let cfg = crate::auth::middleware::JwtOrApiKeyPermissionConfig::new(
+            state.clone(),
+            ApiKeyPermission::RegistryRead,
+            Some(UserRole::Admin),
+            UserRole::Viewer,
+        );
         Router::new()
             .route("/models", get(models::list_models))
             .route("/models/hub", get(models::list_models_with_status))
