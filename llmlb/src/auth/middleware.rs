@@ -1,5 +1,6 @@
 // T047-T049: 認証ミドルウェア実装
 
+use crate::audit::middleware::AuditActorSlot;
 use crate::common::auth::{ApiKeyPermission, Claims, UserRole};
 use crate::AppState;
 use axum::{
@@ -9,6 +10,19 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+
+/// arch-review [M10]: 認証で解決したアクター（Claims / ApiKeyAuthContext）を
+/// 監査ミドルウェアが request に挿入したスロットへ記録する（存在時のみ）。
+/// これにより監査は response 差し替えに依存せずアクターを取得できる。
+fn record_audit_actor(
+    request: &Request,
+    claims: Option<&Claims>,
+    api_key: Option<&ApiKeyAuthContext>,
+) {
+    if let Some(slot) = request.extensions().get::<AuditActorSlot>() {
+        slot.record(claims.cloned(), api_key.cloned());
+    }
+}
 use chrono::{DateTime, Utc};
 use jsonwebtoken::decode_header;
 use serde_json::json;
@@ -389,6 +403,7 @@ pub async fn jwt_auth_middleware(
     // 検証済みのClaimsをrequestの拡張データに格納
     let claims_for_response = claims.clone();
     request.extensions_mut().insert(claims);
+    record_audit_actor(&request, Some(&claims_for_response), None);
 
     // 次のミドルウェア/ハンドラーに進む
     let mut response = next.run(request).await;
@@ -413,6 +428,7 @@ pub async fn require_jwt_auth_middleware(
 
     let claims_for_response = claims.clone();
     request.extensions_mut().insert(claims);
+    record_audit_actor(&request, Some(&claims_for_response), None);
     let mut response = next.run(request).await;
     // 監査ログミドルウェア (SPEC-8301d106) がresponse extensionsからアクター情報を取得
     response.extensions_mut().insert(claims_for_response);
@@ -537,6 +553,7 @@ pub async fn api_key_auth_middleware(
     let auth_context = authenticate_api_key(&pool, &api_key).await?;
     let auth_context_for_response = auth_context.clone();
     request.extensions_mut().insert(auth_context);
+    record_audit_actor(&request, None, Some(&auth_context_for_response));
 
     let mut response = next.run(request).await;
     // 監査ログミドルウェア (SPEC-8301d106) がresponse extensionsからアクター情報を取得
@@ -603,6 +620,7 @@ pub async fn anthropic_api_key_auth_middleware(
     })?;
     let auth_context_for_response = auth_context.clone();
     request.extensions_mut().insert(auth_context);
+    record_audit_actor(&request, None, Some(&auth_context_for_response));
 
     let mut response = next.run(request).await;
     response.extensions_mut().insert(auth_context_for_response);
@@ -707,6 +725,7 @@ pub async fn jwt_or_api_key_permission_middleware(
 
         let claims_for_response = claims.clone();
         request.extensions_mut().insert(claims);
+        record_audit_actor(&request, Some(&claims_for_response), None);
         let mut response = next.run(request).await;
         // 監査ログミドルウェア (SPEC-8301d106) がresponse extensionsからアクター情報を取得
         response.extensions_mut().insert(claims_for_response);
@@ -744,6 +763,11 @@ pub async fn jwt_or_api_key_permission_middleware(
     let auth_context_for_response = auth_context.clone();
     request.extensions_mut().insert(claims);
     request.extensions_mut().insert(auth_context);
+    record_audit_actor(
+        &request,
+        Some(&claims_for_response),
+        Some(&auth_context_for_response),
+    );
 
     let mut response = next.run(request).await;
     // 監査ログミドルウェア (SPEC-8301d106) がresponse extensionsからアクター情報を取得

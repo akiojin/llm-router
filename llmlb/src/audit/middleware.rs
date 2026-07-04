@@ -50,7 +50,7 @@ fn should_exclude(path: &str) -> bool {
 /// `AuditLogWriter` 経由でバッファに送信する。
 pub async fn audit_middleware(
     State(state): State<AppState>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
     let start = Instant::now();
@@ -61,6 +61,11 @@ pub async fn audit_middleware(
     if should_exclude(&path) {
         return next.run(request).await;
     }
+
+    // arch-review [M10]: 認証ミドルウェアが解決したアクターをロバストに受け取るため、
+    // request にアクタースロットを挿入する。認証ミドルウェアが record() で書き込む。
+    let actor_slot = AuditActorSlot::default();
+    request.extensions_mut().insert(actor_slot.clone());
 
     // クライアントIP取得（プロキシ対応 + 直接接続対応）
     let client_ip = request
@@ -83,8 +88,18 @@ pub async fn audit_middleware(
     let duration = start.elapsed();
     let status_code = response.status().as_u16();
 
-    // response extensionsからアクター情報を取得（認証ミドルウェアが設定）
-    let (actor_type, actor_id, actor_username, api_key_owner_id) = extract_actor_info(&response);
+    // アクター情報: スロット(primary)→response extensions(fallback) の順で取得する。
+    // arch-review [M10]: response 差し替えでアクター帰属が失われる脆さを排除。
+    let actor_snapshot = actor_slot.snapshot();
+    let (actor_type, actor_id, actor_username, api_key_owner_id) =
+        if actor_snapshot.claims.is_some() || actor_snapshot.api_key.is_some() {
+            extract_actor_info_from(
+                actor_snapshot.claims.as_ref(),
+                actor_snapshot.api_key.as_ref(),
+            )
+        } else {
+            extract_actor_info(&response)
+        };
 
     // response extensionsからトークン使用量を取得（推論ハンドラーが設定）
     let token_usage = response.extensions().get::<TokenUsage>().cloned();
@@ -137,16 +152,50 @@ pub async fn audit_middleware(
     response
 }
 
-/// response extensionsからアクター情報を抽出する
-fn extract_actor_info(
-    response: &Response,
-) -> (ActorType, Option<String>, Option<String>, Option<String>) {
-    let extensions = response.extensions();
+/// 認証ミドルウェアが解決したアクターを監査へロバストに伝搬するためのスロット。
+///
+/// arch-review [M10]: 従来はアクター情報を response extensions へ再スタンプして
+/// 監査ミドルウェアが読み取っていたが、ハンドラが response を差し替えると帰属が
+/// 失われる脆さがあった。監査ミドルウェアが request に本スロットを挿入し、認証
+/// ミドルウェアが [`AuditActorSlot::record`] で解決結果を書き込む。監査は next 実行後に
+/// スロット(primary)→response extensions(fallback) の順で読むため、response 差し替えに
+/// 影響されない。fallback を残すため、スロット未書込の経路でも従来挙動に退化するのみ。
+#[derive(Clone, Default)]
+pub struct AuditActorSlot(std::sync::Arc<std::sync::Mutex<AuditActorSnapshot>>);
 
+#[derive(Clone, Default)]
+struct AuditActorSnapshot {
+    claims: Option<Claims>,
+    api_key: Option<ApiKeyAuthContext>,
+}
+
+impl AuditActorSlot {
+    /// 認証ミドルウェアが解決したアクター（Claims / ApiKeyAuthContext）を記録する。
+    pub fn record(&self, claims: Option<Claims>, api_key: Option<ApiKeyAuthContext>) {
+        if let Ok(mut snap) = self.0.lock() {
+            if claims.is_some() {
+                snap.claims = claims;
+            }
+            if api_key.is_some() {
+                snap.api_key = api_key;
+            }
+        }
+    }
+
+    fn snapshot(&self) -> AuditActorSnapshot {
+        self.0.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+}
+
+/// Claims / ApiKeyAuthContext からアクター情報を抽出する（ソース非依存）。
+fn extract_actor_info_from(
+    claims: Option<&Claims>,
+    api_ctx: Option<&ApiKeyAuthContext>,
+) -> (ActorType, Option<String>, Option<String>, Option<String>) {
     // JWT認証済み（Claims）
-    if let Some(claims) = extensions.get::<Claims>() {
+    if let Some(claims) = claims {
         // APIキー認証の場合はApiKeyAuthContextも存在する
-        if let Some(api_ctx) = extensions.get::<ApiKeyAuthContext>() {
+        if let Some(api_ctx) = api_ctx {
             return (
                 ActorType::ApiKey,
                 Some(api_ctx.id.to_string()),
@@ -163,7 +212,7 @@ fn extract_actor_info(
     }
 
     // APIキー認証のみ（Claimsなし）
-    if let Some(api_ctx) = extensions.get::<ApiKeyAuthContext>() {
+    if let Some(api_ctx) = api_ctx {
         return (
             ActorType::ApiKey,
             Some(api_ctx.id.to_string()),
@@ -174,6 +223,17 @@ fn extract_actor_info(
 
     // 認証なし
     (ActorType::Anonymous, None, None, None)
+}
+
+/// response extensions からアクター情報を抽出する（fallback / テスト互換）。
+fn extract_actor_info(
+    response: &Response,
+) -> (ActorType, Option<String>, Option<String>, Option<String>) {
+    let extensions = response.extensions();
+    extract_actor_info_from(
+        extensions.get::<Claims>(),
+        extensions.get::<ApiKeyAuthContext>(),
+    )
 }
 
 #[cfg(test)]
