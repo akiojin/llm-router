@@ -35,23 +35,10 @@ fn build_supported_apis(
 
     let mut set: HashSet<SupportedAPI> = HashSet::new();
     if let Some(m) = model {
+        // arch-review [M13]: ModelCapability→SupportedAPI の対応表は
+        // ModelCapability::supported_apis() へ集約済み（型付き変換）。
         for cap in m.get_capabilities() {
-            match cap {
-                ModelCapability::TextGeneration => {
-                    set.insert(SupportedAPI::ChatCompletions);
-                    set.insert(SupportedAPI::Responses);
-                }
-                ModelCapability::Embedding => {
-                    set.insert(SupportedAPI::Embeddings);
-                }
-                ModelCapability::ImageInput => {
-                    set.insert(SupportedAPI::ImageInput);
-                }
-                ModelCapability::ImageGeneration => {
-                    set.insert(SupportedAPI::ImageGeneration);
-                }
-                _ => {}
-            }
+            set.extend(cap.supported_apis());
         }
     }
     if let Some(reported) = endpoint_reported {

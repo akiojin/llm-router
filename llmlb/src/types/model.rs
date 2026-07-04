@@ -227,9 +227,30 @@ impl ModelCapability {
             ModelType::ImageGeneration => vec![Self::ImageGeneration],
         }
     }
+
+    /// この capability が対応する endpoint 層の [`crate::types::endpoint::SupportedAPI`] を返す。
+    ///
+    /// arch-review [M13]: ModelCapability→SupportedAPI の対応表が呼び出し側に
+    /// インライン展開されていたため、型付き変換としてここへ集約する（自由文字列を
+    /// 経由しない直接変換）。音声系(TextToSpeech/SpeechToText)は SupportedAPI に
+    /// 対応する種別が無いため空を返す。
+    pub fn supported_apis(&self) -> Vec<crate::types::endpoint::SupportedAPI> {
+        use crate::types::endpoint::SupportedAPI;
+        match self {
+            Self::TextGeneration => vec![SupportedAPI::ChatCompletions, SupportedAPI::Responses],
+            Self::Embedding => vec![SupportedAPI::Embeddings],
+            Self::ImageInput => vec![SupportedAPI::ImageInput],
+            Self::ImageGeneration => vec![SupportedAPI::ImageGeneration],
+            Self::TextToSpeech | Self::SpeechToText => Vec::new(),
+        }
+    }
 }
 
 /// モデルの能力（Azure OpenAI 形式）
+///
+/// arch-review [M13]: 本 struct は Azure OpenAI 互換の boolean object 形式で、
+/// `/v1/models` レスポンス**専用のワイヤ表現**である。内部ロジックでは列挙型の
+/// [`ModelCapability`] を正準とし、本 struct への変換は表示直前に局所化する。
 ///
 /// Azure OpenAI API 互換の boolean object 形式で capabilities を表現。
 /// `/v1/models` レスポンスで使用。
