@@ -10,11 +10,11 @@ use uuid::Uuid;
 use crate::common::auth::{ApiKey, ApiKeyPermission, ApiKeyWithPlaintext, User, UserRole};
 use crate::common::error::LbError;
 use crate::common::protocol::RequestResponseRecord;
-use crate::registry::models::ModelInfo;
 use crate::types::endpoint::{
     DeviceInfo, Endpoint, EndpointHealthCheck, EndpointModel, EndpointStatus, EndpointType,
     ModelDownloadTask,
 };
+use crate::types::model::ModelInfo;
 
 use super::endpoint_daily_stats::{DailyStatEntry, ModelStatEntry};
 use super::endpoints::EndpointRequestTotals;

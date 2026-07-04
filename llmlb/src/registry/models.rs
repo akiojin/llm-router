@@ -2,149 +2,10 @@
 //!
 //! LLM runtimeモデルのメタデータ管理
 
-use crate::types::ModelCapability;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-/// モデルのソース種別
-#[derive(Default)]
-pub enum ModelSource {
-    /// 事前定義モデル
-    #[default]
-    Predefined,
-    /// HFのGGUFモデル
-    HfGguf,
-    /// HFのsafetensorsモデル
-    HfSafetensors,
-    /// HFのONNXモデル（Whisper等）
-    HfOnnx,
-}
-
-/// LLM runtimeモデル情報
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ModelInfo {
-    /// モデル名（例: "gpt-oss-20b", "llama3.2"）
-    pub name: String,
-    /// モデルサイズ（バイト）
-    pub size: u64,
-    /// モデルの説明
-    pub description: String,
-    /// 必要なGPUメモリ（バイト）
-    pub required_memory: u64,
-    /// タグ（例: ["tools", "thinking"]）
-    pub tags: Vec<String>,
-    /// モデルの能力（対応するAPI）
-    /// 未設定の場合はModelType::Llm（テキスト生成）として扱う
-    #[serde(default)]
-    pub capabilities: Vec<ModelCapability>,
-    /// ソース種別
-    #[serde(default)]
-    pub source: ModelSource,
-    /// 外部から提供されるchat_template（GGUFに含まれない場合の補助）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub chat_template: Option<String>,
-    /// HFリポジトリ名
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub repo: Option<String>,
-    /// HFファイル名
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filename: Option<String>,
-    /// 最終更新
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_modified: Option<DateTime<Utc>>,
-    /// ステータス（available/registered等）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-}
-
-impl ModelInfo {
-    /// 新しいModelInfoを作成
-    ///
-    /// capabilities が空の場合は、デフォルトで TextGeneration を設定
-    pub fn new(
-        name: String,
-        size: u64,
-        description: String,
-        required_memory: u64,
-        tags: Vec<String>,
-    ) -> Self {
-        Self {
-            name,
-            size,
-            description,
-            required_memory,
-            tags,
-            // デフォルトは TextGeneration（LLMモデル）
-            capabilities: vec![ModelCapability::TextGeneration],
-            source: ModelSource::Predefined,
-            chat_template: None,
-            repo: None,
-            filename: None,
-            last_modified: None,
-            status: None,
-        }
-    }
-
-    /// 指定した capabilities で新しい ModelInfo を作成
-    pub fn with_capabilities(
-        name: String,
-        size: u64,
-        description: String,
-        required_memory: u64,
-        tags: Vec<String>,
-        capabilities: Vec<ModelCapability>,
-    ) -> Self {
-        Self {
-            name,
-            size,
-            description,
-            required_memory,
-            tags,
-            capabilities,
-            source: ModelSource::Predefined,
-            chat_template: None,
-            repo: None,
-            filename: None,
-            last_modified: None,
-            status: None,
-        }
-    }
-
-    /// 必要メモリをMB単位で取得
-    pub fn required_memory_mb(&self) -> u64 {
-        self.required_memory / (1024 * 1024)
-    }
-
-    /// 必要メモリをGB単位で取得
-    pub fn required_memory_gb(&self) -> f64 {
-        self.required_memory as f64 / (1024.0 * 1024.0 * 1024.0)
-    }
-
-    /// モデルが指定した capability をサポートしているか確認
-    ///
-    /// capabilities が空の場合は TextGeneration をサポートしているとみなす（後方互換性）
-    pub fn has_capability(&self, capability: ModelCapability) -> bool {
-        if self.capabilities.is_empty() {
-            // 後方互換性: capabilities 未設定のモデルは TextGeneration のみサポート
-            capability == ModelCapability::TextGeneration
-        } else {
-            self.capabilities.contains(&capability)
-        }
-    }
-
-    /// モデルの capabilities を取得
-    ///
-    /// capabilities が空の場合は TextGeneration のみを返す（後方互換性）
-    pub fn get_capabilities(&self) -> Vec<ModelCapability> {
-        if self.capabilities.is_empty() {
-            vec![ModelCapability::TextGeneration]
-        } else {
-            self.capabilities.clone()
-        }
-    }
-}
+// ModelInfo / ModelSource は中核ドメイン型として types/model.rs へ移設した
+// （db → registry の逆依存/循環を避けるため）。既存の
+// `crate::registry::models::{ModelInfo, ModelSource}` 参照との後方互換のため re-export する。
+pub use crate::types::model::{ModelInfo, ModelSource};
 
 /// HuggingFace URLからrepo_idを抽出
 ///
@@ -237,6 +98,7 @@ pub fn generate_model_id(repo: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ModelCapability;
 
     // ===== モデルID生成テスト（階層形式） =====
 

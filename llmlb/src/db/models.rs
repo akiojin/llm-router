@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
-use crate::registry::models::{ModelInfo, ModelSource};
+use crate::types::model::{ModelInfo, ModelSource};
 
 /// SQLiteベースのモデルストレージ
 #[derive(Clone)]
