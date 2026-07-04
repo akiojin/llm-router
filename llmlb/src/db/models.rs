@@ -4,6 +4,7 @@ use crate::common::error::{LbError, RouterResult};
 use crate::types::ModelCapability;
 use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 
 use crate::registry::models::{ModelInfo, ModelSource};
 
@@ -157,11 +158,18 @@ impl ModelStorage {
             .await
             .map_err(|e| LbError::Database(format!("Failed to load models: {}", e)))?;
 
+        // N+1 回避: 従来は各モデルごとに tags/capabilities を個別クエリ（1 + 2N クエリ）
+        // していたが、全 tags/capabilities を1クエリずつ一括取得して model_name で
+        // グルーピングする（合計3クエリ）。row.name は models の主キーで一意なため
+        // remove で所有権を移してクローンを避ける。
+        let mut tags_by_model = self.load_all_tags().await?;
+        let mut capabilities_by_model = self.load_all_capabilities().await?;
+
         let mut models = Vec::with_capacity(rows.len());
 
         for row in rows {
-            let tags = self.load_tags(&row.name).await?;
-            let capabilities = self.load_capabilities(&row.name).await?;
+            let tags = tags_by_model.remove(&row.name).unwrap_or_default();
+            let capabilities = capabilities_by_model.remove(&row.name).unwrap_or_default();
 
             let source = match row.source.as_str() {
                 "hf_gguf" => ModelSource::HfGguf,
@@ -276,18 +284,41 @@ impl ModelStorage {
 
         let capabilities: Vec<ModelCapability> = rows
             .into_iter()
-            .filter_map(|(cap_str,)| match cap_str.as_str() {
-                "TextGeneration" => Some(ModelCapability::TextGeneration),
-                "TextToSpeech" => Some(ModelCapability::TextToSpeech),
-                "SpeechToText" => Some(ModelCapability::SpeechToText),
-                "ImageGeneration" => Some(ModelCapability::ImageGeneration),
-                "ImageInput" => Some(ModelCapability::ImageInput),
-                "Embedding" => Some(ModelCapability::Embedding),
-                _ => None,
-            })
+            .filter_map(|(cap_str,)| parse_capability(&cap_str))
             .collect();
 
         Ok(capabilities)
+    }
+
+    /// 全モデルのタグを1クエリで一括取得し model_name でグルーピング（N+1回避）
+    async fn load_all_tags(&self) -> RouterResult<HashMap<String, Vec<String>>> {
+        let rows: Vec<(String, String)> = sqlx::query_as("SELECT model_name, tag FROM model_tags")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LbError::Database(format!("Failed to load tags: {}", e)))?;
+
+        let mut map: HashMap<String, Vec<String>> = HashMap::new();
+        for (model_name, tag) in rows {
+            map.entry(model_name).or_default().push(tag);
+        }
+        Ok(map)
+    }
+
+    /// 全モデルの能力を1クエリで一括取得し model_name でグルーピング（N+1回避）
+    async fn load_all_capabilities(&self) -> RouterResult<HashMap<String, Vec<ModelCapability>>> {
+        let rows: Vec<(String, String)> =
+            sqlx::query_as("SELECT model_name, capability FROM model_capabilities")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| LbError::Database(format!("Failed to load capabilities: {}", e)))?;
+
+        let mut map: HashMap<String, Vec<ModelCapability>> = HashMap::new();
+        for (model_name, cap_str) in rows {
+            if let Some(cap) = parse_capability(&cap_str) {
+                map.entry(model_name).or_default().push(cap);
+            }
+        }
+        Ok(map)
     }
 
     /// 複数モデルを一括保存
@@ -296,6 +327,20 @@ impl ModelStorage {
             self.save_model(model).await?;
         }
         Ok(())
+    }
+}
+
+/// DB に保存された capability 文字列を `ModelCapability` に変換する。
+/// 未知の文字列は `None`（load_capabilities / load_all_capabilities で共有）。
+fn parse_capability(cap_str: &str) -> Option<ModelCapability> {
+    match cap_str {
+        "TextGeneration" => Some(ModelCapability::TextGeneration),
+        "TextToSpeech" => Some(ModelCapability::TextToSpeech),
+        "SpeechToText" => Some(ModelCapability::SpeechToText),
+        "ImageGeneration" => Some(ModelCapability::ImageGeneration),
+        "ImageInput" => Some(ModelCapability::ImageInput),
+        "Embedding" => Some(ModelCapability::Embedding),
+        _ => None,
     }
 }
 
@@ -364,6 +409,72 @@ mod tests {
 
         let models = storage.load_models().await.unwrap();
         assert_eq!(models.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_load_models_groups_tags_and_capabilities_per_model() {
+        // N+1 一括取得版で tags/capabilities がモデル間で混線しないことを固定する
+        let pool = create_test_pool().await;
+        let storage = ModelStorage::new(pool);
+
+        let mut model1 = ModelInfo::new(
+            "m1".to_string(),
+            1000,
+            "M1".to_string(),
+            2000,
+            vec!["a".to_string(), "b".to_string()],
+        );
+        model1.capabilities = vec![ModelCapability::TextGeneration, ModelCapability::Embedding];
+
+        let mut model2 = ModelInfo::new(
+            "m2".to_string(),
+            2000,
+            "M2".to_string(),
+            4000,
+            vec!["c".to_string()],
+        );
+        model2.capabilities = vec![ModelCapability::ImageInput];
+
+        // タグも能力も持たないモデル
+        let mut model3 = ModelInfo::new("m3".to_string(), 3000, "M3".to_string(), 6000, vec![]);
+        model3.capabilities = vec![];
+
+        storage.save_model(&model1).await.unwrap();
+        storage.save_model(&model2).await.unwrap();
+        storage.save_model(&model3).await.unwrap();
+
+        let models = storage.load_models().await.unwrap();
+        assert_eq!(models.len(), 3);
+
+        let sorted = |mut v: Vec<String>| {
+            v.sort();
+            v
+        };
+        let get = |name: &str| models.iter().find(|m| m.name == name).unwrap().clone();
+
+        let cap_set = |caps: &[ModelCapability]| {
+            caps.iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+        };
+
+        let m1 = get("m1");
+        assert_eq!(
+            sorted(m1.tags.clone()),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert_eq!(
+            cap_set(&m1.capabilities),
+            cap_set(&[ModelCapability::TextGeneration, ModelCapability::Embedding])
+        );
+
+        let m2 = get("m2");
+        assert_eq!(m2.tags, vec!["c".to_string()]);
+        assert_eq!(m2.capabilities, vec![ModelCapability::ImageInput]);
+
+        let m3 = get("m3");
+        assert!(m3.tags.is_empty());
+        assert!(m3.capabilities.is_empty());
     }
 
     #[tokio::test]
