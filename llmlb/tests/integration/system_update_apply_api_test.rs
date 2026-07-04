@@ -25,6 +25,7 @@ fn admin_jwt(secret: &str) -> String {
         secret,
         false,
         0,
+        None,
     )
     .expect("create admin jwt")
 }

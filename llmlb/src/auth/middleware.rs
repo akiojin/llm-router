@@ -758,6 +758,8 @@ pub async fn jwt_or_api_key_permission_middleware(
         exp,
         must_change_password: false,
         password_changed_at: 0,
+        // API キー actor はユーザー名を持たない。
+        username: None,
     };
     let claims_for_response = claims.clone();
     let auth_context_for_response = auth_context.clone();
@@ -1028,6 +1030,7 @@ mod tests {
             "secret",
             false,
             0,
+            None,
         )
         .unwrap();
         assert!(token_looks_like_jwt(&token));
@@ -1057,6 +1060,7 @@ mod tests {
             "secret",
             false,
             0,
+            None,
         )
         .unwrap();
         let mut headers = HeaderMap::new();
@@ -1081,9 +1085,15 @@ mod tests {
 
     #[test]
     fn extract_jwt_from_headers_falls_back_to_cookie() {
-        let token =
-            crate::auth::jwt::create_jwt("u", crate::common::auth::UserRole::Viewer, "s", false, 0)
-                .unwrap();
+        let token = crate::auth::jwt::create_jwt(
+            "u",
+            crate::common::auth::UserRole::Viewer,
+            "s",
+            false,
+            0,
+            None,
+        )
+        .unwrap();
         let mut headers = HeaderMap::new();
         headers.insert(
             header::COOKIE,

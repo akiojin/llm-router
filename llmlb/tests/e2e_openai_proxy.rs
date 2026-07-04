@@ -195,6 +195,7 @@ async fn openai_proxy_end_to_end_updates_dashboard_history() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create jwt");
 

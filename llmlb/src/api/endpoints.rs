@@ -1594,6 +1594,7 @@ mod tests {
             exp: 0,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
 
         let response = update_endpoint(
@@ -2135,6 +2136,7 @@ mod tests {
             exp: 0,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         assert!(ensure_admin(&claims).is_ok());
     }
@@ -2147,6 +2149,7 @@ mod tests {
             exp: 0,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         assert!(ensure_admin(&claims).is_err());
     }

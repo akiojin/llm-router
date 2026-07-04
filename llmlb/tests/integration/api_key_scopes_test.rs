@@ -102,6 +102,7 @@ async fn jwt_identity_preserved_for_me_api_keys() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create jwt");
     let key_name = format!("me-key-{}", uuid::Uuid::new_v4());
@@ -145,6 +146,7 @@ async fn invalid_jwt_rejected_for_me_api_keys() {
         "wrong-secret",
         false,
         0,
+        None,
     )
     .expect("create jwt with wrong secret");
 
@@ -336,6 +338,7 @@ async fn dashboard_overview_requires_jwt() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create jwt");
 
@@ -467,6 +470,7 @@ async fn me_api_keys_routes_require_jwt_and_owner_scope() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create admin jwt");
     let viewer_jwt = llmlb::auth::jwt::create_jwt(
@@ -475,6 +479,7 @@ async fn me_api_keys_routes_require_jwt_and_owner_scope() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create viewer jwt");
 
@@ -614,6 +619,7 @@ async fn me_api_keys_create_enforces_role_based_permissions_payload() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create admin jwt");
     let viewer_jwt = llmlb::auth::jwt::create_jwt(
@@ -622,6 +628,7 @@ async fn me_api_keys_create_enforces_role_based_permissions_payload() {
         &support::lb::test_jwt_secret(),
         false,
         0,
+        None,
     )
     .expect("create viewer jwt");
 

@@ -758,6 +758,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         assert!(check_admin(&claims).is_ok());
     }
@@ -771,6 +772,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         assert!(check_admin(&claims).is_err());
     }
@@ -819,6 +821,7 @@ mod tests {
             &state.jwt_secret,
             false,
             0,
+            None,
         )
         .expect("create viewer jwt");
         let mut app = create_app(state);
@@ -912,6 +915,7 @@ mod tests {
             &state.jwt_secret,
             false,
             0,
+            None,
         )
         .expect("create admin jwt");
         let mut app = create_app(state);

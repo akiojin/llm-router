@@ -206,7 +206,8 @@ fn extract_actor_info_from(
         return (
             ActorType::User,
             Some(claims.sub.clone()),
-            None, // ユーザー名はDBルックアップが必要（将来拡張）
+            // arch-review [L8]: JWT に載せたユーザー名を actor_username として使用する。
+            claims.username.clone(),
             None,
         );
     }
@@ -625,6 +626,7 @@ mod tests {
             &jwt_secret,
             false,
             0,
+            None,
         )
         .expect("create jwt");
 
@@ -937,6 +939,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         });
         let (actor_type, actor_id, _actor_username, api_key_owner_id) =
             extract_actor_info(&response);
@@ -974,6 +977,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         });
         response.extensions_mut().insert(ApiKeyAuthContext {
             id: key_id,

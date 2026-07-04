@@ -109,6 +109,7 @@ pub async fn login(
             &app_state.jwt_secret,
             false,
             0,
+            Some(&request.username),
         )
         .map_err(|e| {
             tracing::error!("Failed to create JWT: {}", e);
@@ -201,6 +202,7 @@ pub async fn login(
         &app_state.jwt_secret,
         user.must_change_password,
         user.password_changed_at,
+        Some(&user.username),
     )
     .map_err(|e| {
         tracing::error!("Failed to create JWT: {}", e);
@@ -538,6 +540,7 @@ pub async fn change_password(
         &app_state.jwt_secret,
         false,
         updated_user.password_changed_at,
+        claims.username.as_deref(),
     )
     .map_err(|e| {
         tracing::error!("Failed to create JWT: {}", e);

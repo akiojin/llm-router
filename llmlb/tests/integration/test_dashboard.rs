@@ -82,7 +82,7 @@ fn ws_request_with_token(
 ) -> tokio_tungstenite::tungstenite::http::Request<()> {
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     let token =
-        create_jwt("test-admin", UserRole::Admin, secret, false, 0).expect("create test jwt");
+        create_jwt("test-admin", UserRole::Admin, secret, false, 0, None).expect("create test jwt");
     let mut request = format!("ws://{}/ws/dashboard", addr)
         .into_client_request()
         .expect("build ws client request");

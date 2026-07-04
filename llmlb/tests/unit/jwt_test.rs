@@ -15,7 +15,8 @@ mod jwt_tests {
         let role = UserRole::Admin;
 
         // When: JWTトークンを生成
-        let token = create_jwt(user_id, role, TEST_SECRET, false, 0).expect("Failed to create JWT");
+        let token =
+            create_jwt(user_id, role, TEST_SECRET, false, 0, None).expect("Failed to create JWT");
 
         // Then: JWT形式（3つのピリオド区切り部分）
         let parts: Vec<&str> = token.split('.').collect();
@@ -27,7 +28,8 @@ mod jwt_tests {
         // Given: 生成されたJWTトークン
         let user_id = "user-456";
         let role = UserRole::Viewer;
-        let token = create_jwt(user_id, role, TEST_SECRET, false, 0).expect("Failed to create JWT");
+        let token =
+            create_jwt(user_id, role, TEST_SECRET, false, 0, None).expect("Failed to create JWT");
 
         // When: トークンを検証
         let claims = verify_jwt(&token, TEST_SECRET).expect("Failed to verify JWT");
@@ -42,7 +44,8 @@ mod jwt_tests {
         // Given: 異なるシークレットで生成されたトークン
         let user_id = "user-789";
         let role = UserRole::Admin;
-        let token = create_jwt(user_id, role, TEST_SECRET, false, 0).expect("Failed to create JWT");
+        let token =
+            create_jwt(user_id, role, TEST_SECRET, false, 0, None).expect("Failed to create JWT");
 
         // When: 間違ったシークレットで検証
         let result = verify_jwt(&token, "wrong_secret_key");
@@ -68,7 +71,8 @@ mod jwt_tests {
         // Given: 有効期限内のトークン（24時間）
         let user_id = "user-exp-1";
         let role = UserRole::Admin;
-        let token = create_jwt(user_id, role, TEST_SECRET, false, 0).expect("Failed to create JWT");
+        let token =
+            create_jwt(user_id, role, TEST_SECRET, false, 0, None).expect("Failed to create JWT");
 
         // When: 即座に検証
         let claims = verify_jwt(&token, TEST_SECRET).expect("Failed to verify JWT");
@@ -90,6 +94,7 @@ mod jwt_tests {
             exp: expired_at,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         let token = encode(
             &Header::default(),
@@ -111,9 +116,9 @@ mod jwt_tests {
         let user_id = "user-roles";
 
         // When: AdminとViewerのトークンを生成
-        let admin_token = create_jwt(user_id, UserRole::Admin, TEST_SECRET, false, 0)
+        let admin_token = create_jwt(user_id, UserRole::Admin, TEST_SECRET, false, 0, None)
             .expect("Failed to create admin JWT");
-        let viewer_token = create_jwt(user_id, UserRole::Viewer, TEST_SECRET, false, 0)
+        let viewer_token = create_jwt(user_id, UserRole::Viewer, TEST_SECRET, false, 0, None)
             .expect("Failed to create viewer JWT");
 
         // Then: 両方とも有効だが、ロールが異なる

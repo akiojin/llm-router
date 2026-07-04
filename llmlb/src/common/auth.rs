@@ -171,6 +171,13 @@ pub struct Claims {
     /// DB の現在値より小さい場合、そのセッションは無効化されている（パスワード変更/リセット後）。
     #[serde(default)]
     pub password_changed_at: i64,
+    /// 表示用ユーザー名（監査ログの actor_username に使用）。
+    ///
+    /// arch-review [L8]: `sub` はユーザーIDのため、監査ログの actor_username が常に None
+    /// だった。認証時にユーザー名を JWT へ載せて actor context として伝搬する。
+    /// 旧トークン互換のため `serde(default)`。
+    #[serde(default)]
+    pub username: Option<String>,
 }
 
 #[cfg(test)]
@@ -267,6 +274,7 @@ mod tests {
             exp: 1_700_000_000,
             must_change_password: true,
             password_changed_at: 0,
+            username: None,
         };
         let json = serde_json::to_string(&claims).unwrap();
         let back: Claims = serde_json::from_str(&json).unwrap();
@@ -500,6 +508,7 @@ mod tests {
             exp: 0,
             must_change_password: true,
             password_changed_at: 0,
+            username: None,
         };
         assert!(claims.must_change_password);
         assert_eq!(claims.exp, 0);
@@ -513,6 +522,7 @@ mod tests {
             exp: usize::MAX,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         assert_eq!(claims.role, UserRole::Viewer);
     }

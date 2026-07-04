@@ -582,6 +582,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         let result = parse_user_id_from_claims(&claims);
         assert!(result.is_ok());
@@ -596,6 +597,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         let result = parse_user_id_from_claims(&claims);
         assert!(result.is_err());
@@ -609,6 +611,7 @@ mod tests {
             exp: 9999999999,
             must_change_password: false,
             password_changed_at: 0,
+            username: None,
         };
         let result = parse_user_id_from_claims(&claims);
         assert!(result.is_err());
