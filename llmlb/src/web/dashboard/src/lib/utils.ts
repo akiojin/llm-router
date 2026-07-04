@@ -88,17 +88,6 @@ export function isAbortError(error: unknown): boolean {
   return (error as { name?: unknown }).name === 'AbortError'
 }
 
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout>
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => fn(...args), delay)
-  }
-}
-
 export type ClipboardCopyMethod = 'exec-command' | 'clipboard' | 'manual'
 
 export interface ClipboardCopyResult {
