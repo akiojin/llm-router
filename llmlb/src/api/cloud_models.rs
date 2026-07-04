@@ -330,6 +330,40 @@ pub async fn fetch_all_cloud_models(client: &reqwest::Client) -> Vec<CloudModelI
 // ============================================================================
 
 /// キャッシュからモデル一覧を取得（必要に応じて更新）
+/// クラウドモデルのキャッシュ更新方針（純粋・テスト可能）。
+struct CloudModelsUpdate {
+    /// 呼び出し元へ返すモデル一覧。
+    returned: Vec<CloudModelInfo>,
+    /// `Some` ならキャッシュへ保存するモデル一覧、`None` なら保存せず旧キャッシュを維持（stale）。
+    to_store: Option<Vec<CloudModelInfo>>,
+}
+
+/// 取得結果と旧キャッシュから、返却値と保存値を決める。
+///
+/// - 取得成功（非空）: fetched を保存し返す。
+/// - 取得失敗（空）で旧キャッシュあり: 旧モデルを返し保存しない（stale フォールバック）。
+/// - 取得失敗（空）で旧キャッシュなし: 空を保存し返す。
+fn resolve_cloud_models_update(
+    old_models: Option<Vec<CloudModelInfo>>,
+    fetched: Vec<CloudModelInfo>,
+) -> CloudModelsUpdate {
+    if fetched.is_empty() {
+        if let Some(old) = old_models {
+            return CloudModelsUpdate {
+                returned: old,
+                to_store: None,
+            };
+        }
+    }
+    CloudModelsUpdate {
+        returned: fetched.clone(),
+        to_store: Some(fetched),
+    }
+}
+
+/// キャッシュ済みのクラウドモデル一覧を返す（TTL 内はキャッシュ、失効時は再取得）。
+///
+/// 再取得に失敗した場合は旧キャッシュへフォールバックする（`resolve_cloud_models_update`）。
 pub async fn get_cached_models(client: &reqwest::Client) -> Vec<CloudModelInfo> {
     let cache = get_cache();
 
@@ -346,20 +380,15 @@ pub async fn get_cached_models(client: &reqwest::Client) -> Vec<CloudModelInfo> 
     // キャッシュ更新
     let models = fetch_all_cloud_models(client).await;
 
-    // 新しいキャッシュを保存（取得失敗時も空リストで更新）
-    // ただし、取得失敗時かつ古いキャッシュがある場合はフォールバック
-    {
-        let mut guard = cache.write().await;
-        if models.is_empty() {
-            if let Some(ref old_cache) = *guard {
-                tracing::info!("Cloud models fetch failed, using stale cache");
-                return old_cache.models.clone();
-            }
-        }
-        *guard = Some(CloudModelsCache::new(models.clone()));
+    // 「返す値」と「保存する値」を純粋関数で決める（取得失敗時の stale フォールバックを含む）。
+    let mut guard = cache.write().await;
+    let old_models = guard.as_ref().map(|c| c.models.clone());
+    let update = resolve_cloud_models_update(old_models, models);
+    match update.to_store {
+        Some(to_store) => *guard = Some(CloudModelsCache::new(to_store)),
+        None => tracing::info!("Cloud models fetch failed, using stale cache"),
     }
-
-    models
+    update.returned
 }
 
 #[cfg(test)]
@@ -688,5 +717,48 @@ mod tests {
         let models = parse_openai_models(&response);
         // parse_openai_models normalizes owned_by to "openai"
         assert_eq!(models[0].owned_by, "openai");
+    }
+
+    // --- resolve_cloud_models_update tests (arch-review [M12]) ---
+
+    fn sample_cloud_model(id: &str) -> super::CloudModelInfo {
+        super::CloudModelInfo {
+            id: id.to_string(),
+            object: "model".to_string(),
+            created: 0,
+            owned_by: "openai".to_string(),
+        }
+    }
+
+    #[test]
+    fn resolve_cloud_models_update_stores_fetched_on_success() {
+        let fetched = vec![sample_cloud_model("openai:gpt-4o")];
+        let update = super::resolve_cloud_models_update(None, fetched);
+        assert_eq!(update.returned.len(), 1);
+        assert_eq!(update.returned[0].id, "openai:gpt-4o");
+        let stored = update.to_store.expect("成功時は保存する");
+        assert_eq!(stored[0].id, "openai:gpt-4o");
+    }
+
+    #[test]
+    fn resolve_cloud_models_update_falls_back_to_stale_on_empty_fetch() {
+        let old = vec![sample_cloud_model("openai:gpt-4o")];
+        let update = super::resolve_cloud_models_update(Some(old), vec![]);
+        assert_eq!(update.returned.len(), 1, "空取得時は旧キャッシュを返す");
+        assert_eq!(update.returned[0].id, "openai:gpt-4o");
+        assert!(
+            update.to_store.is_none(),
+            "stale フォールバック時は保存しない"
+        );
+    }
+
+    #[test]
+    fn resolve_cloud_models_update_stores_empty_when_no_old_cache() {
+        let update = super::resolve_cloud_models_update(None, vec![]);
+        assert!(update.returned.is_empty());
+        assert!(
+            update.to_store.map(|m| m.is_empty()).unwrap_or(false),
+            "旧キャッシュ無しなら空を保存する"
+        );
     }
 }
