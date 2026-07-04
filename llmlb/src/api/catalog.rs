@@ -194,8 +194,14 @@ fn get_search_cache() -> &'static Arc<RwLock<Vec<CacheEntry>>> {
 // ---------------------------------------------------------------------------
 
 /// HuggingFace APIのベースURLを取得
+///
+/// 末尾スラッシュを除去する（`HF_BASE_URL=http://host:1234/` 設定時に
+/// `//api/models` の二重スラッシュを生まないため。api/models.rs の hf_base_url と挙動を揃える）。
 fn hf_base_url() -> String {
-    std::env::var("HF_BASE_URL").unwrap_or_else(|_| DEFAULT_HF_BASE_URL.to_string())
+    std::env::var("HF_BASE_URL")
+        .unwrap_or_else(|_| DEFAULT_HF_BASE_URL.to_string())
+        .trim_end_matches('/')
+        .to_string()
 }
 
 /// HuggingFace APIのAuthorizationヘッダー値を取得
