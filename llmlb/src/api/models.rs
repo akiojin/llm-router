@@ -125,6 +125,17 @@ static HF_INFO_CACHE: Lazy<RwLock<HashMap<String, HfInfoCacheEntry>>> =
 
 const HF_INFO_CACHE_TTL: Duration = Duration::from_secs(600); // 10分
 
+/// HF情報キャッシュを明示的にクリアする（テスト分離・強制無効化フック）。
+///
+/// arch-review [L1]: モジュールグローバル static のためテスト間で状態が漏れ、
+/// キャッシュ分岐の検証が困難だった。クリアフックを提供して分離可能にする。
+#[cfg(test)]
+pub(crate) fn invalidate_hf_info_cache() {
+    if let Ok(mut cache) = HF_INFO_CACHE.write() {
+        cache.clear();
+    }
+}
+
 /// HuggingFace APIからモデル情報を取得（キャッシュ付き）
 async fn fetch_hf_info(http_client: &reqwest::Client, repo: &str) -> Option<HfInfo> {
     // キャッシュチェック（ロックポイズニング時はスキップ）
@@ -1298,6 +1309,22 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::net::TcpListener;
+
+    #[test]
+    #[serial]
+    fn hf_info_cache_invalidation_clears_entries() {
+        // arch-review [L1]: クリアフックがキャッシュを確実に空にすることを検証。
+        HF_INFO_CACHE.write().unwrap().insert(
+            "owner/repo".to_string(),
+            HfInfoCacheEntry {
+                fetched_at: Instant::now(),
+                info: HfInfo::default(),
+            },
+        );
+        assert!(HF_INFO_CACHE.read().unwrap().contains_key("owner/repo"));
+        invalidate_hf_info_cache();
+        assert!(HF_INFO_CACHE.read().unwrap().is_empty());
+    }
 
     #[test]
     fn test_validate_model_name_valid() {

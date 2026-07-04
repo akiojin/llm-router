@@ -246,6 +246,17 @@ struct PersistedTotalsCache {
 static LAST_KNOWN_PERSISTED_TOTALS: LazyLock<RwLock<HashMap<u64, PersistedTotalsCache>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
+/// 永続化トータルのプロセスキャッシュを明示的にクリアする（テスト分離フック）。
+///
+/// arch-review [L3]: ハンドラ層のプロセスグローバル可変キャッシュが never reset で
+/// テスト間に状態が漏れていた。クリアフックを提供して分離可能にする。
+#[cfg(test)]
+pub(crate) fn invalidate_persisted_totals_cache() {
+    if let Ok(mut cache) = LAST_KNOWN_PERSISTED_TOTALS.write() {
+        cache.clear();
+    }
+}
+
 /// GET /api/dashboard/endpoints
 ///
 /// SPEC-e8e9326e: llmlb主導エンドポイント登録システム
@@ -1704,9 +1715,26 @@ pub async fn update_setting(
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_action_items, count_unique_model_ids, parse_ip_alert_threshold, DashboardOperations,
+        collect_action_items, count_unique_model_ids, invalidate_persisted_totals_cache,
+        parse_ip_alert_threshold, DashboardOperations, PersistedRequestTotals,
+        PersistedTokenTotals, PersistedTotalsCache, LAST_KNOWN_PERSISTED_TOTALS,
     };
     use crate::types::endpoint::{Endpoint, EndpointStatus, EndpointType};
+
+    #[test]
+    fn persisted_totals_cache_invalidation_clears_entries() {
+        // arch-review [L3]: クリアフックがプロセスキャッシュを確実に空にすることを検証。
+        LAST_KNOWN_PERSISTED_TOTALS.write().unwrap().insert(
+            1u64,
+            PersistedTotalsCache {
+                request_totals: PersistedRequestTotals::default(),
+                token_totals: PersistedTokenTotals::default(),
+            },
+        );
+        assert!(!LAST_KNOWN_PERSISTED_TOTALS.read().unwrap().is_empty());
+        invalidate_persisted_totals_cache();
+        assert!(LAST_KNOWN_PERSISTED_TOTALS.read().unwrap().is_empty());
+    }
 
     /// フォールバック計算: avg_response_time_ms が None の場合に
     /// オンラインエンドポイントの latency_ms から平均値を計算するロジック

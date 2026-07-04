@@ -189,6 +189,15 @@ fn get_search_cache() -> &'static Arc<RwLock<Vec<CacheEntry>>> {
     SEARCH_CACHE.get_or_init(|| Arc::new(RwLock::new(Vec::new())))
 }
 
+/// 検索キャッシュを明示的にクリアする（テスト分離・強制無効化フック）。
+///
+/// arch-review [L1]: モジュールグローバル static のためテスト間で状態が漏れていた。
+/// クリアフックを提供して分離可能にする。
+#[cfg(test)]
+pub(crate) async fn invalidate_search_cache() {
+    get_search_cache().write().await.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -486,6 +495,19 @@ pub async fn recommend_endpoints(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn search_cache_invalidation_clears_entries() {
+        // arch-review [L1]: クリアフックが検索キャッシュを確実に空にすることを検証。
+        get_search_cache().write().await.push(CacheEntry {
+            key: "query:10".to_string(),
+            response: SearchResponse { models: Vec::new() },
+            fetched_at: Utc::now(),
+        });
+        assert!(!get_search_cache().read().await.is_empty());
+        invalidate_search_cache().await;
+        assert!(get_search_cache().read().await.is_empty());
+    }
 
     #[test]
     fn test_build_engine_names_known_model() {
