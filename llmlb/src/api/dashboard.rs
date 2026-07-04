@@ -302,7 +302,7 @@ pub async fn get_node_metrics(
 /// NOTE: request_history廃止完了まで request_history を集計元として扱う
 pub async fn get_token_stats(
     State(state): State<AppState>,
-) -> Result<Json<crate::db::request_history::TokenStatistics>, AppError> {
+) -> Result<Json<crate::db::request_history::HistoryTokenStatistics>, AppError> {
     let stats = state
         .request_history
         .get_token_statistics()

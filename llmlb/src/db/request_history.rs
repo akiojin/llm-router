@@ -462,7 +462,7 @@ impl RequestHistoryStorage {
     }
 
     /// トークン統計を取得（全体）
-    pub async fn get_token_statistics(&self) -> RouterResult<TokenStatistics> {
+    pub async fn get_token_statistics(&self) -> RouterResult<HistoryTokenStatistics> {
         let row = sqlx::query_as::<_, TokenStatisticsRow>(
             r#"
             SELECT
@@ -484,7 +484,7 @@ impl RequestHistoryStorage {
         .await
         .map_err(|e| LbError::Database(format!("Failed to get token statistics: {}", e)))?;
 
-        Ok(TokenStatistics {
+        Ok(HistoryTokenStatistics {
             total_input_tokens: row.total_input_tokens as u64,
             total_output_tokens: row.total_output_tokens as u64,
             total_tokens: row.total_tokens as u64,
@@ -492,7 +492,9 @@ impl RequestHistoryStorage {
     }
 
     /// トークン統計を取得（モデル別）
-    pub async fn get_token_statistics_by_model(&self) -> RouterResult<Vec<ModelTokenStatistics>> {
+    pub async fn get_token_statistics_by_model(
+        &self,
+    ) -> RouterResult<Vec<HistoryModelTokenStatistics>> {
         let rows = sqlx::query_as::<_, ModelTokenStatisticsRow>(
             r#"
             SELECT
@@ -522,7 +524,7 @@ impl RequestHistoryStorage {
 
         Ok(rows
             .into_iter()
-            .map(|row| ModelTokenStatistics {
+            .map(|row| HistoryModelTokenStatistics {
                 model: row.model,
                 total_input_tokens: row.total_input_tokens as u64,
                 total_output_tokens: row.total_output_tokens as u64,
@@ -949,7 +951,7 @@ pub struct FilteredRecords {
 
 /// トークン統計（全体）
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TokenStatistics {
+pub struct HistoryTokenStatistics {
     /// 入力トークン合計
     pub total_input_tokens: u64,
     /// 出力トークン合計
@@ -960,7 +962,7 @@ pub struct TokenStatistics {
 
 /// トークン統計（モデル別）
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ModelTokenStatistics {
+pub struct HistoryModelTokenStatistics {
     /// モデル名
     pub model: String,
     /// 入力トークン合計
@@ -1948,12 +1950,12 @@ mod tests {
     }
 
     // =====================================================================
-    // 追加テスト: TokenStatistics serialize
+    // 追加テスト: HistoryTokenStatistics serialize
     // =====================================================================
 
     #[test]
     fn test_token_statistics_serialize() {
-        let stats = TokenStatistics {
+        let stats = HistoryTokenStatistics {
             total_input_tokens: 100,
             total_output_tokens: 50,
             total_tokens: 150,
@@ -1965,12 +1967,12 @@ mod tests {
     }
 
     // =====================================================================
-    // 追加テスト: ModelTokenStatistics serialize
+    // 追加テスト: HistoryModelTokenStatistics serialize
     // =====================================================================
 
     #[test]
     fn test_model_token_statistics_serialize() {
-        let stats = ModelTokenStatistics {
+        let stats = HistoryModelTokenStatistics {
             model: "gpt-4".to_string(),
             total_input_tokens: 200,
             total_output_tokens: 100,
