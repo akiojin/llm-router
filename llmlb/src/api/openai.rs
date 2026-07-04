@@ -871,12 +871,7 @@ async fn proxy_openai_post(
     };
 
     // Check if any endpoint has this model
-    if state
-        .endpoint_registry
-        .find_by_model(&resolved_model)
-        .await
-        .is_empty()
-    {
+    if !state.endpoint_registry.has_model(&resolved_model).await {
         let is_registered = load_registered_model(&state.db_pool, &resolved_model).await?;
         if is_registered.is_none() {
             let message = format!("The model '{}' does not exist", model);

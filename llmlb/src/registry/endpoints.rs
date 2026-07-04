@@ -234,6 +234,29 @@ impl EndpointRegistry {
         resolved
     }
 
+    /// モデルIDに対応するオンラインエンドポイントが存在するか確認
+    ///
+    /// `!find_by_model(model_id).is_empty()` と等価だが、該当エンドポイントを
+    /// clone せず最初のオンライン一致で早期 return するため存在確認に適する。
+    pub async fn has_model(&self, model_id: &str) -> bool {
+        let model_map = self.model_to_endpoints.read().await;
+        let endpoints = self.endpoints.read().await;
+
+        for lookup_key in model_lookup_keys(model_id) {
+            if let Some(ids) = model_map.get(&lookup_key) {
+                for id in ids {
+                    if let Some(endpoint) = endpoints.get(id) {
+                        if endpoint.status == EndpointStatus::Online {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
     /// モデルIDと対応APIからオンラインエンドポイントを検索
     pub async fn find_by_model_and_supported_api(
         &self,
@@ -746,6 +769,58 @@ mod tests {
         // 存在しないモデル
         let not_found = registry.find_by_model("nonexistent").await;
         assert!(not_found.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_has_model_matches_find_by_model() {
+        let _lock = TEST_LOCK.lock().await;
+        let pool = setup_test_db().await;
+        let registry = EndpointRegistry::new(pool).await.unwrap();
+
+        let mut endpoint = Endpoint::new(
+            "Test".to_string(),
+            "http://localhost:11434".to_string(),
+            EndpointType::Xllm,
+        );
+        endpoint.status = EndpointStatus::Online;
+        let endpoint_id = endpoint.id;
+        registry.add(endpoint).await.unwrap();
+
+        let model = EndpointModel {
+            endpoint_id,
+            model_id: "llama3:8b".to_string(),
+            capabilities: Some(vec!["chat".to_string()]),
+            max_tokens: None,
+            last_checked: Some(chrono::Utc::now()),
+            supported_apis: vec![SupportedAPI::ChatCompletions],
+            canonical_name: None,
+        };
+        registry.add_model(&model).await.unwrap();
+
+        // オンライン一致: has_model は find_by_model の非空判定と一致する
+        assert!(registry.has_model("llama3:8b").await);
+        assert_eq!(
+            registry.has_model("llama3:8b").await,
+            !registry.find_by_model("llama3:8b").await.is_empty()
+        );
+
+        // 未登録モデル: どちらも「無し」
+        assert!(!registry.has_model("nonexistent").await);
+        assert_eq!(
+            registry.has_model("nonexistent").await,
+            !registry.find_by_model("nonexistent").await.is_empty()
+        );
+
+        // オフライン化するとオンライン限定の has_model は false（find_by_model と一致）
+        registry
+            .update_status(endpoint_id, EndpointStatus::Offline, None, None)
+            .await
+            .unwrap();
+        assert!(!registry.has_model("llama3:8b").await);
+        assert_eq!(
+            registry.has_model("llama3:8b").await,
+            !registry.find_by_model("llama3:8b").await.is_empty()
+        );
     }
 
     #[tokio::test]
