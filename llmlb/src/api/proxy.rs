@@ -132,8 +132,8 @@ fn process_sse_lines(
     buffer.push_str(chunk_text);
 
     while let Some(newline_idx) = buffer.find('\n') {
-        let line = buffer[..newline_idx].trim_end_matches('\r').to_string();
-        accumulator.process_chunk(&line);
+        // process_chunk は先頭で trim() するため \r 除去・String 確保は不要（借用のまま渡す）。
+        accumulator.process_chunk(&buffer[..newline_idx]);
         buffer.drain(..=newline_idx);
     }
 }
