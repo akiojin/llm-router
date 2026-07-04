@@ -12,10 +12,17 @@ mod download;
 mod github;
 pub mod history;
 pub mod schedule;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+mod tray;
 use download::{
     asset_name_from_url, download_to_path, extract_archive, find_extracted_binary, ProgressCallback,
 };
 use github::{fetch_latest_release, parse_tag_to_version, GitHubAsset, GitHubRelease};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use tray::{
+    notify_tray_available, notify_tray_failed, notify_tray_ready, notify_tray_up_to_date,
+    schedule_to_tray_info,
+};
 
 use crate::{inference_gate::InferenceGate, shutdown::ShutdownController};
 use anyhow::{anyhow, Context, Result};
@@ -2049,31 +2056,6 @@ fn restart_from_args_file(target: &Path, args_file: &Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-fn schedule_to_tray_info(schedule: &schedule::UpdateSchedule) -> crate::gui::tray::ScheduleInfo {
-    let mode = match schedule.mode {
-        schedule::ScheduleMode::Immediate => "Immediate",
-        schedule::ScheduleMode::Idle => "Idle",
-        schedule::ScheduleMode::Scheduled => "Scheduled",
-    }
-    .to_string();
-
-    crate::gui::tray::ScheduleInfo {
-        mode,
-        scheduled_at: schedule.scheduled_at.as_ref().cloned(),
-    }
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-async fn notify_tray_available(
-    tray: &RwLock<Option<crate::gui::tray::TrayEventProxy>>,
-    latest: String,
-) {
-    if let Some(proxy) = tray.read().await.clone() {
-        proxy.notify_update_available(latest);
-    }
-}
-
 #[cfg(target_os = "macos")]
 fn run_macos_pkg_installer_with_privileges(installer: &Path) -> Result<()> {
     let installer_path = installer.to_string_lossy().to_string();
@@ -2096,30 +2078,6 @@ fn run_macos_pkg_installer_with_privileges(installer: &Path) -> Result<()> {
         return Err(anyhow!("osascript installer exited with {}", status));
     }
     Ok(())
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-async fn notify_tray_ready(tray: &RwLock<Option<crate::gui::tray::TrayEventProxy>>) {
-    if let Some(proxy) = tray.read().await.clone() {
-        proxy.notify_update_ready();
-    }
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-async fn notify_tray_failed(
-    tray: &RwLock<Option<crate::gui::tray::TrayEventProxy>>,
-    message: String,
-) {
-    if let Some(proxy) = tray.read().await.clone() {
-        proxy.notify_update_failed(message);
-    }
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-async fn notify_tray_up_to_date(tray: &RwLock<Option<crate::gui::tray::TrayEventProxy>>) {
-    if let Some(proxy) = tray.read().await.clone() {
-        proxy.notify_update_up_to_date();
-    }
 }
 
 #[cfg(test)]
