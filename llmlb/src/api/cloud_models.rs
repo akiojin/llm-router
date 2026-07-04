@@ -189,6 +189,47 @@ pub fn parse_anthropic_models(response: &AnthropicModelsResponse) -> Vec<CloudMo
 // フェッチ関数
 // ============================================================================
 
+/// クラウドプロバイダのモデル一覧を共通処理で取得・パースする。
+///
+/// arch-review [L9]: 各 `fetch_*_models` が「タイムアウト付き送信 → ステータス
+/// 判定 → JSON パース → 失敗時に warn して空返し」を逐語重複していたため集約した。
+/// URL と認証ヘッダはプロバイダ側で `request` に設定し、応答型 `T` とパース関数
+/// `parse` のみを差し替える。挙動（警告メッセージ含む）は従来と同一。
+async fn fetch_and_parse_models<T, F>(
+    provider: &str,
+    request: reqwest::RequestBuilder,
+    parse: F,
+) -> Vec<CloudModelInfo>
+where
+    T: serde::de::DeserializeOwned,
+    F: FnOnce(&T) -> Vec<CloudModelInfo>,
+{
+    let result = request
+        .timeout(std::time::Duration::from_secs(
+            CLOUD_MODELS_FETCH_TIMEOUT_SECS,
+        ))
+        .send()
+        .await;
+
+    match result {
+        Ok(resp) if resp.status().is_success() => match resp.json::<T>().await {
+            Ok(data) => parse(&data),
+            Err(e) => {
+                tracing::warn!("Failed to parse {} models response: {}", provider, e);
+                Vec::new()
+            }
+        },
+        Ok(resp) => {
+            tracing::warn!("{} models API returned status: {}", provider, resp.status());
+            Vec::new()
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch {} models: {}", provider, e);
+            Vec::new()
+        }
+    }
+}
+
 /// OpenAIからモデル一覧を取得
 pub async fn fetch_openai_models(client: &reqwest::Client) -> Vec<CloudModelInfo> {
     let api_key = match std::env::var("OPENAI_API_KEY") {
@@ -199,32 +240,10 @@ pub async fn fetch_openai_models(client: &reqwest::Client) -> Vec<CloudModelInfo
         }
     };
 
-    let result = client
+    let request = client
         .get("https://api.openai.com/v1/models")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .timeout(std::time::Duration::from_secs(
-            CLOUD_MODELS_FETCH_TIMEOUT_SECS,
-        ))
-        .send()
-        .await;
-
-    match result {
-        Ok(resp) if resp.status().is_success() => match resp.json::<OpenAIModelsResponse>().await {
-            Ok(data) => parse_openai_models(&data),
-            Err(e) => {
-                tracing::warn!("Failed to parse OpenAI models response: {}", e);
-                Vec::new()
-            }
-        },
-        Ok(resp) => {
-            tracing::warn!("OpenAI models API returned status: {}", resp.status());
-            Vec::new()
-        }
-        Err(e) => {
-            tracing::warn!("Failed to fetch OpenAI models: {}", e);
-            Vec::new()
-        }
-    }
+        .header("Authorization", format!("Bearer {}", api_key));
+    fetch_and_parse_models("OpenAI", request, parse_openai_models).await
 }
 
 /// Googleからモデル一覧を取得
@@ -242,31 +261,8 @@ pub async fn fetch_google_models(client: &reqwest::Client) -> Vec<CloudModelInfo
         api_key
     );
 
-    let result = client
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(
-            CLOUD_MODELS_FETCH_TIMEOUT_SECS,
-        ))
-        .send()
-        .await;
-
-    match result {
-        Ok(resp) if resp.status().is_success() => match resp.json::<GoogleModelsResponse>().await {
-            Ok(data) => parse_google_models(&data),
-            Err(e) => {
-                tracing::warn!("Failed to parse Google models response: {}", e);
-                Vec::new()
-            }
-        },
-        Ok(resp) => {
-            tracing::warn!("Google models API returned status: {}", resp.status());
-            Vec::new()
-        }
-        Err(e) => {
-            tracing::warn!("Failed to fetch Google models: {}", e);
-            Vec::new()
-        }
-    }
+    let request = client.get(&url);
+    fetch_and_parse_models("Google", request, parse_google_models).await
 }
 
 /// Anthropicからモデル一覧を取得
@@ -279,35 +275,11 @@ pub async fn fetch_anthropic_models(client: &reqwest::Client) -> Vec<CloudModelI
         }
     };
 
-    let result = client
+    let request = client
         .get("https://api.anthropic.com/v1/models")
         .header("x-api-key", &api_key)
-        .header("anthropic-version", "2023-06-01")
-        .timeout(std::time::Duration::from_secs(
-            CLOUD_MODELS_FETCH_TIMEOUT_SECS,
-        ))
-        .send()
-        .await;
-
-    match result {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<AnthropicModelsResponse>().await {
-                Ok(data) => parse_anthropic_models(&data),
-                Err(e) => {
-                    tracing::warn!("Failed to parse Anthropic models response: {}", e);
-                    Vec::new()
-                }
-            }
-        }
-        Ok(resp) => {
-            tracing::warn!("Anthropic models API returned status: {}", resp.status());
-            Vec::new()
-        }
-        Err(e) => {
-            tracing::warn!("Failed to fetch Anthropic models: {}", e);
-            Vec::new()
-        }
-    }
+        .header("anthropic-version", "2023-06-01");
+    fetch_and_parse_models("Anthropic", request, parse_anthropic_models).await
 }
 
 /// 全プロバイダーからモデル一覧を並列取得
