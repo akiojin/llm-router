@@ -377,7 +377,9 @@ pub(crate) fn record_endpoint_request_stats(
             tracing::error!("Failed to increment endpoint request counters: {}", e);
         }
 
-        // TPS計測対象かつ成功かつ有効トークンがある場合のみトークン・時間をDB永続化
+        // TPS計測対象かつ成功かつ有効トークンがある場合のみトークン・時間をDB永続化。
+        // arch-review [L15]: is_tps_trackable() は現状全タイプで true（SPEC-4bb5b55f の拡張点）。
+        // 特定タイプを計測対象外にする将来仕様のためのガードとして保持している。
         let should_update_tps = endpoint_type.is_tps_trackable()
             && api_kind.is_some()
             && success
