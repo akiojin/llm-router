@@ -1873,6 +1873,7 @@ impl LoadManager {
         let tracker = self.tps_tracker.read().await;
         let mut map: HashMap<Uuid, EndpointTpsSummary> = HashMap::new();
         let mut model_sets: HashMap<Uuid, std::collections::HashSet<&str>> = HashMap::new();
+        let mut total_durations: HashMap<Uuid, u64> = HashMap::new();
 
         for ((endpoint_id, model_id, _), state) in tracker.iter() {
             let entry = map
@@ -1890,34 +1891,20 @@ impl LoadManager {
                 .insert(model_id.as_str());
             entry.total_output_tokens += state.total_output_tokens;
             entry.total_requests += state.request_count;
+            *total_durations.entry(*endpoint_id).or_default() += state.total_duration_ms;
         }
 
-        for (endpoint_id, model_set) in model_sets {
-            if let Some(entry) = map.get_mut(&endpoint_id) {
+        // model_count と aggregate_tps を1エンドポイントあたり1回で確定させる（旧実装の
+        // O(E×N) 全走査を排除）。集計トークン/時間は第1ループで積んだ値をそのまま使う。
+        for (endpoint_id, entry) in map.iter_mut() {
+            if let Some(model_set) = model_sets.get(endpoint_id) {
                 entry.model_count = model_set.len();
             }
-        }
-
-        for ((endpoint_id, _, _), state) in tracker.iter() {
-            if let Some(entry) = map.get_mut(endpoint_id) {
-                if entry.aggregate_tps.is_none() {
-                    let total_tokens: u64 = tracker
-                        .iter()
-                        .filter(|((eid, _, _), _)| eid == endpoint_id)
-                        .map(|(_, s)| s.total_output_tokens)
-                        .sum();
-                    let total_duration: u64 = tracker
-                        .iter()
-                        .filter(|((eid, _, _), _)| eid == endpoint_id)
-                        .map(|(_, s)| s.total_duration_ms)
-                        .sum();
-                    if total_duration > 0 {
-                        entry.aggregate_tps =
-                            Some(total_tokens as f64 / (total_duration as f64 / 1000.0));
-                    }
-                }
+            let total_duration = total_durations.get(endpoint_id).copied().unwrap_or(0);
+            if total_duration > 0 {
+                entry.aggregate_tps =
+                    Some(entry.total_output_tokens as f64 / (total_duration as f64 / 1000.0));
             }
-            let _ = state;
         }
 
         map.into_values().collect()
