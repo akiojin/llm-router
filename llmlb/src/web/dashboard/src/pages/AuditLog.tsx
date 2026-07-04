@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import {
@@ -25,7 +26,7 @@ export default function AuditLogPage({ onBack }: AuditLogPageProps) {
   })
 
   const { data, isLoading } = useQuery<AuditLogListResponse>({
-    queryKey: ['audit-logs', filters],
+    queryKey: queryKeys.auditLogs(filters),
     queryFn: () => auditLogApi.list(filters),
     enabled: user?.role === 'admin',
   })

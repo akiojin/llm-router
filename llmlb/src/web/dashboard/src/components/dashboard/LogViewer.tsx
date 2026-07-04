@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery } from '@tanstack/react-query'
 import { type LogEntry, dashboardApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -39,7 +40,7 @@ export function LogViewer() {
     refetch: refetchRouter,
     isRefetching,
   } = useQuery({
-    queryKey: ['router-logs'],
+    queryKey: queryKeys.routerLogs,
     queryFn: () => dashboardApi.getRouterLogs({ limit: 200 }),
     refetchInterval: 5000,
   })

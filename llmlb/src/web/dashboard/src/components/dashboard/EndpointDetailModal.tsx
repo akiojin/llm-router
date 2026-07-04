@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
@@ -167,7 +168,7 @@ function EndpointDetailModalContent({
 
   // SPEC-8c32349f: Fetch today's request statistics
   const { data: todayStats, isLoading: isLoadingTodayStats } = useQuery({
-    queryKey: ['endpoint-today-stats', endpoint?.id],
+    queryKey: queryKeys.endpointTodayStats(endpoint?.id),
     queryFn: () => endpointsApi.getTodayStats(endpoint.id),
     enabled: !!endpoint?.id && open,
   })
@@ -184,7 +185,7 @@ function EndpointDetailModalContent({
     mutationFn: (data: Parameters<typeof endpointsApi.update>[1]) =>
       endpointsApi.update(endpoint.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
       toast({
         title: 'Update Complete',
         description: 'Endpoint settings updated',
@@ -203,7 +204,7 @@ function EndpointDetailModalContent({
   const testMutation = useMutation({
     mutationFn: () => endpointsApi.test(endpoint.id),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
       toast({
         title: result.success
           ? 'Connection Successful'
@@ -229,7 +230,7 @@ function EndpointDetailModalContent({
   const syncMutation = useMutation({
     mutationFn: () => endpointsApi.sync(endpoint.id),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
       toast({
         title: 'Sync Complete',
         description: `Synced ${result.synced_models} models`,

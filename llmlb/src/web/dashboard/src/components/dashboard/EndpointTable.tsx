@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQueryClient } from '@tanstack/react-query'
 import {
   type DashboardEndpoint,
@@ -199,7 +200,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
         api_key: createForm.api_key || undefined,
         notes: createForm.notes || undefined,
       })
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
       setIsCreateDialogOpen(false)
       setCreateForm({ name: '', base_url: '', api_key: '', notes: '' })
     } catch (error) {
@@ -215,7 +216,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
     setIsDeleting(true)
     try {
       await endpointsApi.delete(deletingEndpoint.id)
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
     } catch (error) {
       console.error('Failed to delete endpoint:', error)
     } finally {
@@ -228,7 +229,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
     setIsTesting(endpoint.id)
     try {
       await endpointsApi.test(endpoint.id)
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
     } catch (error) {
       console.error('Failed to test endpoint:', error)
     } finally {
@@ -240,7 +241,7 @@ export function EndpointTable({ endpoints, isLoading }: EndpointTableProps) {
     setIsSyncing(endpoint.id)
     try {
       await endpointsApi.sync(endpoint.id)
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
     } catch (error) {
       console.error('Failed to sync endpoint:', error)
     } finally {

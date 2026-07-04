@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { invitationsApi, type Invitation, type CreateInvitationResponse } from '@/lib/api'
 import {
@@ -79,7 +80,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
 
   // Fetch invitations
   const { data: invitations, isLoading, refetch } = useQuery({
-    queryKey: ['invitations'],
+    queryKey: queryKeys.invitations,
     queryFn: invitationsApi.list,
     enabled: open,
   })
@@ -88,7 +89,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
   const createMutation = useMutation({
     mutationFn: (hours: number) => invitationsApi.create(hours),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['invitations'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.invitations })
       setCreatedCode(data)
       toast({ title: 'Invitation code created' })
     },
@@ -105,7 +106,7 @@ export function InvitationModal({ open, onOpenChange }: InvitationModalProps) {
   const revokeMutation = useMutation({
     mutationFn: (id: string) => invitationsApi.revoke(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invitations'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.invitations })
       setRevokeInvitation(null)
       toast({ title: 'Invitation code revoked' })
     },

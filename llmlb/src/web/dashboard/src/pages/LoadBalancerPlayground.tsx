@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery } from '@tanstack/react-query'
 import {
   chatApi,
@@ -183,7 +184,7 @@ export default function LoadBalancerPlayground({ onBack, initialModel }: LoadBal
     error: modelsError,
     refetch: refetchModels,
   } = useQuery<OpenAIModelsResponse>({
-    queryKey: ['lb-playground-models'],
+    queryKey: queryKeys.lbPlaygroundModels,
     queryFn: () => chatApi.getModels(),
     retry: false,
     staleTime: 5000,

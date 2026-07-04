@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   type CatalogSearchResult,
@@ -79,21 +80,21 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
 
   // Search query
   const { data: searchResults, isLoading: isSearching } = useQuery({
-    queryKey: ['catalog-search', debouncedQuery],
+    queryKey: queryKeys.catalogSearch(debouncedQuery),
     queryFn: () => catalogApi.search(debouncedQuery, 20),
     enabled: debouncedQuery.length >= 2,
   })
 
   // Model detail query
   const { data: modelDetail, isLoading: isLoadingDetail } = useQuery({
-    queryKey: ['catalog-model', selectedModel?.repo_id],
+    queryKey: queryKeys.catalogModel(selectedModel?.repo_id),
     queryFn: () => catalogApi.getModel(selectedModel!.repo_id),
     enabled: !!selectedModel && (step === 'detail' || step === 'endpoints'),
   })
 
   // Endpoint recommendations
   const { data: recommendations, isLoading: isLoadingEndpoints } = useQuery({
-    queryKey: ['catalog-recommend', selectedModel?.repo_id],
+    queryKey: queryKeys.catalogRecommend(selectedModel?.repo_id),
     queryFn: () => catalogApi.recommendEndpoints(selectedModel!.repo_id),
     enabled: !!selectedModel && step === 'endpoints',
   })
@@ -159,8 +160,8 @@ function ModelAddWizardContent({ open, onOpenChange }: ModelAddWizardProps) {
       }
     }
 
-    queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
-    queryClient.invalidateQueries({ queryKey: ['models'] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
+    queryClient.invalidateQueries({ queryKey: queryKeys.models })
     toast({
       title: 'Download requests sent',
       description: `Initiated download of ${selectedModel.repo_id} to ${selectedEndpointIds.size} endpoint(s)`,

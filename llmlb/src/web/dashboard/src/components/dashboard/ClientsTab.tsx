@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery } from '@tanstack/react-query'
 import {
   clientsApi,
@@ -28,22 +29,22 @@ export function ClientsTab() {
   }, [])
 
   const { data, isLoading } = useQuery<ClientRankingResponse>({
-    queryKey: ['client-ranking', page, perPage, ipFilter],
+    queryKey: queryKeys.clientRanking(page, perPage, ipFilter),
     queryFn: () => clientsApi.getClientRanking({ page, per_page: perPage, ip: ipFilter }),
   })
 
   const { data: timelineData } = useQuery<UniqueIpTimelinePoint[]>({
-    queryKey: ['client-timeline'],
+    queryKey: queryKeys.clientTimeline,
     queryFn: () => clientsApi.getTimeline(),
   })
 
   const { data: modelsData } = useQuery<ModelDistribution[]>({
-    queryKey: ['client-models'],
+    queryKey: queryKeys.clientModels,
     queryFn: () => clientsApi.getModels(),
   })
 
   const { data: heatmapData } = useQuery<HeatmapCell[]>({
-    queryKey: ['client-heatmap', ipFilter],
+    queryKey: queryKeys.clientHeatmap(ipFilter),
     queryFn: () => clientsApi.getHeatmap({ ip: ipFilter }),
   })
 

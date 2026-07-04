@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQueryClient } from '@tanstack/react-query'
 
 export type DashboardEventType =
@@ -113,22 +114,22 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             case 'NodeRemoved':
             case 'NodeStatusChanged':
               // Invalidate dashboard overview query (includes endpoints, stats)
-              queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] })
-              queryClient.invalidateQueries({ queryKey: ['request-responses'] })
+              queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverview })
+              queryClient.invalidateQueries({ queryKey: queryKeys.requestResponses })
               break
             case 'MetricsUpdated':
               // Invalidate dashboard overview for metrics updates
-              queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] })
+              queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverview })
               break
             case 'TpsUpdated':
               // SPEC-4bb5b55f: Invalidate TPS data for the affected endpoint
               if (data.data?.endpoint_id) {
-                queryClient.invalidateQueries({ queryKey: ['endpoint-model-tps', data.data.endpoint_id] })
+                queryClient.invalidateQueries({ queryKey: queryKeys.endpointModelTps(data.data.endpoint_id) })
               }
               break
             case 'UpdateStateChanged':
               // Invalidate system-info so other clients see update state changes
-              queryClient.invalidateQueries({ queryKey: ['system-info'] })
+              queryClient.invalidateQueries({ queryKey: queryKeys.systemInfo })
               break
           }
         } catch (err) {

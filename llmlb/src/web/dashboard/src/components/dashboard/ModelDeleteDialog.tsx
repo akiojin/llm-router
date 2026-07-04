@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/lib/query-keys';
 import { endpointsApi } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -44,9 +45,9 @@ export function ModelDeleteDialog({
         title: 'Model deleted',
         description: `${modelId} has been removed from ${endpointName}`,
       })
-      queryClient.invalidateQueries({ queryKey: ['endpoint-models', endpointId] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.endpointModels(endpointId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
+      queryClient.invalidateQueries({ queryKey: queryKeys.models })
       onOpenChange(false)
       onDeleted?.()
     },

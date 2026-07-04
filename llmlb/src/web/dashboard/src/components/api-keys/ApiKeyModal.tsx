@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   apiKeysApi,
@@ -104,7 +105,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ['api-keys'],
+    queryKey: queryKeys.apiKeys,
     queryFn: apiKeysApi.list,
     enabled: open,
     // Plaintext keys are only shown once at creation time. We must not auto-refresh
@@ -174,7 +175,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
     onSuccess: (data: CreateApiKeyResponse) => {
       // Update list without refetching, so the "created key" stays visible/copyable
       // until the user explicitly refreshes or closes the modal.
-      queryClient.setQueryData(['api-keys'], (old?: ApiKey[]) => {
+      queryClient.setQueryData(queryKeys.apiKeys, (old?: ApiKey[]) => {
         const next = Array.isArray(old) ? old : []
         const withoutDup = next.filter((k) => k.id !== data.id)
         const created: ApiKey = {
@@ -208,7 +209,7 @@ export function ApiKeyModal({ open, onOpenChange }: ApiKeyModalProps) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiKeysApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys })
       setDeleteKey(null)
       toast({ title: 'API key deleted' })
     },

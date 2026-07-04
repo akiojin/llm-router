@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi, type User, type CreateUserResponse } from '@/lib/api'
 import {
@@ -79,7 +80,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
 
   // Fetch users
   const { data: users, isLoading, refetch } = useQuery({
-    queryKey: ['users'],
+    queryKey: queryKeys.users,
     queryFn: usersApi.list,
     enabled: open,
   })
@@ -89,7 +90,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
     mutationFn: (data: { username: string; role: string }) =>
       usersApi.create(data),
     onSuccess: (result: CreateUserResponse) => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.users })
       resetForm()
       setCreateOpen(false)
       setGeneratedPassword(result.generated_password)
@@ -114,7 +115,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
       data: { username?: string; password?: string; role?: string }
     }) => usersApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.users })
       resetForm()
       setEditUser(null)
       toast({ title: 'User updated' })
@@ -133,7 +134,7 @@ export function UserModal({ open, onOpenChange }: UserModalProps) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => usersApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.users })
       setDeleteUser(null)
       toast({ title: 'User deleted' })
     },

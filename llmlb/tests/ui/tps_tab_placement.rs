@@ -23,7 +23,7 @@ fn endpoint_table_does_not_render_tps_column() {
 fn models_table_renders_endpoint_model_tps() {
     let source = get_models_table_source();
     assert!(
-        source.contains("queryKey: ['endpoint-model-tps', endpoint.id]"),
+        source.contains("queryKey: queryKeys.endpointModelTps(endpoint.id)"),
         "ModelsTable should fetch endpoint x model TPS data"
     );
     assert!(

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { queryKeys } from '@/lib/query-keys';
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type DashboardEndpoint, endpointsApi } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
@@ -115,8 +116,8 @@ function ModelDownloadDialogContent({
             clearInterval(pollingRef.current)
             pollingRef.current = null
           }
-          queryClient.invalidateQueries({ queryKey: ['endpoint-models', endpoint.id] })
-          queryClient.invalidateQueries({ queryKey: ['dashboard-endpoints'] })
+          queryClient.invalidateQueries({ queryKey: queryKeys.endpointModels(endpoint.id) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.dashboardEndpoints })
           toast({
             title: 'Download Completed',
             description: `Model ${modelName} has been downloaded successfully`,
