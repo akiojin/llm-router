@@ -24,49 +24,20 @@ fn record_audit_actor(
     }
 }
 use chrono::{DateTime, Utc};
-use jsonwebtoken::decode_header;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 mod csrf;
+mod debug_keys;
+mod jwt_token;
 #[cfg(test)]
 use csrf::{
     default_port_for_scheme, expected_origin, normalize_origin_for_compare, origin_or_referer,
 };
 use csrf::{extract_csrf_cookie, method_requires_csrf, origin_matches, response_sets_csrf_cookie};
-
-#[cfg(debug_assertions)]
-const DEBUG_API_KEY_ALL: &str = "sk_debug";
-#[cfg(debug_assertions)]
-const DEBUG_API_KEY_RUNTIME: &str = "sk_debug_runtime";
-#[cfg(debug_assertions)]
-const DEBUG_API_KEY_API: &str = "sk_debug_api";
-#[cfg(debug_assertions)]
-const DEBUG_API_KEY_ADMIN: &str = "sk_debug_admin";
-
-#[cfg(debug_assertions)]
-fn debug_api_key_permissions(
-    request_key: &str,
-) -> Option<Vec<crate::common::auth::ApiKeyPermission>> {
-    match request_key {
-        DEBUG_API_KEY_ALL => Some(crate::common::auth::ApiKeyPermission::all()),
-        DEBUG_API_KEY_RUNTIME => Some(vec![crate::common::auth::ApiKeyPermission::RegistryRead]),
-        DEBUG_API_KEY_API => Some(vec![
-            crate::common::auth::ApiKeyPermission::OpenaiInference,
-            crate::common::auth::ApiKeyPermission::OpenaiModelsRead,
-        ]),
-        DEBUG_API_KEY_ADMIN => Some(crate::common::auth::ApiKeyPermission::all()),
-        _ => None,
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn debug_api_key_permissions(
-    _request_key: &str,
-) -> Option<Vec<crate::common::auth::ApiKeyPermission>> {
-    None
-}
+pub(crate) use jwt_token::extract_jwt_cookie;
+use jwt_token::{extract_jwt_from_headers, verify_jwt_claims};
 
 /// APIキー認証済みのコンテキスト
 #[derive(Debug, Clone)]
@@ -88,61 +59,11 @@ fn has_permission(
     permissions.contains(&required)
 }
 
-fn token_looks_like_jwt(token: &str) -> bool {
-    let mut parts = token.split('.');
-    let (first, second, third, extra) = (parts.next(), parts.next(), parts.next(), parts.next());
-    if extra.is_some() {
-        return false;
-    }
-    if matches!((first, second, third), (Some(a), Some(b), Some(c)) if !a.is_empty() && !b.is_empty() && !c.is_empty())
-    {
-        return decode_header(token).is_ok();
-    }
-    false
-}
-
-fn extract_jwt_from_headers(headers: &HeaderMap) -> Option<String> {
-    if let Some(auth_header) = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-    {
-        if let Some(token) = auth_header.strip_prefix("Bearer ") {
-            if token_looks_like_jwt(token) {
-                return Some(token.to_string());
-            }
-        }
-    }
-    extract_jwt_cookie(headers)
-}
-
-#[allow(clippy::result_large_err)]
-fn verify_jwt_claims(token: &str, jwt_secret: &str) -> Result<Claims, Response> {
-    crate::auth::jwt::verify_jwt(token, jwt_secret).map_err(|e| {
-        tracing::warn!("JWT verification failed: {}", e);
-        (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)).into_response()
-    })
-}
-
-pub(crate) fn extract_jwt_cookie(headers: &HeaderMap) -> Option<String> {
-    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
-    for part in cookie_header.split(';') {
-        let trimmed = part.trim();
-        if let Some(value) =
-            trimmed.strip_prefix(&format!("{}=", crate::auth::DASHBOARD_JWT_COOKIE))
-        {
-            if !value.is_empty() {
-                return Some(value.to_string());
-            }
-        }
-    }
-    None
-}
-
 async fn authenticate_api_key(
     pool: &sqlx::SqlitePool,
     api_key: &str,
 ) -> Result<ApiKeyAuthContext, Response> {
-    if let Some(permissions) = debug_api_key_permissions(api_key) {
+    if let Some(permissions) = debug_keys::debug_api_key_permissions(api_key) {
         tracing::warn!("Authenticated via debug API key (debug build only)");
         return Ok(ApiKeyAuthContext {
             id: Uuid::nil(),
@@ -703,6 +624,8 @@ fn hash_with_sha256(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::debug_keys::*;
+    use super::jwt_token::token_looks_like_jwt;
     use super::*;
     use axum::{body::Body, http::Request, middleware as axum_middleware, routing::get, Router};
     use tower::ServiceExt;
