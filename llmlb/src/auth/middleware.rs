@@ -27,8 +27,14 @@ use chrono::{DateTime, Utc};
 use jsonwebtoken::decode_header;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::str::FromStr;
 use uuid::Uuid;
+
+mod csrf;
+#[cfg(test)]
+use csrf::{
+    default_port_for_scheme, expected_origin, normalize_origin_for_compare, origin_or_referer,
+};
+use csrf::{extract_csrf_cookie, method_requires_csrf, origin_matches, response_sets_csrf_cookie};
 
 #[cfg(debug_assertions)]
 const DEBUG_API_KEY_ALL: &str = "sk_debug";
@@ -130,126 +136,6 @@ pub(crate) fn extract_jwt_cookie(headers: &HeaderMap) -> Option<String> {
         }
     }
     None
-}
-
-pub(crate) fn extract_csrf_cookie(headers: &HeaderMap) -> Option<String> {
-    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
-    for part in cookie_header.split(';') {
-        let trimmed = part.trim();
-        if let Some(value) =
-            trimmed.strip_prefix(&format!("{}=", crate::auth::DASHBOARD_CSRF_COOKIE))
-        {
-            if !value.is_empty() {
-                return Some(value.to_string());
-            }
-        }
-    }
-    None
-}
-
-fn method_requires_csrf(method: &axum::http::Method) -> bool {
-    matches!(
-        *method,
-        axum::http::Method::POST
-            | axum::http::Method::PUT
-            | axum::http::Method::PATCH
-            | axum::http::Method::DELETE
-    )
-}
-
-fn expected_origin(headers: &HeaderMap) -> Option<String> {
-    let host_raw = headers
-        .get("x-forwarded-host")
-        .or_else(|| headers.get(header::HOST))
-        .and_then(|value| value.to_str().ok())?;
-    let host = host_raw
-        .split(',')
-        .next()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-    let proto_raw = headers
-        .get("x-forwarded-proto")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("http");
-    let proto = proto_raw
-        .split(',')
-        .next()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("http");
-    Some(format!("{}://{}", proto, host))
-}
-
-fn origin_or_referer(headers: &HeaderMap) -> Option<String> {
-    if let Some(origin) = headers
-        .get(header::ORIGIN)
-        .and_then(|value| value.to_str().ok())
-    {
-        return Some(origin.to_string());
-    }
-    let referer = headers
-        .get(header::REFERER)
-        .and_then(|value| value.to_str().ok())?;
-    if let Some((scheme, rest)) = referer.split_once("://") {
-        let host = rest.split('/').next().unwrap_or_default();
-        if !host.is_empty() {
-            return Some(format!("{}://{}", scheme, host));
-        }
-    }
-    None
-}
-
-fn origin_matches(headers: &HeaderMap) -> bool {
-    let expected = match expected_origin(headers) {
-        Some(value) => value,
-        None => return false,
-    };
-    let provided = match origin_or_referer(headers) {
-        Some(value) => value,
-        None => return false,
-    };
-    match (
-        normalize_origin_for_compare(&provided),
-        normalize_origin_for_compare(&expected),
-    ) {
-        (Some(provided), Some(expected)) => provided == expected,
-        _ => false,
-    }
-}
-
-fn normalize_origin_for_compare(origin: &str) -> Option<(String, String, u16)> {
-    let (scheme, rest) = origin.split_once("://")?;
-    let authority = rest.split('/').next()?.trim();
-    if authority.is_empty() {
-        return None;
-    }
-    let authority = axum::http::uri::Authority::from_str(authority).ok()?;
-    let scheme = scheme.trim().to_ascii_lowercase();
-    let host = authority.host().trim_end_matches('.').to_ascii_lowercase();
-    if host.is_empty() {
-        return None;
-    }
-    let port = authority
-        .port_u16()
-        .or_else(|| default_port_for_scheme(&scheme))?;
-    Some((scheme, host, port))
-}
-
-fn default_port_for_scheme(scheme: &str) -> Option<u16> {
-    match scheme {
-        "http" => Some(80),
-        "https" => Some(443),
-        _ => None,
-    }
-}
-
-fn response_sets_csrf_cookie(response: &Response) -> bool {
-    response
-        .headers()
-        .get_all(header::SET_COOKIE)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .any(|value| value.starts_with(crate::auth::DASHBOARD_CSRF_COOKIE))
 }
 
 async fn authenticate_api_key(
