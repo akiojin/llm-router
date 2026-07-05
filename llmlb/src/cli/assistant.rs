@@ -6,18 +6,21 @@ use anyhow::{anyhow, Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use reqwest::Url;
 use serde::Serialize;
-use serde_json::{json, Value};
-use std::path::Path;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::time::Instant;
 
 mod curl;
 mod guide;
+mod openapi;
 use curl::*;
 use guide::{
     dashboard_guide, endpoint_management_guide, model_management_guide, openai_guide,
     overview_guide,
 };
+use openapi::load_openapi_value;
+#[cfg(test)]
+use openapi::{default_openapi_spec, find_openapi_in_ancestors};
 
 const DEFAULT_ROUTER_URL: &str = "http://localhost:32768";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
@@ -300,191 +303,6 @@ fn curl_failure_error(result: &CurlResult) -> anyhow::Error {
     }
 
     anyhow!("assistant curl command failed")
-}
-
-fn load_openapi_value(path: Option<&PathBuf>, env_path: Option<&PathBuf>) -> Value {
-    let mut candidates = Vec::new();
-
-    if let Some(path) = path {
-        candidates.push(path.clone());
-    }
-
-    if let Some(path) = env_path {
-        candidates.push(path.clone());
-    }
-
-    // Backward-compatible default: search docs/openapi.yaml from cwd to ancestors.
-    if candidates.is_empty() {
-        if let Some(path) = find_openapi_in_ancestors(
-            std::env::current_dir()
-                .ok()
-                .as_deref()
-                .unwrap_or(Path::new(".")),
-        ) {
-            candidates.push(path);
-        }
-    }
-
-    for candidate in candidates {
-        if candidate.exists() {
-            if let Ok(content) = std::fs::read_to_string(&candidate) {
-                if let Ok(json_value) = serde_json::from_str::<Value>(&content) {
-                    return json_value;
-                }
-
-                if let Ok(yaml_value) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
-                    if let Ok(json_value) = serde_json::to_value(yaml_value) {
-                        return json_value;
-                    }
-                }
-            }
-        }
-    }
-
-    default_openapi_spec()
-}
-
-fn find_openapi_in_ancestors(start: &Path) -> Option<PathBuf> {
-    for dir in start.ancestors() {
-        let candidate = dir.join("docs").join("openapi.yaml");
-        if candidate.exists() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn default_openapi_spec() -> Value {
-    json!({
-      "openapi": "3.1.0",
-      "info": {
-        "title": "llmlb API",
-        "version": "0.1.0",
-        "description": "OpenAI-compatible endpoints with optional cloud routing by model prefix (openai:/google:/anthropic:)."
-      },
-      "servers": [{ "url": "http://localhost:32768" }],
-      "paths": {
-        "/v1/chat/completions": {
-          "post": {
-            "summary": "Chat completion (local or cloud depending on model prefix)",
-            "requestBody": {
-              "required": true,
-              "content": {
-                "application/json": {
-                  "schema": { "$ref": "#/components/schemas/ChatRequest" }
-                }
-              }
-            },
-            "responses": {
-              "200": {
-                "description": "Chat completion response",
-                "content": {
-                  "application/json": {
-                    "schema": { "$ref": "#/components/schemas/ChatResponse" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "/v1/models": {
-          "get": {
-            "summary": "List available models",
-            "responses": {
-              "200": { "description": "List of models" }
-            }
-          }
-        },
-        "/v1/embeddings": {
-          "post": {
-            "summary": "Generate embeddings",
-            "requestBody": {
-              "required": true,
-              "content": {
-                "application/json": {
-                  "schema": { "$ref": "#/components/schemas/EmbeddingRequest" }
-                }
-              }
-            }
-          }
-        },
-        "/api/auth/login": {
-          "post": { "summary": "Login (sets HttpOnly cookie for the dashboard)" }
-        },
-        "/api/auth/me": {
-          "get": { "summary": "Get current user session" }
-        },
-        "/api/endpoints": {
-          "get": { "summary": "List endpoints" },
-          "post": { "summary": "Create endpoint" }
-        },
-        "/api/endpoints/{id}": {
-          "get": { "summary": "Get endpoint detail" },
-          "put": { "summary": "Update endpoint" },
-          "delete": { "summary": "Delete endpoint" }
-        },
-        "/api/dashboard/overview": {
-          "get": { "summary": "Get dashboard overview" }
-        },
-        "/api/dashboard/stats": {
-          "get": { "summary": "Get dashboard statistics" }
-        },
-        "/api/models/register": {
-          "post": { "summary": "Register a model (admin only)" }
-        }
-      },
-      "components": {
-        "schemas": {
-          "ChatRequest": {
-            "type": "object",
-            "properties": {
-              "model": { "type": "string", "example": "openai:gpt-4o" },
-              "messages": {
-                "type": "array",
-                "items": { "$ref": "#/components/schemas/ChatMessage" }
-              },
-              "stream": { "type": "boolean" }
-            },
-            "required": ["model", "messages"]
-          },
-          "ChatMessage": {
-            "type": "object",
-            "properties": {
-              "role": { "type": "string", "enum": ["system", "user", "assistant"] },
-              "content": { "type": "string" }
-            },
-            "required": ["role", "content"]
-          },
-          "ChatResponse": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "model": { "type": "string" },
-              "choices": {
-                "type": "array",
-                "items": { "$ref": "#/components/schemas/ChatChoice" }
-              }
-            }
-          },
-          "ChatChoice": {
-            "type": "object",
-            "properties": {
-              "index": { "type": "integer" },
-              "message": { "$ref": "#/components/schemas/ChatMessage" },
-              "finish_reason": { "type": "string" }
-            }
-          },
-          "EmbeddingRequest": {
-            "type": "object",
-            "properties": {
-              "model": { "type": "string" },
-              "input": { "oneOf": [{ "type": "string" }, { "type": "array" }] }
-            },
-            "required": ["model", "input"]
-          }
-        }
-      }
-    })
 }
 
 #[cfg(test)]
