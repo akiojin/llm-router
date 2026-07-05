@@ -2,6 +2,7 @@
 
 /// アーカイブ処理（別DBへの移送・検索）は archive submodule に分離（arch-review [C3]）
 mod archive;
+pub use archive::create_archive_pool;
 mod statistics;
 pub use statistics::{
     DailyTokenStatistics, ModelTokenStatistics, MonthlyTokenStatistics, TokenStatistics,
@@ -9,120 +10,7 @@ pub use statistics::{
 
 use crate::audit::types::{ActorType, AuditBatchHash, AuditLogEntry, AuditLogFilter};
 use crate::common::error::{LbError, RouterResult};
-use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
-
-/// アーカイブDBプールを作成
-///
-/// アーカイブDBファイルが存在しない場合は自動作成し、
-/// 必要なテーブル（audit_log_entries + audit_batch_hashes）を作成する。
-pub async fn create_archive_pool(path: &str) -> RouterResult<SqlitePool> {
-    let url = format!("sqlite:{}?mode=rwc", path);
-    let pool = SqlitePoolOptions::new()
-        .max_connections(2)
-        .connect(&url)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to create archive pool: {}", e)))?;
-
-    // WALモード設定
-    sqlx::query("PRAGMA journal_mode=WAL")
-        .execute(&pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to set WAL mode: {}", e)))?;
-
-    // アーカイブDBにテーブルを作成
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS audit_log_entries (
-            id INTEGER PRIMARY KEY,
-            timestamp TEXT NOT NULL,
-            http_method TEXT NOT NULL,
-            request_path TEXT NOT NULL,
-            status_code INTEGER NOT NULL,
-            actor_type TEXT NOT NULL,
-            actor_id TEXT,
-            actor_username TEXT,
-            api_key_owner_id TEXT,
-            client_ip TEXT,
-            duration_ms INTEGER,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            total_tokens INTEGER,
-            model_name TEXT,
-            endpoint_id TEXT,
-            detail TEXT,
-            batch_id INTEGER,
-            is_migrated INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )",
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| LbError::Database(format!("Failed to create archive tables: {}", e)))?;
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS audit_batch_hashes (
-            id INTEGER PRIMARY KEY,
-            sequence_number INTEGER NOT NULL UNIQUE,
-            batch_start TEXT NOT NULL,
-            batch_end TEXT NOT NULL,
-            record_count INTEGER NOT NULL,
-            hash TEXT NOT NULL,
-            previous_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )",
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| LbError::Database(format!("Failed to create archive batch table: {}", e)))?;
-
-    // インデックス
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_archive_timestamp ON audit_log_entries(timestamp)")
-        .execute(&pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to create archive index: {}", e)))?;
-
-    sqlx::query(
-        "CREATE VIRTUAL TABLE IF NOT EXISTS audit_log_fts USING fts5(
-            request_path,
-            actor_id,
-            actor_username,
-            client_ip,
-            detail,
-            content=audit_log_entries,
-            content_rowid=id
-        )",
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| LbError::Database(format!("Failed to create archive FTS table: {}", e)))?;
-
-    sqlx::query(
-        "CREATE TRIGGER IF NOT EXISTS audit_log_fts_insert AFTER INSERT ON audit_log_entries BEGIN
-            INSERT INTO audit_log_fts(rowid, request_path, actor_id, actor_username, client_ip, detail)
-            VALUES (new.id, new.request_path, new.actor_id, new.actor_username, new.client_ip, new.detail);
-        END;",
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| {
-        LbError::Database(format!(
-            "Failed to create archive FTS insert trigger: {}",
-            e
-        ))
-    })?;
-
-    sqlx::query(
-        "CREATE TRIGGER IF NOT EXISTS audit_log_fts_delete AFTER DELETE ON audit_log_entries BEGIN
-            INSERT INTO audit_log_fts(audit_log_fts, rowid, request_path, actor_id, actor_username, client_ip, detail)
-            VALUES ('delete', old.id, old.request_path, old.actor_id, old.actor_username, old.client_ip, old.detail);
-        END;",
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| LbError::Database(format!("Failed to create archive FTS delete trigger: {}", e)))?;
-
-    Ok(pool)
-}
 
 /// 監査ログのDB CRUD操作
 #[derive(Clone)]
