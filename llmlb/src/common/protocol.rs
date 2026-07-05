@@ -8,58 +8,16 @@ use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use uuid::Uuid;
 
-use crate::types::media::{ImageQuality, ImageResponseFormat, ImageSize, ImageStyle};
-
 mod audio;
 pub use audio::*;
-
-/// LLM runtimeチャットリクエスト
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatRequest {
-    /// モデル名
-    pub model: String,
-    /// メッセージ配列
-    pub messages: Vec<ChatMessage>,
-    /// ストリーミング有効化
-    #[serde(default)]
-    pub stream: bool,
-}
-
-/// チャットメッセージ
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ChatMessage {
-    /// ロール ("user", "assistant", "system")
-    pub role: String,
-    /// メッセージ内容
-    pub content: String,
-}
-
-/// Chat Completionsリクエスト
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ChatCompletionRequest {
-    /// モデル名
-    pub model: String,
-    /// メッセージ配列
-    pub messages: Vec<ChatMessage>,
-    /// ストリーミング有効化
-    #[serde(default)]
-    pub stream: bool,
-    /// 最大トークン数
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<u32>,
-}
-
-/// Generateリクエスト
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenerateRequest {
-    /// モデル名
-    pub model: String,
-    /// プロンプト
-    pub prompt: String,
-    /// ストリーミング有効化
-    #[serde(default)]
-    pub stream: bool,
-}
+mod requests;
+pub use requests::*;
+mod tps;
+pub use tps::*;
+mod image;
+#[cfg(test)]
+use crate::types::media::{ImageQuality, ImageResponseFormat, ImageSize, ImageStyle};
+pub use image::*;
 
 /// リクエスト/レスポンスレコード
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,49 +90,6 @@ pub enum RequestType {
     ImageVariation,
 }
 
-/// TPS計測対象のAPI種別。
-///
-/// 比較可能性を担保するため、TPSは API 種別ごとに分離して集計する。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum TpsApiKind {
-    /// /v1/chat/completions
-    ChatCompletions,
-    /// /v1/completions
-    Completions,
-    /// /v1/responses
-    Responses,
-}
-
-impl TpsApiKind {
-    /// RequestType から TPS API 種別を解決する。
-    ///
-    /// テキスト生成系以外（embeddings/audio/images）は TPS対象外として None を返す。
-    pub fn from_request_type(request_type: RequestType) -> Option<Self> {
-        match request_type {
-            RequestType::AnthropicMessages | RequestType::Chat => Some(Self::ChatCompletions),
-            RequestType::Responses => Some(Self::Responses),
-            RequestType::Generate => Some(Self::Completions),
-            RequestType::Embeddings
-            | RequestType::Transcription
-            | RequestType::Speech
-            | RequestType::ImageGeneration
-            | RequestType::ImageEdit
-            | RequestType::ImageVariation => None,
-        }
-    }
-}
-
-/// TPSデータの取得元。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TpsSource {
-    /// 本番リクエスト由来
-    Production,
-    /// ベンチマーク実行由来
-    Benchmark,
-}
-
 /// レコードステータス
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -185,112 +100,6 @@ pub enum RecordStatus {
     Error {
         /// エラーメッセージ
         message: String,
-    },
-}
-
-/// 画像生成リクエスト (Text-to-Image)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ImageGenerationRequest {
-    /// モデル名 (例: "stable-diffusion-xl", "dall-e-3")
-    pub model: String,
-    /// 生成プロンプト
-    pub prompt: String,
-    /// 生成画像数 (1-10、デフォルト1)
-    #[serde(default = "default_image_n")]
-    pub n: u8,
-    /// 出力サイズ
-    #[serde(default)]
-    pub size: ImageSize,
-    /// 品質設定
-    #[serde(default)]
-    pub quality: ImageQuality,
-    /// スタイル
-    #[serde(default)]
-    pub style: ImageStyle,
-    /// レスポンスフォーマット
-    #[serde(default)]
-    pub response_format: ImageResponseFormat,
-    /// ネガティブプロンプト（SD拡張）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub negative_prompt: Option<String>,
-    /// シード値（再現性用）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed: Option<i64>,
-    /// 生成ステップ数（SD拡張、デフォルト: 20）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub steps: Option<u32>,
-}
-
-fn default_image_n() -> u8 {
-    1
-}
-
-/// 画像編集リクエスト (Inpainting)
-///
-/// multipart/form-dataとして送信されるため、画像データは別途処理
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ImageEditRequest {
-    /// モデル名
-    pub model: String,
-    /// 編集プロンプト
-    pub prompt: String,
-    /// 生成画像数 (1-10、デフォルト1)
-    #[serde(default = "default_image_n")]
-    pub n: u8,
-    /// 出力サイズ
-    #[serde(default)]
-    pub size: ImageSize,
-    /// レスポンスフォーマット
-    #[serde(default)]
-    pub response_format: ImageResponseFormat,
-}
-
-/// 画像バリエーションリクエスト
-///
-/// multipart/form-dataとして送信されるため、画像データは別途処理
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ImageVariationRequest {
-    /// モデル名
-    pub model: String,
-    /// 生成画像数 (1-10、デフォルト1)
-    #[serde(default = "default_image_n")]
-    pub n: u8,
-    /// 出力サイズ
-    #[serde(default)]
-    pub size: ImageSize,
-    /// レスポンスフォーマット
-    #[serde(default)]
-    pub response_format: ImageResponseFormat,
-}
-
-/// 画像レスポンス (generations/edits/variations共通)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ImageResponse {
-    /// 生成時刻 (Unix timestamp)
-    pub created: i64,
-    /// 生成された画像データ配列
-    pub data: Vec<ImageData>,
-}
-
-/// 画像データ
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum ImageData {
-    /// URL形式
-    Url {
-        /// 画像URL
-        url: String,
-        /// 改訂されたプロンプト（DALL-E 3等）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        revised_prompt: Option<String>,
-    },
-    /// Base64形式
-    Base64 {
-        /// Base64エンコードされた画像データ
-        b64_json: String,
-        /// 改訂されたプロンプト
-        #[serde(skip_serializing_if = "Option::is_none")]
-        revised_prompt: Option<String>,
     },
 }
 
