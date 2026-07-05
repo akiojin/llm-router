@@ -19,6 +19,12 @@ use crate::types::endpoint::EndpointType;
 
 mod builtin;
 pub use builtin::*;
+mod repo_id;
+pub use repo_id::*;
+mod context_length;
+pub use context_length::*;
+mod quantization;
+pub use quantization::*;
 
 fn model_id_eq(left: &str, right: &str) -> bool {
     left == right || left.eq_ignore_ascii_case(right)
@@ -398,92 +404,6 @@ pub fn build_canonical_maps<'a>(
     res
 }
 
-/// 量子化サフィックス（`:Q4_K_M` `:Q8_0` `:F16` 等）をモデル ID から分離する。
-///
-/// 戻り値は `(base_id, quantization)` のタプル。suffix が量子化タグに該当する場合は
-/// `:` の前後に分割し、そうでなければ元の `model_id` 全体を base として返す
-/// （`qwen3-coder:30b` のような Ollama 形式タグや `gemma3:latest` を誤検出しない）。
-///
-/// G-3 の暫定対応として、ID は当面互換性のため変更せず、量子化情報は新フィールド
-/// `quantization` として API レスポンスに別出しする。
-pub fn split_quantization_suffix(model_id: &str) -> (&str, Option<&str>) {
-    if let Some(idx) = model_id.rfind(':') {
-        let suffix = &model_id[idx + 1..];
-        if is_quantization_tag(suffix) {
-            return (&model_id[..idx], Some(suffix));
-        }
-    }
-    (model_id, None)
-}
-
-/// 与えられた文字列が GGUF / safetensors の量子化タグらしいかを判定する。
-///
-/// 認識する形式:
-/// - `Q[0-9]...`: `Q4_K_M`, `Q5_K_M`, `Q8_0` など（GGUF k-quants/legacy quants）
-/// - `IQ[0-9]...`: `IQ4_XS`, `IQ3_S` など（GGUF imatrix quants）
-/// - 浮動小数点フォーマット: `F16`, `F32`, `BF16`, `FP16`, `FP32`, `F8E4M3FN`, `F8E5M2`
-fn is_quantization_tag(s: &str) -> bool {
-    if matches!(
-        s,
-        "F16" | "F32" | "BF16" | "FP16" | "FP32" | "F8E4M3FN" | "F8E5M2"
-    ) {
-        return true;
-    }
-    let mut chars = s.chars();
-    match chars.next() {
-        Some('Q') => chars.next().is_some_and(|c| c.is_ascii_digit()),
-        Some('I') => chars.next() == Some('Q'),
-        _ => false,
-    }
-}
-
-/// 既知 canonical モデルのコンテキスト長フォールバックテーブル。
-///
-/// エンドポイントが `/v1/models` で `max_tokens` を申告しないケース（B-1, G-7）への対策として、
-/// 公開情報から確認できる代表的なモデルの context window をハードコードしている。
-/// エンドポイント申告が優先されるため、このテーブルはあくまで欠損値補填用。
-///
-/// 値の出典: 各モデルの HuggingFace モデルカード／公式リリースノート時点での公称 context length。
-const KNOWN_CONTEXT_LENGTHS: &[(&str, u32)] = &[
-    // OpenAI gpt-oss
-    ("openai/gpt-oss-20b", 131_072),
-    ("openai/gpt-oss-120b", 131_072),
-    // Qwen
-    ("Qwen/Qwen3-Coder-30B-A3B-Instruct", 262_144),
-    ("Qwen/Qwen3.5-35B-A3B", 262_144),
-    ("Qwen/Qwen2.5-14B-Instruct-AWQ", 32_768),
-    // Google Gemma
-    ("google/gemma-3-27b-it", 131_072),
-    ("google/gemma-4-26b-a4b", 131_072),
-    // GLM
-    ("zai-org/glm-4.7-flash", 131_072),
-    // Nvidia Nemotron
-    ("nvidia/nemotron-3-super-120b-a12b", 131_072),
-    ("nvidia/Nemotron-3-Nano", 131_072),
-    // Meta Llama
-    ("meta-llama/Llama-3.3-70B-Instruct", 131_072),
-    // Embeddings
-    ("nomic-ai/nomic-embed-text-v1.5", 8_192),
-];
-
-/// 既知 canonical の context length を返す（未登録なら `None`）。
-pub fn known_max_tokens(canonical: &str) -> Option<u32> {
-    KNOWN_CONTEXT_LENGTHS
-        .iter()
-        .find(|(name, _)| *name == canonical)
-        .map(|(_, len)| *len)
-}
-
-/// `max_tokens` をエンドポイント申告 → known テーブルの順に解決する。
-///
-/// 値の優先順位:
-/// 1. エンドポイントが申告した値（`endpoint_reported`）。
-/// 2. `KNOWN_CONTEXT_LENGTHS` のフォールバック値。
-/// 3. いずれも該当なし → `None`（API レスポンスでは `null` として表現）。
-pub fn resolve_max_tokens(canonical: &str, endpoint_reported: Option<u32>) -> Option<u32> {
-    endpoint_reported.or_else(|| known_max_tokens(canonical))
-}
-
 /// Resolve a canonical ID by matching against any known alias regardless of endpoint type.
 pub fn resolve_canonical_any(model_id: &str) -> Option<&'static str> {
     for mapping in BUILTIN_MAPPINGS {
@@ -499,66 +419,6 @@ pub fn resolve_canonical_any(model_id: &str) -> Option<&'static str> {
     }
 
     None
-}
-
-/// HuggingFace URLからrepo_idを抽出
-///
-/// 入力例:
-/// - "https://huggingface.co/openai/gpt-oss-20b" → "openai/gpt-oss-20b"
-/// - "http://huggingface.co/openai/gpt-oss-20b" → "openai/gpt-oss-20b"
-/// - "openai/gpt-oss-20b" → "openai/gpt-oss-20b" (そのまま)
-/// - "gpt-oss-20b" → "gpt-oss-20b" (そのまま)
-///
-/// 備考:
-/// - huggingface_hubのsnapshot_downloadはrepo_id形式（namespace/repo_name）を期待する
-/// - フルURLが渡された場合はrepo_id部分のみを抽出して返す
-///
-/// arch-review [L13]: registry 層にあった純粋 util を共有 util (models/mapping) へ移設し、
-/// アウトバウンドアダプタ(metadata)が registry へ逆依存する状態を解消した。
-pub fn extract_repo_id(input: &str) -> String {
-    // HuggingFace URLパターンを検出
-    let hf_patterns = [
-        "https://huggingface.co/",
-        "http://huggingface.co/",
-        "https://www.huggingface.co/",
-        "http://www.huggingface.co/",
-    ];
-
-    for pattern in hf_patterns {
-        if let Some(rest) = input.strip_prefix(pattern) {
-            // URLの残り部分からrepo_idを抽出
-            // "openai/gpt-oss-20b/tree/main" → "openai/gpt-oss-20b"
-            let parts: Vec<&str> = rest.split('/').collect();
-            if parts.len() >= 2 {
-                // namespace/repo_name を返す
-                return format!("{}/{}", parts[0], parts[1]);
-            } else if parts.len() == 1 && !parts[0].is_empty() {
-                return parts[0].to_string();
-            }
-        }
-    }
-
-    // HF_BASE_URL環境変数が設定されている場合、そのURLも考慮
-    if let Ok(base_url) = std::env::var("HF_BASE_URL") {
-        let base_url = base_url.trim_end_matches('/');
-        let patterns = [
-            format!("{}/", base_url),
-            format!("{}//", base_url.replace("https://", "http://")),
-        ];
-        for pattern in patterns {
-            if let Some(rest) = input.strip_prefix(&pattern) {
-                let parts: Vec<&str> = rest.split('/').collect();
-                if parts.len() >= 2 {
-                    return format!("{}/{}", parts[0], parts[1]);
-                } else if parts.len() == 1 && !parts[0].is_empty() {
-                    return parts[0].to_string();
-                }
-            }
-        }
-    }
-
-    // URLパターンに一致しない場合はそのまま返す
-    input.to_string()
 }
 
 #[cfg(test)]
