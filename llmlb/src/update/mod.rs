@@ -8,6 +8,7 @@
 //! - Update scheduling (immediate / idle / time-based)
 //! - Update history recording
 
+mod cache;
 mod download;
 mod dto;
 mod github;
@@ -19,6 +20,7 @@ mod platform;
 pub mod schedule;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod tray;
+use cache::{load_cache, save_cache, UpdateCacheFile};
 use download::{
     asset_name_from_url, download_to_path, extract_archive, find_extracted_binary, ProgressCallback,
 };
@@ -62,7 +64,6 @@ use crate::{inference_gate::InferenceGate, shutdown::ShutdownController};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use semver::Version;
-use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -85,15 +86,6 @@ const DEFAULT_LISTEN_PORT: u16 = 32768;
 const DEFAULT_OWNER: &str = "akiojin";
 const DEFAULT_REPO: &str = "llmlb";
 const DEFAULT_TTL: Duration = Duration::from_secs(60 * 60 * 24);
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct UpdateCacheFile {
-    last_checked_at: DateTime<Utc>,
-    latest_version: Option<String>,
-    release_url: Option<String>,
-    portable_asset_url: Option<String>,
-    installer_asset_url: Option<String>,
-}
 
 #[derive(Clone)]
 /// Self-update manager.
@@ -1329,25 +1321,6 @@ fn default_paths() -> Result<(PathBuf, PathBuf)> {
         }
     };
     Ok((data_dir.join("update-check.json"), data_dir.join("updates")))
-}
-
-fn load_cache(path: &Path) -> Result<Option<UpdateCacheFile>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(path)?;
-    let cache: UpdateCacheFile = serde_json::from_str(&content)?;
-    Ok(Some(cache))
-}
-
-fn save_cache(path: &Path, cache: UpdateCacheFile) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).ok();
-    }
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, serde_json::to_vec_pretty(&cache)?)?;
-    fs::rename(tmp, path)?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -2590,74 +2563,6 @@ mod tests {
     fn is_dir_writable_temp_dir() {
         let dir = tempfile::tempdir().unwrap();
         assert!(is_dir_writable(dir.path()).unwrap());
-    }
-
-    // =======================================================================
-    // load_cache / save_cache roundtrip
-    // =======================================================================
-    #[test]
-    fn cache_roundtrip() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache_path = dir.path().join("update-check.json");
-
-        // No cache initially
-        assert!(load_cache(&cache_path).unwrap().is_none());
-
-        let cache = UpdateCacheFile {
-            last_checked_at: Utc::now(),
-            latest_version: Some("5.0.0".to_string()),
-            release_url: Some("https://example.com/release".to_string()),
-            portable_asset_url: Some("https://example.com/portable.tar.gz".to_string()),
-            installer_asset_url: None,
-        };
-        save_cache(&cache_path, cache.clone()).unwrap();
-
-        let loaded = load_cache(&cache_path).unwrap().unwrap();
-        assert_eq!(loaded.latest_version, cache.latest_version);
-        assert_eq!(loaded.release_url, cache.release_url);
-        assert_eq!(loaded.portable_asset_url, cache.portable_asset_url);
-        assert_eq!(loaded.installer_asset_url, cache.installer_asset_url);
-    }
-
-    #[test]
-    fn load_cache_nonexistent_returns_none() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache_path = dir.path().join("nonexistent.json");
-        assert!(load_cache(&cache_path).unwrap().is_none());
-    }
-
-    #[test]
-    fn save_cache_creates_parent_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache_path = dir.path().join("subdir").join("nested").join("cache.json");
-
-        let cache = UpdateCacheFile {
-            last_checked_at: Utc::now(),
-            latest_version: None,
-            release_url: None,
-            portable_asset_url: None,
-            installer_asset_url: None,
-        };
-        save_cache(&cache_path, cache).unwrap();
-        assert!(cache_path.exists());
-    }
-
-    // =======================================================================
-    // UpdateCacheFile serialization
-    // =======================================================================
-    #[test]
-    fn update_cache_file_serialization() {
-        let cache = UpdateCacheFile {
-            last_checked_at: Utc::now(),
-            latest_version: Some("5.0.0".to_string()),
-            release_url: Some("https://example.com/release".to_string()),
-            portable_asset_url: None,
-            installer_asset_url: None,
-        };
-        let json = serde_json::to_string(&cache).unwrap();
-        let deserialized: UpdateCacheFile = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.latest_version, cache.latest_version);
-        assert_eq!(deserialized.release_url, cache.release_url);
     }
 
     // =======================================================================
