@@ -30,6 +30,10 @@ use tracing::warn;
 use uuid::Uuid;
 
 mod overview;
+mod token_stats;
+pub use token_stats::*;
+mod endpoint_stats;
+pub use endpoint_stats::*;
 use overview::*;
 
 /// エンドポイントのダッシュボード表示用サマリー
@@ -274,128 +278,6 @@ pub async fn get_node_metrics(
 ) -> Result<Json<Vec<HealthMetrics>>, AppError> {
     let history = state.load_manager.metrics_history(endpoint_id).await?;
     Ok(Json(history))
-}
-
-/// GET /api/dashboard/stats/tokens - トークン統計取得
-///
-/// NOTE: request_history廃止完了まで request_history を集計元として扱う
-pub async fn get_token_stats(
-    State(state): State<AppState>,
-) -> Result<Json<crate::db::request_history::HistoryTokenStatistics>, AppError> {
-    let stats = state
-        .request_history
-        .get_token_statistics()
-        .await
-        .map_err(AppError::from)?;
-    Ok(Json(stats))
-}
-
-/// 日次トークン統計クエリパラメータ
-#[derive(Debug, Clone, Deserialize)]
-pub struct DailyTokenStatsQuery {
-    /// 取得する日数（デフォルト: 30）
-    #[serde(default = "default_days")]
-    pub days: Option<u32>,
-}
-
-fn default_days() -> Option<u32> {
-    Some(30)
-}
-
-/// 日次トークン統計レスポンス
-#[derive(Debug, Clone, Serialize)]
-pub struct DailyTokenStats {
-    /// 日付（YYYY-MM-DD形式）
-    pub date: String,
-    /// 入力トークン合計
-    pub total_input_tokens: u64,
-    /// 出力トークン合計
-    pub total_output_tokens: u64,
-    /// 総トークン合計
-    pub total_tokens: u64,
-    /// リクエスト数
-    pub request_count: u64,
-}
-
-/// GET /api/dashboard/stats/tokens/daily - 日次トークン統計取得
-///
-/// NOTE: request_history廃止完了まで request_history を集計元として扱う
-pub async fn get_daily_token_stats(
-    State(state): State<AppState>,
-    Query(query): Query<DailyTokenStatsQuery>,
-) -> Result<Json<Vec<DailyTokenStats>>, AppError> {
-    let days = query.days.unwrap_or(30);
-    let stats = state
-        .request_history
-        .get_daily_token_statistics(days)
-        .await
-        .map_err(AppError::from)?;
-    Ok(Json(
-        stats
-            .into_iter()
-            .map(|s| DailyTokenStats {
-                date: s.date,
-                total_input_tokens: s.total_input_tokens,
-                total_output_tokens: s.total_output_tokens,
-                total_tokens: s.total_tokens,
-                request_count: s.request_count,
-            })
-            .collect(),
-    ))
-}
-
-/// 月次トークン統計クエリパラメータ
-#[derive(Debug, Clone, Deserialize)]
-pub struct MonthlyTokenStatsQuery {
-    /// 取得する月数（デフォルト: 12）
-    #[serde(default = "default_months")]
-    pub months: Option<u32>,
-}
-
-fn default_months() -> Option<u32> {
-    Some(12)
-}
-
-/// 月次トークン統計レスポンス
-#[derive(Debug, Clone, Serialize)]
-pub struct MonthlyTokenStats {
-    /// 月（YYYY-MM形式）
-    pub month: String,
-    /// 入力トークン合計
-    pub total_input_tokens: u64,
-    /// 出力トークン合計
-    pub total_output_tokens: u64,
-    /// 総トークン合計
-    pub total_tokens: u64,
-    /// リクエスト数
-    pub request_count: u64,
-}
-
-/// GET /api/dashboard/stats/tokens/monthly - 月次トークン統計取得
-///
-/// NOTE: request_history廃止完了まで request_history を集計元として扱う
-pub async fn get_monthly_token_stats(
-    State(state): State<AppState>,
-    Query(query): Query<MonthlyTokenStatsQuery>,
-) -> Result<Json<Vec<MonthlyTokenStats>>, AppError> {
-    let months = query.months.unwrap_or(12);
-    let stats = state
-        .request_history
-        .get_monthly_token_statistics(months)
-        .await
-        .map_err(AppError::from)?;
-    Ok(Json(
-        stats
-            .into_iter()
-            .map(|s| MonthlyTokenStats {
-                month: s.month,
-                total_input_tokens: s.total_input_tokens,
-                total_output_tokens: s.total_output_tokens,
-                total_tokens: s.total_tokens,
-                request_count: s.request_count,
-            })
-            .collect(),
-    ))
 }
 
 /// 許可されたページサイズ
@@ -787,68 +669,6 @@ pub async fn export_request_responses(
     }
 }
 
-/// GET /api/endpoints/{id}/today-stats - 当日リクエスト統計
-///
-/// SPEC-8c32349f: エンドポイント単位リクエスト統計 (Phase 5)
-pub async fn get_endpoint_today_stats(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-) -> Result<Json<crate::db::endpoint_daily_stats::DailyStatEntry>, AppError> {
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let stats = crate::db::endpoint_daily_stats::get_today_stats(&state.db_pool, id, &today)
-        .await
-        .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
-    Ok(Json(stats))
-}
-
-/// GET /api/endpoints/{id}/daily-stats - 日次リクエスト統計
-///
-/// SPEC-8c32349f: エンドポイント単位リクエスト統計 (Phase 6)
-pub async fn get_endpoint_daily_stats(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-    Query(query): Query<EndpointDailyStatsQuery>,
-) -> Result<Json<Vec<crate::db::endpoint_daily_stats::DailyStatEntry>>, AppError> {
-    let days = query.days.unwrap_or(7).min(365);
-    let stats = crate::db::endpoint_daily_stats::get_daily_stats(&state.db_pool, id, days)
-        .await
-        .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
-    Ok(Json(stats))
-}
-
-/// エンドポイント日次統計クエリパラメータ
-#[derive(Debug, Clone, Deserialize)]
-pub struct EndpointDailyStatsQuery {
-    /// 取得する日数（デフォルト: 7、最大: 365）
-    #[serde(default)]
-    pub days: Option<u32>,
-}
-
-/// GET /api/endpoints/{id}/model-stats - モデル別リクエスト統計
-///
-/// SPEC-8c32349f: エンドポイント単位リクエスト統計 (Phase 7)
-pub async fn get_endpoint_model_stats(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-) -> Result<Json<Vec<crate::db::endpoint_daily_stats::ModelStatEntry>>, AppError> {
-    let stats = crate::db::endpoint_daily_stats::get_model_stats(&state.db_pool, id)
-        .await
-        .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
-    Ok(Json(stats))
-}
-
-/// GET /api/dashboard/all-model-stats - 全エンドポイント横断のモデル別統計
-///
-/// SPEC-8c32349f: ダッシュボード向けモデル別集計
-pub async fn get_all_model_stats(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<crate::db::endpoint_daily_stats::ModelStatEntry>>, AppError> {
-    let stats = crate::db::endpoint_daily_stats::get_all_model_stats(&state.db_pool)
-        .await
-        .map_err(|e| AppError(crate::common::error::LbError::Database(e.to_string())))?;
-    Ok(Json(stats))
-}
-
 /// ダッシュボードモデル一覧の表示モード（US-029）。
 ///
 /// - `canonical`（既定）: 論理モデル単位に集約した Canonical 表示
@@ -1097,49 +917,6 @@ pub async fn get_models(
     });
 
     Ok((StatusCode::OK, Json(body)).into_response())
-}
-
-/// エンドポイント×モデル単位のTPS情報（SPEC-4bb5b55f）
-#[derive(Debug, Clone, Serialize)]
-pub struct ModelTpsEntry {
-    /// モデルID
-    pub model_id: String,
-    /// API種別（chat/completions/responses）
-    pub api_kind: crate::common::protocol::TpsApiKind,
-    /// 計測元（production / benchmark）
-    pub source: crate::common::protocol::TpsSource,
-    /// EMA平滑化されたTPS値（None=未計測）
-    pub tps: Option<f64>,
-    /// リクエスト完了数
-    pub request_count: u64,
-    /// 出力トークン累計
-    pub total_output_tokens: u64,
-    /// 平均処理時間（ミリ秒、None=未計測）
-    pub average_duration_ms: Option<f64>,
-}
-
-/// GET /api/endpoints/{id}/model-tps - エンドポイント×モデル単位のTPS情報
-///
-/// SPEC-4bb5b55f: エンドポイント×モデル単位TPS可視化 (Phase 3)
-pub async fn get_endpoint_model_tps(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-) -> Json<Vec<ModelTpsEntry>> {
-    let tps_list = state.load_manager.get_model_tps(id).await;
-    Json(
-        tps_list
-            .into_iter()
-            .map(|info| ModelTpsEntry {
-                model_id: info.model_id,
-                api_kind: info.api_kind,
-                source: info.source,
-                tps: info.tps,
-                request_count: info.request_count,
-                total_output_tokens: info.total_output_tokens,
-                average_duration_ms: info.average_duration_ms,
-            })
-            .collect(),
-    )
 }
 
 /// Clientsランキングのクエリパラメータ
