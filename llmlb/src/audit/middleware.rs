@@ -3,7 +3,9 @@
 //! 全HTTPリクエストのメタデータを自動記録する。
 //! WebSocket・静的アセット・ヘルスチェック等のノイズパスは除外。
 
-use crate::audit::types::{ActorType, AuditLogEntry, AuthFailureInfo, TokenUsage};
+#[cfg(test)]
+use crate::audit::types::ActorType;
+use crate::audit::types::{AuditLogEntry, AuthFailureInfo, TokenUsage};
 use crate::auth::middleware::ApiKeyAuthContext;
 use crate::common::auth::Claims;
 use crate::AppState;
@@ -18,31 +20,10 @@ use chrono::Utc;
 use std::{net::SocketAddr, time::Instant};
 use tracing::trace;
 
-/// 監査対象から除外すべきパスか判定する
-fn should_exclude(path: &str) -> bool {
-    // WebSocket
-    if path.starts_with("/ws/") || path == "/ws" {
-        return true;
-    }
-    // ヘルスチェック
-    if path == "/health" {
-        return true;
-    }
-    // 静的アセット（ダッシュボード配下の拡張子付きファイル）
-    if path.starts_with("/dashboard/") {
-        let extensions = [
-            ".js", ".css", ".png", ".jpg", ".svg", ".ico", ".woff", ".woff2", ".map",
-        ];
-        if extensions.iter().any(|ext| path.ends_with(ext)) {
-            return true;
-        }
-    }
-    // ダッシュボードSSEポーリング
-    if path == "/api/dashboard/events" {
-        return true;
-    }
-    false
-}
+mod actor;
+use actor::{extract_actor_info, extract_actor_info_from};
+mod exclusion;
+use exclusion::should_exclude;
 
 /// 監査ログミドルウェア
 ///
@@ -185,56 +166,6 @@ impl AuditActorSlot {
     fn snapshot(&self) -> AuditActorSnapshot {
         self.0.lock().map(|s| s.clone()).unwrap_or_default()
     }
-}
-
-/// Claims / ApiKeyAuthContext からアクター情報を抽出する（ソース非依存）。
-fn extract_actor_info_from(
-    claims: Option<&Claims>,
-    api_ctx: Option<&ApiKeyAuthContext>,
-) -> (ActorType, Option<String>, Option<String>, Option<String>) {
-    // JWT認証済み（Claims）
-    if let Some(claims) = claims {
-        // APIキー認証の場合はApiKeyAuthContextも存在する
-        if let Some(api_ctx) = api_ctx {
-            return (
-                ActorType::ApiKey,
-                Some(api_ctx.id.to_string()),
-                None,
-                Some(api_ctx.created_by.to_string()),
-            );
-        }
-        return (
-            ActorType::User,
-            Some(claims.sub.clone()),
-            // arch-review [L8]: JWT に載せたユーザー名を actor_username として使用する。
-            claims.username.clone(),
-            None,
-        );
-    }
-
-    // APIキー認証のみ（Claimsなし）
-    if let Some(api_ctx) = api_ctx {
-        return (
-            ActorType::ApiKey,
-            Some(api_ctx.id.to_string()),
-            None,
-            Some(api_ctx.created_by.to_string()),
-        );
-    }
-
-    // 認証なし
-    (ActorType::Anonymous, None, None, None)
-}
-
-/// response extensions からアクター情報を抽出する（fallback / テスト互換）。
-fn extract_actor_info(
-    response: &Response,
-) -> (ActorType, Option<String>, Option<String>, Option<String>) {
-    let extensions = response.extensions();
-    extract_actor_info_from(
-        extensions.get::<Claims>(),
-        extensions.get::<ApiKeyAuthContext>(),
-    )
 }
 
 #[cfg(test)]
