@@ -4,11 +4,14 @@ use crate::common::auth::{ApiKey, ApiKeyPermission, ApiKeyWithPlaintext};
 use crate::common::error::{CommonError, LbError};
 use chrono::{DateTime, Utc};
 use rand::RngExt;
-use serde_json;
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
-use tracing::warn;
 use uuid::Uuid;
+
+mod rowmap;
+#[cfg(test)]
+use rowmap::parse_permissions;
+use rowmap::{serialize_permissions, ApiKeyRow};
 
 const DUPLICATE_NAME_VALIDATION_MSG: &str = "API key with this name already exists";
 
@@ -328,92 +331,6 @@ fn hash_with_sha256(input: &str) -> String {
     hasher.update(input.as_bytes());
     let result = hasher.finalize();
     result.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-// SQLiteからの行取得用の内部型
-#[derive(sqlx::FromRow)]
-struct ApiKeyRow {
-    id: String,
-    key_hash: String,
-    key_prefix: Option<String>,
-    name: String,
-    created_by: String,
-    created_at: String,
-    expires_at: Option<String>,
-    permissions: Option<String>,
-}
-
-impl ApiKeyRow {
-    /// DB行を `ApiKey` へ変換する。
-    ///
-    /// 認証ホットパス（`find_by_hash`）からも呼ばれるため、不正な行データで
-    /// panic させず `LbError` を返す。`expires_at` のパース失敗のみ無期限扱いで
-    /// 緩和する（致命的でないため）。
-    fn into_api_key(self) -> Result<ApiKey, LbError> {
-        let id = Uuid::parse_str(&self.id)
-            .map_err(|e| LbError::Database(format!("Invalid API key id '{}': {}", self.id, e)))?;
-        let created_by = Uuid::parse_str(&self.created_by).map_err(|e| {
-            LbError::Database(format!(
-                "Invalid API key created_by '{}': {}",
-                self.created_by, e
-            ))
-        })?;
-        let created_at = DateTime::parse_from_rfc3339(&self.created_at)
-            .map_err(|e| {
-                LbError::Database(format!(
-                    "Invalid API key created_at '{}': {}",
-                    self.created_at, e
-                ))
-            })?
-            .with_timezone(&Utc);
-        let expires_at = self.expires_at.as_ref().and_then(|s| {
-            DateTime::parse_from_rfc3339(s)
-                .ok()
-                .map(|dt| dt.with_timezone(&Utc))
-        });
-
-        let permissions = parse_permissions(self.permissions);
-
-        Ok(ApiKey {
-            id,
-            key_hash: self.key_hash,
-            key_prefix: self.key_prefix,
-            name: self.name,
-            created_by,
-            created_at,
-            expires_at,
-            permissions,
-        })
-    }
-}
-
-fn parse_permissions(permissions: Option<String>) -> Vec<ApiKeyPermission> {
-    match permissions {
-        None => {
-            // Migration should backfill, but be safe: default-deny.
-            warn!("API key permissions are NULL; treating as no permissions");
-            Vec::new()
-        }
-        Some(raw) if raw.trim().is_empty() => {
-            warn!("API key permissions are empty; treating as no permissions");
-            Vec::new()
-        }
-        Some(raw) => match serde_json::from_str::<Vec<ApiKeyPermission>>(&raw) {
-            Ok(permissions) => permissions,
-            Err(err) => {
-                warn!(
-                    "Failed to parse API key permissions JSON; treating as no permissions: {}",
-                    err
-                );
-                Vec::new()
-            }
-        },
-    }
-}
-
-fn serialize_permissions(permissions: &[ApiKeyPermission]) -> Result<String, LbError> {
-    serde_json::to_string(permissions)
-        .map_err(|e| LbError::Database(format!("Failed to serialize permissions: {}", e)))
 }
 
 fn is_duplicate_name_violation(err: &sqlx::Error) -> bool {
