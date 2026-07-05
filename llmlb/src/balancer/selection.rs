@@ -8,7 +8,9 @@
 use super::LoadManager;
 use crate::common::error::{LbError, RouterResult};
 use crate::common::protocol::TpsApiKind;
+use std::collections::HashMap;
 use std::sync::atomic::Ordering as AtomicOrdering;
+use uuid::Uuid;
 
 impl LoadManager {
     async fn collect_online_endpoints(
@@ -103,4 +105,135 @@ impl LoadManager {
 
         Ok(endpoints[index].clone())
     }
+    async fn compute_endpoint_tps_scores(
+        &self,
+        endpoints: &[crate::types::endpoint::Endpoint],
+        model_id: Option<&str>,
+        api_kind: Option<TpsApiKind>,
+    ) -> HashMap<Uuid, f64> {
+        let tracker = self.tps_tracker.read().await;
+        let mut scores = HashMap::with_capacity(endpoints.len());
+
+        for endpoint in endpoints {
+            let score = if let Some(model_id) = model_id {
+                let Some(api_kind) = api_kind else {
+                    scores.insert(endpoint.id, 0.0);
+                    continue;
+                };
+
+                tracker
+                    .iter()
+                    .filter(|((eid, mid, kind), _)| {
+                        *eid == endpoint.id && mid == model_id && *kind == api_kind
+                    })
+                    .filter_map(|(_, state)| state.tps_ema)
+                    .fold(0.0, f64::max)
+            } else {
+                let (total_tokens, total_duration_ms) = tracker
+                    .iter()
+                    .filter(|((eid, _, kind), _)| {
+                        *eid == endpoint.id && api_kind.is_none_or(|expected| *kind == expected)
+                    })
+                    .fold((0u64, 0u64), |(tokens, duration), (_, state)| {
+                        (
+                            tokens.saturating_add(state.total_output_tokens),
+                            duration.saturating_add(state.total_duration_ms),
+                        )
+                    });
+
+                if total_duration_ms > 0 {
+                    total_tokens as f64 / (total_duration_ms as f64 / 1000.0)
+                } else {
+                    0.0
+                }
+            };
+
+            scores.insert(endpoint.id, score);
+        }
+
+        scores
+    }
+
+    async fn select_endpoint_by_tps_from_endpoints(
+        &self,
+        endpoints: Vec<crate::types::endpoint::Endpoint>,
+        model_id: Option<&str>,
+        api_kind: Option<TpsApiKind>,
+    ) -> RouterResult<crate::types::endpoint::Endpoint> {
+        if endpoints.is_empty() {
+            return Err(match model_id {
+                Some(model_id) => LbError::NoCapableEndpoints(model_id.to_string()),
+                None => LbError::NoEndpointsAvailable,
+            });
+        }
+
+        let candidates: Vec<_> = {
+            let state = self.state.read().await;
+            endpoints
+                .into_iter()
+                .filter(|ep| {
+                    state
+                        .get(&ep.id)
+                        .map(|load| !load.initializing)
+                        .unwrap_or(true)
+                })
+                .collect()
+        };
+
+        if candidates.is_empty() {
+            return Err(LbError::NoEndpointsAvailable);
+        }
+
+        let scores = self
+            .compute_endpoint_tps_scores(&candidates, model_id, api_kind)
+            .await;
+        let round_robin_cursor = self.round_robin.fetch_add(1, AtomicOrdering::SeqCst);
+        let round_robin_start = round_robin_cursor % candidates.len().max(1);
+        let round_robin_priority =
+            compute_round_robin_priority_for_endpoints(&candidates, round_robin_start);
+
+        let mut ordered = candidates;
+        ordered.sort_by(|a, b| {
+            let a_score = scores.get(&a.id).copied().unwrap_or(0.0);
+            let b_score = scores.get(&b.id).copied().unwrap_or(0.0);
+
+            b_score
+                .partial_cmp(&a_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    let a_rank = round_robin_priority
+                        .get(&a.id)
+                        .copied()
+                        .unwrap_or(usize::MAX);
+                    let b_rank = round_robin_priority
+                        .get(&b.id)
+                        .copied()
+                        .unwrap_or(usize::MAX);
+                    a_rank.cmp(&b_rank)
+                })
+        });
+
+        Ok(ordered
+            .into_iter()
+            .next()
+            .expect("candidates checked as non-empty"))
+    }
+}
+
+pub(crate) fn compute_round_robin_priority_for_endpoints(
+    endpoints: &[crate::types::endpoint::Endpoint],
+    start_index: usize,
+) -> HashMap<Uuid, usize> {
+    let len = endpoints.len();
+    let mut priority = HashMap::with_capacity(len);
+    if len == 0 {
+        return priority;
+    }
+
+    for offset in 0..len {
+        let idx = (start_index + offset) % len;
+        priority.insert(endpoints[idx].id, offset);
+    }
+
+    priority
 }
