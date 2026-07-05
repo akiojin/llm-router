@@ -7,40 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
 
-/// デバイスタイプ（SPEC-f8e3a1b7）
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum DeviceType {
-    /// CPU推論
-    #[default]
-    Cpu,
-    /// GPU推論
-    Gpu,
-}
+mod device;
+pub use device::*;
+mod download;
+pub use download::{DownloadStatus, ModelDownloadTask};
 
-/// デバイス情報（SPEC-f8e3a1b7）
-///
-/// /api/system APIから取得したデバイス情報を格納
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DeviceInfo {
-    /// デバイスタイプ（CPU/GPU）
-    pub device_type: DeviceType,
-    /// GPUデバイス情報（GPU推論の場合のみ）
-    #[serde(default)]
-    pub gpu_devices: Vec<GpuDevice>,
-}
-
-/// GPU デバイス情報（SPEC-f8e3a1b7）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GpuDevice {
-    /// デバイス名（例: "NVIDIA RTX 4090"）
-    pub name: String,
-    /// 総メモリ（バイト）
-    pub total_memory_bytes: u64,
-    /// 使用中メモリ（バイト）
-    #[serde(default)]
-    pub used_memory_bytes: u64,
-}
 
 /// モデルがサポートするAPI種別（SPEC-0f1de549）
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -249,56 +220,6 @@ impl std::fmt::Display for EndpointType {
     }
 }
 
-/// ダウンロードタスクの状態（SPEC-e8e9326e追加要件 2026-01-26）
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum DownloadStatus {
-    /// 待機中
-    #[default]
-    Pending,
-    /// ダウンロード中
-    Downloading,
-    /// 完了
-    Completed,
-    /// 失敗
-    Failed,
-    /// キャンセル
-    Cancelled,
-}
-
-impl DownloadStatus {
-    /// DownloadStatusを文字列に変換
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Downloading => "downloading",
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
-}
-
-impl FromStr for DownloadStatus {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "pending" => Self::Pending,
-            "downloading" => Self::Downloading,
-            "completed" => Self::Completed,
-            "failed" => Self::Failed,
-            "cancelled" => Self::Cancelled,
-            _ => Self::Pending,
-        })
-    }
-}
-
-impl std::fmt::Display for DownloadStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
 
 /// エンドポイントの機能タイプ
 ///
@@ -508,60 +429,6 @@ impl EndpointModel {
 }
 
 /// モデルダウンロードタスク（SPEC-e8e9326e追加要件 2026-01-26）
-///
-/// xLLMエンドポイント専用のモデルダウンロード進捗管理
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelDownloadTask {
-    /// タスク識別子
-    pub id: String,
-    /// エンドポイントID
-    pub endpoint_id: Uuid,
-    /// モデル名（例: "llama-3.2-1b"）
-    pub model: String,
-    /// ダウンロード中のファイル名
-    pub filename: Option<String>,
-    /// ダウンロード状態
-    pub status: DownloadStatus,
-    /// 進捗率（0.0 〜 1.0）
-    pub progress: f64,
-    /// ダウンロード速度（Mbps）
-    pub speed_mbps: Option<f64>,
-    /// 残り時間（秒）
-    pub eta_seconds: Option<u32>,
-    /// エラーメッセージ（失敗時のみ）
-    pub error_message: Option<String>,
-    /// 開始時刻
-    pub started_at: DateTime<Utc>,
-    /// 完了時刻
-    pub completed_at: Option<DateTime<Utc>>,
-}
-
-impl ModelDownloadTask {
-    /// 新しいダウンロードタスクを作成
-    pub fn new(endpoint_id: Uuid, model: String) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            endpoint_id,
-            model,
-            filename: None,
-            status: DownloadStatus::Pending,
-            progress: 0.0,
-            speed_mbps: None,
-            eta_seconds: None,
-            error_message: None,
-            started_at: Utc::now(),
-            completed_at: None,
-        }
-    }
-
-    /// ダウンロード完了かどうか
-    pub fn is_finished(&self) -> bool {
-        matches!(
-            self.status,
-            DownloadStatus::Completed | DownloadStatus::Failed | DownloadStatus::Cancelled
-        )
-    }
-}
 
 /// ヘルスチェック履歴
 #[derive(Debug, Clone, Serialize, Deserialize)]
