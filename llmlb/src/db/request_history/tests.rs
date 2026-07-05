@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::common::protocol::RequestType;
 use serial_test::serial;

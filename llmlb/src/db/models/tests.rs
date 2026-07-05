@@ -1,4 +1,3 @@
-
 use super::*;
 
 async fn create_test_pool() -> SqlitePool {

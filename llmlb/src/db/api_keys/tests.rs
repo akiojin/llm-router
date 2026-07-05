@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::common::auth::UserRole;
 use crate::db::users;

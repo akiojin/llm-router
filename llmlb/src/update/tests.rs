@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn available_state_with_payload(payload: PayloadState) -> UpdateState {
