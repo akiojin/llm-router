@@ -14,6 +14,7 @@ mod github;
 pub mod history;
 #[cfg(target_os = "macos")]
 mod macos_installer;
+mod platform;
 pub mod schedule;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod tray;
@@ -21,9 +22,12 @@ use download::{
     asset_name_from_url, download_to_path, extract_archive, find_extracted_binary, ProgressCallback,
 };
 pub use dto::*;
-use github::{fetch_latest_release, parse_tag_to_version, GitHubAsset, GitHubRelease};
+use github::{fetch_latest_release, parse_tag_to_version};
+#[cfg(test)]
+use github::{GitHubAsset, GitHubRelease};
 #[cfg(target_os = "macos")]
 use macos_installer::run_macos_pkg_installer_with_privileges;
+use platform::{choose_apply_plan, is_dir_writable, select_assets, ApplyPlan, Platform};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tray::{notify_tray_available, notify_tray_failed, notify_tray_ready, notify_tray_up_to_date};
 
@@ -1337,144 +1341,6 @@ fn save_cache(path: &Path, cache: UpdateCacheFile) -> Result<()> {
     fs::write(&tmp, serde_json::to_vec_pretty(&cache)?)?;
     fs::rename(tmp, path)?;
     Ok(())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Platform {
-    os: String,
-    arch: String,
-}
-
-impl Platform {
-    fn detect() -> Result<Self> {
-        Ok(Self {
-            os: std::env::consts::OS.to_string(),
-            arch: std::env::consts::ARCH.to_string(),
-        })
-    }
-
-    fn artifact(&self) -> Option<&'static str> {
-        match (self.os.as_str(), self.arch.as_str()) {
-            ("linux", "x86_64") => Some("linux-x86_64"),
-            ("linux", "aarch64") => Some("linux-arm64"),
-            ("macos", "x86_64") => Some("macos-x86_64"),
-            ("macos", "aarch64") => Some("macos-arm64"),
-            ("windows", "x86_64") => Some("windows-x86_64"),
-            _ => None,
-        }
-    }
-
-    fn binary_name(&self) -> String {
-        if self.os == "windows" {
-            "llmlb.exe".to_string()
-        } else {
-            "llmlb".to_string()
-        }
-    }
-
-    fn portable_asset_name(&self) -> Option<String> {
-        self.artifact().map(|a| {
-            if self.os == "windows" {
-                format!("llmlb-{a}.zip")
-            } else {
-                format!("llmlb-{a}.tar.gz")
-            }
-        })
-    }
-
-    fn installer_asset_name(&self) -> Option<(String, InstallerKind)> {
-        let artifact = self.artifact()?;
-        match self.os.as_str() {
-            "macos" => Some((format!("llmlb-{artifact}.pkg"), InstallerKind::MacPkg)),
-            "windows" => Some((
-                format!("llmlb-{artifact}-setup.exe"),
-                InstallerKind::WindowsSetup,
-            )),
-            _ => None,
-        }
-    }
-}
-
-fn select_assets(
-    release: &GitHubRelease,
-    platform: &Platform,
-) -> (Option<GitHubAsset>, Option<GitHubAsset>) {
-    let portable_name = platform.portable_asset_name();
-    let installer = platform.installer_asset_name();
-
-    let portable_asset =
-        portable_name.and_then(|name| release.assets.iter().find(|a| a.name == name).cloned());
-
-    let installer_asset =
-        installer.and_then(|(name, _kind)| release.assets.iter().find(|a| a.name == name).cloned());
-
-    (portable_asset, installer_asset)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ApplyPlan {
-    Portable { url: String },
-    Installer { url: String, kind: InstallerKind },
-}
-
-fn choose_apply_plan(
-    platform: &Platform,
-    current_exe: &Path,
-    portable_url: Option<&str>,
-    installer_url: Option<&str>,
-) -> Option<ApplyPlan> {
-    let dir = current_exe.parent().unwrap_or_else(|| Path::new("."));
-    let writable = is_dir_writable(dir).unwrap_or(false);
-
-    // If we cannot replace the current executable in-place, prefer installer when available.
-    if !writable {
-        if let Some(url) = installer_url {
-            let kind = platform.installer_asset_name().map(|(_, k)| k)?;
-            return Some(ApplyPlan::Installer {
-                url: url.to_string(),
-                kind,
-            });
-        }
-        // No installer available and we cannot replace in-place.
-        return None;
-    }
-
-    if let Some(url) = portable_url {
-        return Some(ApplyPlan::Portable {
-            url: url.to_string(),
-        });
-    }
-
-    if let Some(url) = installer_url {
-        let kind = platform.installer_asset_name().map(|(_, k)| k)?;
-        return Some(ApplyPlan::Installer {
-            url: url.to_string(),
-            kind,
-        });
-    }
-
-    None
-}
-
-fn is_dir_writable(dir: &Path) -> Result<bool> {
-    fs::create_dir_all(dir).ok();
-    let probe = dir.join(".llmlb_write_probe");
-    let result = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&probe)
-        .map(|_| true)
-        .or_else(|e| {
-            if matches!(e.kind(), io::ErrorKind::PermissionDenied) {
-                Ok(false)
-            } else {
-                Err(e)
-            }
-        })?;
-    if result {
-        let _ = fs::remove_file(&probe);
-    }
-    Ok(result)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
