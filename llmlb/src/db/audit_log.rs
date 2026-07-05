@@ -3,6 +3,8 @@
 /// アーカイブ処理（別DBへの移送・検索）は archive submodule に分離（arch-review [C3]）
 mod archive;
 pub use archive::create_archive_pool;
+mod batch_hash;
+pub(crate) use batch_hash::AuditBatchHashRow;
 mod statistics;
 pub use statistics::{
     DailyTokenStatistics, ModelTokenStatistics, MonthlyTokenStatistics, TokenStatistics,
@@ -50,41 +52,6 @@ pub(super) const AUDIT_LOG_SELECT_COLUMNS: &str = "id, timestamp, http_method, r
      status_code, actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
      duration_ms, input_tokens, output_tokens, total_tokens, model_name, endpoint_id, \
      detail, batch_id, is_migrated";
-
-/// sqlx::FromRow用の行構造体（バッチハッシュ）
-#[derive(Debug, sqlx::FromRow)]
-struct AuditBatchHashRow {
-    id: i64,
-    sequence_number: i64,
-    batch_start: String,
-    batch_end: String,
-    record_count: i64,
-    hash: String,
-    previous_hash: String,
-}
-
-impl TryFrom<AuditBatchHashRow> for AuditBatchHash {
-    type Error = LbError;
-
-    fn try_from(row: AuditBatchHashRow) -> Result<Self, Self::Error> {
-        let batch_start = chrono::DateTime::parse_from_rfc3339(&row.batch_start)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .map_err(|e| LbError::Database(format!("Failed to parse batch_start: {}", e)))?;
-        let batch_end = chrono::DateTime::parse_from_rfc3339(&row.batch_end)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .map_err(|e| LbError::Database(format!("Failed to parse batch_end: {}", e)))?;
-
-        Ok(AuditBatchHash {
-            id: Some(row.id),
-            sequence_number: row.sequence_number,
-            batch_start,
-            batch_end,
-            record_count: row.record_count,
-            hash: row.hash,
-            previous_hash: row.previous_hash,
-        })
-    }
-}
 
 impl TryFrom<AuditLogRow> for AuditLogEntry {
     type Error = LbError;
@@ -245,62 +212,6 @@ impl AuditLogStorage {
 
         match row {
             Some(r) => Ok(Some(AuditLogEntry::try_from(r)?)),
-            None => Ok(None),
-        }
-    }
-
-    /// バッチハッシュを挿入してIDを返す
-    pub async fn insert_batch_hash(&self, batch: &AuditBatchHash) -> RouterResult<i64> {
-        let batch_start_str = batch.batch_start.to_rfc3339();
-        let batch_end_str = batch.batch_end.to_rfc3339();
-
-        let result = sqlx::query(
-            r#"INSERT INTO audit_batch_hashes (
-                sequence_number, batch_start, batch_end, record_count, hash, previous_hash
-            ) VALUES (?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(batch.sequence_number)
-        .bind(&batch_start_str)
-        .bind(&batch_end_str)
-        .bind(batch.record_count)
-        .bind(&batch.hash)
-        .bind(&batch.previous_hash)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to insert batch hash: {}", e)))?;
-
-        Ok(result.last_insert_rowid())
-    }
-
-    /// 全バッチハッシュを連番順で取得
-    pub async fn get_all_batch_hashes(&self) -> RouterResult<Vec<AuditBatchHash>> {
-        let rows = sqlx::query_as::<_, AuditBatchHashRow>(
-            "SELECT id, sequence_number, batch_start, batch_end, \
-             record_count, hash, previous_hash \
-             FROM audit_batch_hashes ORDER BY sequence_number ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to get batch hashes: {}", e)))?;
-
-        rows.into_iter()
-            .map(AuditBatchHash::try_from)
-            .collect::<Result<Vec<_>, _>>()
-    }
-
-    /// 最新バッチハッシュを取得
-    pub async fn get_latest_batch_hash(&self) -> RouterResult<Option<AuditBatchHash>> {
-        let row = sqlx::query_as::<_, AuditBatchHashRow>(
-            "SELECT id, sequence_number, batch_start, batch_end, \
-             record_count, hash, previous_hash \
-             FROM audit_batch_hashes ORDER BY sequence_number DESC LIMIT 1",
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| LbError::Database(format!("Failed to get latest batch hash: {}", e)))?;
-
-        match row {
-            Some(r) => Ok(Some(AuditBatchHash::try_from(r)?)),
             None => Ok(None),
         }
     }
@@ -2140,46 +2051,6 @@ mod tests {
         };
 
         let result = AuditLogEntry::try_from(row);
-        assert!(result.is_err());
-    }
-
-    // =====================================================================
-    // 追加テスト: AuditBatchHashRow -> AuditBatchHash conversion
-    // =====================================================================
-
-    #[test]
-    fn test_audit_batch_hash_try_from_row() {
-        let row = AuditBatchHashRow {
-            id: 1,
-            sequence_number: 42,
-            batch_start: "2024-01-01T00:00:00+00:00".to_string(),
-            batch_end: "2024-01-01T01:00:00+00:00".to_string(),
-            record_count: 100,
-            hash: "abcdef".to_string(),
-            previous_hash: "000000".to_string(),
-        };
-
-        let batch = AuditBatchHash::try_from(row).unwrap();
-        assert_eq!(batch.id, Some(1));
-        assert_eq!(batch.sequence_number, 42);
-        assert_eq!(batch.record_count, 100);
-        assert_eq!(batch.hash, "abcdef");
-        assert_eq!(batch.previous_hash, "000000");
-    }
-
-    #[test]
-    fn test_audit_batch_hash_try_from_invalid_date() {
-        let row = AuditBatchHashRow {
-            id: 1,
-            sequence_number: 1,
-            batch_start: "not-a-date".to_string(),
-            batch_end: "2024-01-01T00:00:00+00:00".to_string(),
-            record_count: 0,
-            hash: "x".to_string(),
-            previous_hash: "y".to_string(),
-        };
-
-        let result = AuditBatchHash::try_from(row);
         assert!(result.is_err());
     }
 
