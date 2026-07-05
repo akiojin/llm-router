@@ -188,7 +188,6 @@ pub enum RecordStatus {
     },
 }
 
-
 /// 画像生成リクエスト (Text-to-Image)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ImageGenerationRequest {

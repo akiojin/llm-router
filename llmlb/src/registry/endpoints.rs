@@ -13,13 +13,14 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 mod model_map;
-use model_map::{endpoint_model_lookup_keys, insert_model_mapping, model_lookup_keys, remove_model_mapping};
+use model_map::{
+    endpoint_model_lookup_keys, insert_model_mapping, model_lookup_keys, remove_model_mapping,
+};
 
 /// 単一エンドポイントが「異常な数」のモデルを申告したと判定する閾値。
 /// この値を超えたら `warn!()` ログで運用者に通知する（実態を持たない誤申告の早期検知用）。
 const SUSPICIOUS_MODEL_COUNT_THRESHOLD: usize = 50;
 use uuid::Uuid;
-
 
 /// エンドポイントレジストリ
 ///
