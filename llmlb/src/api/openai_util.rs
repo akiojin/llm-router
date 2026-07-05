@@ -7,117 +7,18 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(test)]
+use serde_json::Value;
 
 mod ollama_probe;
 pub use ollama_probe::probe_ollama_model_loaded;
 mod upstream_error;
 pub use upstream_error::*;
-
-/// 履歴保存用にペイロードをサニタイズ（base64データをリダクト）
-pub fn sanitize_openai_payload_for_history(payload: &Value) -> Value {
-    fn redact_data_url(value: &Value) -> Value {
-        match value {
-            Value::String(s) => {
-                if s.starts_with("data:") && s.contains(";base64,") {
-                    Value::String(format!("[redacted data-url len={}]", s.len()))
-                } else {
-                    Value::String(s.clone())
-                }
-            }
-            Value::Array(items) => Value::Array(items.iter().map(redact_data_url).collect()),
-            Value::Object(map) => {
-                let mut out = serde_json::Map::with_capacity(map.len());
-                for (k, v) in map {
-                    if k == "input_audio" {
-                        if let Some(obj) = v.as_object() {
-                            let mut cloned = obj.clone();
-                            if let Some(data) = obj.get("data").and_then(|d| d.as_str()) {
-                                cloned.insert(
-                                    "data".to_string(),
-                                    Value::String(format!("[redacted base64 len={}]", data.len())),
-                                );
-                            }
-                            out.insert(k.clone(), Value::Object(cloned));
-                            continue;
-                        }
-                    }
-
-                    if k == "image_url" {
-                        if let Some(obj) = v.as_object() {
-                            let mut cloned = obj.clone();
-                            if let Some(url) = obj.get("url").and_then(|d| d.as_str()) {
-                                if url.starts_with("data:") && url.contains(";base64,") {
-                                    cloned.insert(
-                                        "url".to_string(),
-                                        Value::String(format!(
-                                            "[redacted data-url len={}]",
-                                            url.len()
-                                        )),
-                                    );
-                                }
-                            }
-                            out.insert(k.clone(), Value::Object(cloned));
-                            continue;
-                        }
-                    }
-
-                    out.insert(k.clone(), redact_data_url(v));
-                }
-                Value::Object(out)
-            }
-            _ => value.clone(),
-        }
-    }
-
-    redact_data_url(payload)
-}
-
-/// OpenAIメッセージ形式をGoogle Generative AI形式に変換
-pub fn map_openai_messages_to_google_contents(messages: &[Value]) -> Vec<Value> {
-    messages
-        .iter()
-        .filter_map(|m| {
-            let role = m.get("role")?.as_str().unwrap_or("user");
-            let text = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
-            let mapped_role = match role {
-                "assistant" => "model",
-                _ => "user",
-            };
-            Some(json!({
-                "role": mapped_role,
-                "parts": [{"text": text}]
-            }))
-        })
-        .collect()
-}
-
-/// OpenAIメッセージ形式をAnthropic形式に変換（systemメッセージを分離）
-pub fn map_openai_messages_to_anthropic(messages: &[Value]) -> (Option<String>, Vec<Value>) {
-    let mut system_msgs: Vec<String> = Vec::new();
-    let mut regular: Vec<Value> = Vec::new();
-    for m in messages.iter() {
-        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("user");
-        let text = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
-        match role {
-            "system" => system_msgs.push(text.to_string()),
-            "assistant" => regular.push(json!({
-                "role": "assistant",
-                "content": [{"type":"text","text": text}]
-            })),
-            _ => regular.push(json!({
-                "role": "user",
-                "content": [{"type":"text","text": text}]
-            })),
-        }
-    }
-    let system = if system_msgs.is_empty() {
-        None
-    } else {
-        Some(system_msgs.join("\n"))
-    };
-    (system, regular)
-}
+mod messages;
+pub use messages::{map_openai_messages_to_anthropic, map_openai_messages_to_google_contents};
+mod sanitize;
+pub use sanitize::sanitize_openai_payload_for_history;
 
 /// OpenAI互換のエラーレスポンスを生成
 pub fn openai_error_response_with_type(
