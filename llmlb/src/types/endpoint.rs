@@ -12,7 +12,6 @@ pub use device::*;
 mod download;
 pub use download::{DownloadStatus, ModelDownloadTask};
 
-
 /// モデルがサポートするAPI種別（SPEC-0f1de549）
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -220,7 +219,6 @@ impl std::fmt::Display for EndpointType {
     }
 }
 
-
 /// エンドポイントの機能タイプ
 ///
 /// エンドポイントの機能分類
@@ -427,8 +425,6 @@ impl EndpointModel {
         vec![SupportedAPI::ChatCompletions]
     }
 }
-
-/// モデルダウンロードタスク（SPEC-e8e9326e追加要件 2026-01-26）
 
 /// ヘルスチェック履歴
 #[derive(Debug, Clone, Serialize, Deserialize)]
