@@ -168,9 +168,6 @@ pub async fn embeddings(
     .await
 }
 
-// NOTE: list_models_extended() は廃止されました。
-// /v1/models に Azure OpenAI 形式の capabilities とダッシュボード拡張が統合されています。
-
 fn extract_model(payload: &Value) -> Result<String, AppError> {
     payload
         .get("model")

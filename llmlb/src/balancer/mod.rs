@@ -48,9 +48,6 @@ use std::{
         Arc,
     },
 };
-// StdDuration はテストのみが参照するため cfg(test) で取り込む。
-#[cfg(test)]
-use std::time::Duration as StdDuration;
 use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
 
@@ -103,29 +100,6 @@ impl LoadManager {
     /// インスタンス単位のキャッシュキーを返す。
     pub fn cache_key(&self) -> u64 {
         self.instance_id
-    }
-
-    /// テスト用: 指定エンドポイントがアクティブになるまで待機する
-    #[cfg(test)]
-    pub async fn wait_for_endpoint_active(
-        &self,
-        endpoint_id: Uuid,
-        timeout_duration: StdDuration,
-    ) -> bool {
-        let start = std::time::Instant::now();
-        loop {
-            if let Ok(snapshot) = self.snapshot(endpoint_id).await {
-                if snapshot.active_requests > 0 {
-                    return true;
-                }
-            }
-
-            if start.elapsed() > timeout_duration {
-                return false;
-            }
-
-            tokio::time::sleep(StdDuration::from_millis(10)).await;
-        }
     }
 
     /// エンドポイントレジストリへの参照を取得

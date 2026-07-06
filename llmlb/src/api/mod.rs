@@ -20,7 +20,6 @@ pub mod dashboard_ws;
 pub mod endpoints;
 /// APIエラーレスポンス型
 pub mod error;
-pub mod health;
 pub mod images;
 pub mod inference_backend;
 pub mod invitations;

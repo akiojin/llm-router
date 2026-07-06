@@ -22,10 +22,6 @@ pub use listing::*;
 pub(crate) use manifest::get_model_registry_manifest;
 pub(crate) use register::register_model;
 
-// NOTE: supported_models.json は廃止されました (2026-01-25)
-// モデルアーキテクチャ認識はエンドポイント（xLLM）側の config.json ベースで行われます
-// 詳細は SPEC-6cd7f960, SPEC-48678000 を参照
-
 /// モデル名の妥当性を検証
 ///
 /// 有効なモデル名の形式:
@@ -66,12 +62,6 @@ fn validate_model_name(model_name: &str) -> Result<(), LbError> {
 
     Ok(())
 }
-
-// NOTE: AvailableModelView, AvailableModelsResponse, Pagination, model_info_to_view() は
-// /api/models/available 廃止に伴い削除されました。
-
-// NOTE: GET /api/models/available は廃止されました。
-// HFカタログは直接 https://huggingface.co を参照してください。
 
 /// DELETE /api/models/:model_name - 登録モデル削除
 ///

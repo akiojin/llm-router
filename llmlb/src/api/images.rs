@@ -114,7 +114,6 @@ pub async fn generations(
     }
 
     let parsed = parse_quantized_model_name(&payload.model).map_err(AppError::from)?;
-    let _lookup_model = parsed.base;
 
     // モデルの ImageGeneration capability を検証
     let model_info = load_registered_model(&state.db_pool, &payload.model).await?;

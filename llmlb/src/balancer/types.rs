@@ -64,11 +64,6 @@ impl Drop for QueueWaiterGuard {
     }
 }
 
-// SPEC-f8e3a1b7: Node依存のヘルパー関数は削除されました
-// - node_spec_score, compare_spec_levels, compare_spec_by_state
-// - compare_option_f32, compare_average_ms, usage_snapshot, compare_usage_levels
-// 新しい負荷分散はレイテンシベース（EMA α=0.2）を使用
-
 /// エンドポイント×モデル単位のTPS EMA状態（SPEC-4bb5b55f）
 #[derive(Debug, Clone, Default)]
 pub struct ModelTpsState {
@@ -159,8 +154,6 @@ pub(crate) struct EndpointLoadState {
     /// 総トークン累計
     pub(crate) total_tokens: u64,
 }
-
-// SPEC-f8e3a1b7: NodeLoadState型エイリアスは削除されました
 
 impl EndpointLoadState {
     pub(crate) fn combined_active(&self) -> u32 {

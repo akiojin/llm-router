@@ -237,9 +237,6 @@ impl Endpoint {
     pub fn get_inference_latency_for_sort(&self) -> f64 {
         self.inference_latency_ms.unwrap_or(f64::INFINITY)
     }
-
-    // SPEC-f8e3a1b7: to_legacy_node()は削除されました
-    // Node型は完全に廃止され、Endpoint型に移行しました
 }
 
 /// エンドポイントで利用可能なモデル情報
