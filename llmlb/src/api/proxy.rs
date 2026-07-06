@@ -348,6 +348,42 @@ pub(crate) fn save_request_record(
     });
 }
 
+/// SPEC-f8e3a1b7: 推論リクエスト成功時にエンドポイントのレイテンシを更新（Fire-and-forget）
+pub(crate) fn update_inference_latency(
+    registry: &crate::registry::endpoints::EndpointRegistry,
+    endpoint_id: uuid::Uuid,
+    duration: std::time::Duration,
+) {
+    let registry = registry.clone();
+    let latency_ms = duration.as_millis() as f64;
+    tokio::spawn(async move {
+        if let Err(e) = registry
+            .update_inference_latency(endpoint_id, latency_ms)
+            .await
+        {
+            tracing::debug!(
+                endpoint_id = %endpoint_id,
+                latency_ms = latency_ms,
+                error = %e,
+                "Failed to update inference latency"
+            );
+        }
+    });
+}
+
+/// キュー待機情報を示す HTTP ヘッダをレスポンスに付与する。
+pub(crate) fn add_queue_headers(response: &mut Response, wait_ms: u128) {
+    let headers = response.headers_mut();
+    headers.insert(
+        HeaderName::from_static("x-queue-status"),
+        HeaderValue::from_static("queued"),
+    );
+    let wait_value = wait_ms.to_string();
+    if let Ok(value) = HeaderValue::from_str(&wait_value) {
+        headers.insert(HeaderName::from_static("x-queue-wait-ms"), value);
+    }
+}
+
 /// エンドポイントリクエスト統計を更新（Fire-and-forget）（SPEC-8c32349f）
 ///
 /// endpointsテーブルの累計カウンタとendpoint_daily_statsの日次集計を

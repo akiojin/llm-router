@@ -33,8 +33,8 @@ use crate::api::model_name::rewrite_payload_model_for_endpoint;
 use crate::api::models::load_registered_model;
 use crate::api::openai_util::upstream_error_message_from_bytes;
 use crate::api::proxy::{
-    forward_to_endpoint, record_endpoint_request_stats, save_request_record,
-    select_available_endpoint_with_queue_for_model, QueueSelection,
+    add_queue_headers, forward_to_endpoint, record_endpoint_request_stats, save_request_record,
+    select_available_endpoint_with_queue_for_model, update_inference_latency, QueueSelection,
 };
 use crate::auth::middleware::ApiKeyAuthContext;
 use crate::balancer::RequestOutcome;
@@ -43,7 +43,7 @@ use crate::common::protocol::{RecordStatus, RequestResponseRecord, RequestType, 
 use crate::token::{estimate_tokens, extract_or_estimate_tokens};
 use crate::AppState;
 use axum::extract::{ConnectInfo, State};
-use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::Value;
@@ -661,40 +661,6 @@ fn extract_required_header(headers: &HeaderMap, name: &'static str) -> Result<St
             format!("Missing required header: {}", name),
         )),
     }
-}
-
-fn add_queue_headers(response: &mut Response, wait_ms: u128) {
-    response.headers_mut().insert(
-        HeaderName::from_static("x-queue-status"),
-        HeaderValue::from_static("queued"),
-    );
-    if let Ok(value) = HeaderValue::from_str(&wait_ms.to_string()) {
-        response
-            .headers_mut()
-            .insert(HeaderName::from_static("x-queue-wait-ms"), value);
-    }
-}
-
-fn update_inference_latency(
-    registry: &crate::registry::endpoints::EndpointRegistry,
-    endpoint_id: Uuid,
-    duration: std::time::Duration,
-) {
-    let registry = registry.clone();
-    let latency_ms = duration.as_millis() as f64;
-    tokio::spawn(async move {
-        if let Err(err) = registry
-            .update_inference_latency(endpoint_id, latency_ms)
-            .await
-        {
-            tracing::debug!(
-                endpoint_id = %endpoint_id,
-                latency_ms = latency_ms,
-                error = %err,
-                "Failed to update inference latency"
-            );
-        }
-    });
 }
 
 #[cfg(test)]

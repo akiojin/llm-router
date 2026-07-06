@@ -19,12 +19,8 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Instant;
 
 mod helpers;
-use helpers::{
-    add_queue_headers, extract_model, extract_stream, model_unavailable_response,
-    openai_error_response,
-};
+use helpers::{extract_model, extract_stream, model_unavailable_response, openai_error_response};
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 use crate::{
     api::{
@@ -33,9 +29,11 @@ use crate::{
         models::load_registered_model,
         openai_util::{sanitize_openai_payload_for_history, upstream_error_message_from_bytes},
         proxy::{
-            forward_streaming_response, forward_streaming_response_with_tps_tracking,
-            forward_to_endpoint, record_endpoint_request_stats, save_request_record,
-            select_available_endpoint_with_queue_for_model, QueueSelection,
+            add_queue_headers, forward_streaming_response,
+            forward_streaming_response_with_tps_tracking, forward_to_endpoint,
+            record_endpoint_request_stats, save_request_record,
+            select_available_endpoint_with_queue_for_model, update_inference_latency,
+            QueueSelection,
         },
     },
     auth::middleware::ApiKeyAuthContext,
@@ -46,29 +44,6 @@ use crate::{
 
 /// 履歴記録でエンドポイントIPが未特定な場合（ストリーミング等）のフォールバック。
 const UNSPECIFIED_IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
-
-/// SPEC-f8e3a1b7: 推論リクエスト成功時にエンドポイントのレイテンシを更新（Fire-and-forget）
-fn update_inference_latency(
-    registry: &crate::registry::endpoints::EndpointRegistry,
-    endpoint_id: Uuid,
-    duration: std::time::Duration,
-) {
-    let registry = registry.clone();
-    let latency_ms = duration.as_millis() as f64;
-    tokio::spawn(async move {
-        if let Err(e) = registry
-            .update_inference_latency(endpoint_id, latency_ms)
-            .await
-        {
-            tracing::debug!(
-                endpoint_id = %endpoint_id,
-                latency_ms = latency_ms,
-                error = %e,
-                "Failed to update inference latency"
-            );
-        }
-    });
-}
 
 /// POST /v1/responses - Open Responses API
 ///

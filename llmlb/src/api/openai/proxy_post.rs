@@ -16,9 +16,10 @@ use crate::api::openai_util::{
     UPSTREAM_ERROR_SUMMARY_MAX_BYTES,
 };
 use crate::api::proxy::{
-    forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
+    add_queue_headers, forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
     save_request_record, select_available_endpoint_with_queue_for_model,
-    select_available_endpoint_with_queue_for_model_and_api, QueueSelection,
+    select_available_endpoint_with_queue_for_model_and_api, update_inference_latency,
+    QueueSelection,
 };
 use crate::balancer::RequestOutcome;
 use crate::common::error::LbError;
@@ -37,41 +38,6 @@ use std::net::IpAddr;
 use std::time::Instant;
 use tracing::{error, warn};
 use uuid::Uuid;
-
-/// SPEC-f8e3a1b7: 推論リクエスト成功時にエンドポイントのレイテンシを更新（Fire-and-forget）
-fn update_inference_latency(
-    registry: &crate::registry::endpoints::EndpointRegistry,
-    endpoint_id: Uuid,
-    duration: std::time::Duration,
-) {
-    let registry = registry.clone();
-    let latency_ms = duration.as_millis() as f64;
-    tokio::spawn(async move {
-        if let Err(e) = registry
-            .update_inference_latency(endpoint_id, latency_ms)
-            .await
-        {
-            tracing::debug!(
-                endpoint_id = %endpoint_id,
-                latency_ms = latency_ms,
-                error = %e,
-                "Failed to update inference latency"
-            );
-        }
-    });
-}
-
-pub(super) fn add_queue_headers(response: &mut Response, wait_ms: u128) {
-    let headers = response.headers_mut();
-    headers.insert(
-        HeaderName::from_static("x-queue-status"),
-        HeaderValue::from_static("queued"),
-    );
-    let wait_value = wait_ms.to_string();
-    if let Ok(value) = HeaderValue::from_str(&wait_value) {
-        headers.insert(HeaderName::from_static("x-queue-wait-ms"), value);
-    }
-}
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn proxy_openai_post(

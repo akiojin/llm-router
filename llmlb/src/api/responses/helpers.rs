@@ -4,7 +4,7 @@
 
 use crate::api::error::AppError;
 use crate::common::error::LbError;
-use axum::http::{HeaderName, HeaderValue, StatusCode};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{json, Value};
@@ -31,18 +31,6 @@ pub(crate) fn model_unavailable_response(message: impl Into<String>) -> Response
     });
 
     (StatusCode::SERVICE_UNAVAILABLE, Json(payload)).into_response()
-}
-
-pub(crate) fn add_queue_headers(response: &mut Response, wait_ms: u128) {
-    let headers = response.headers_mut();
-    headers.insert(
-        HeaderName::from_static("x-queue-status"),
-        HeaderValue::from_static("queued"),
-    );
-    let wait_value = wait_ms.to_string();
-    if let Ok(value) = HeaderValue::from_str(&wait_value) {
-        headers.insert(HeaderName::from_static("x-queue-wait-ms"), value);
-    }
 }
 
 /// リクエストからモデル名を抽出

@@ -8,12 +8,12 @@ const UNSPECIFIED_IP: std::net::IpAddr = std::net::IpAddr::V4(std::net::Ipv4Addr
 mod catalog;
 mod cloud;
 mod proxy_post;
+#[cfg(test)]
+use crate::api::proxy::add_queue_headers;
 pub use catalog::{get_model, list_models};
 #[cfg(test)]
 use cloud::cloud_virtual_node;
 use cloud::{parse_cloud_model, proxy_openai_cloud_post};
-#[cfg(test)]
-use proxy_post::add_queue_headers;
 use proxy_post::proxy_openai_post;
 
 use crate::common::{
