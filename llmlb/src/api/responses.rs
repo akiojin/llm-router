@@ -19,7 +19,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Instant;
 
 mod helpers;
-use helpers::{extract_model, extract_stream, model_unavailable_response, openai_error_response};
+use helpers::{extract_model, extract_stream};
 use tracing::{error, info, warn};
 
 use crate::{
@@ -27,7 +27,10 @@ use crate::{
         error::AppError,
         model_name::rewrite_payload_model_for_endpoint,
         models::load_registered_model,
-        openai_util::{sanitize_openai_payload_for_history, upstream_error_message_from_bytes},
+        openai_util::{
+            model_unavailable_response, openai_error_response, sanitize_openai_payload_for_history,
+            upstream_error_message_from_bytes,
+        },
         proxy::{
             add_queue_headers, copy_upstream_headers, forward_streaming_response,
             forward_streaming_response_with_tps_tracking, forward_to_endpoint,
@@ -133,7 +136,10 @@ pub async fn post_responses(
                     ),
                 );
                 if matches!(e, LbError::NoCapableEndpoints(_)) {
-                    return Ok(model_unavailable_response(error_message));
+                    return Ok(model_unavailable_response(
+                        error_message,
+                        "no_capable_nodes",
+                    ));
                 }
                 return Err(AppError::from(e));
             }

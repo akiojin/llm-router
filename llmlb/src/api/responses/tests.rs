@@ -466,14 +466,14 @@ fn openai_error_response_returns_500() {
 
 #[test]
 fn model_unavailable_response_returns_503() {
-    let resp = super::model_unavailable_response("no endpoints for model X");
+    let resp = super::model_unavailable_response("no endpoints for model X", "no_capable_nodes");
     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 #[test]
 fn model_unavailable_response_accepts_owned_string() {
     let msg = format!("No available endpoints support model: {}", "llama3");
-    let resp = super::model_unavailable_response(msg);
+    let resp = super::model_unavailable_response(msg, "no_capable_nodes");
     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
