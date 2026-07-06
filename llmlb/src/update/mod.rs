@@ -8,7 +8,9 @@
 //! - Update scheduling (immediate / idle / time-based)
 //! - Update history recording
 
+mod apply;
 mod cache;
+mod check;
 mod download;
 mod dto;
 mod github;
@@ -16,30 +18,29 @@ mod helper;
 pub mod history;
 #[cfg(target_os = "macos")]
 mod macos_installer;
+mod payload;
 mod platform;
 pub mod schedule;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod tray;
-use cache::{load_cache, save_cache, UpdateCacheFile};
-use download::{
-    asset_name_from_url, download_to_path, extract_archive, find_extracted_binary, ProgressCallback,
-};
-pub use dto::*;
-use github::{fetch_latest_release, parse_tag_to_version};
+use cache::load_cache;
 #[cfg(test)]
-use github::{GitHubAsset, GitHubRelease};
+use cache::{save_cache, UpdateCacheFile};
+#[cfg(test)]
+use download::{asset_name_from_url, extract_archive, find_extracted_binary};
+pub use dto::*;
+#[cfg(test)]
+use github::{parse_tag_to_version, GitHubAsset, GitHubRelease};
 #[cfg(test)]
 use helper::{
     detect_server_port, parse_port_from_args, record_auto_rollback_history, RestartArgsFile,
 };
 pub(crate) use helper::{internal_apply_update, internal_rollback, internal_run_installer};
-use helper::{
-    spawn_internal_apply_update, spawn_internal_rollback, spawn_internal_run_installer,
-    write_restart_args_file,
-};
+use helper::{spawn_internal_rollback, write_restart_args_file};
+#[cfg(test)]
 use platform::{choose_apply_plan, is_dir_writable, select_assets, ApplyPlan, Platform};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-use tray::{notify_tray_available, notify_tray_failed, notify_tray_ready, notify_tray_up_to_date};
+use tray::notify_tray_failed;
 
 /// 自己更新の状態を UI 層へ通知する抽象。
 ///
@@ -62,10 +63,11 @@ pub trait UpdateNotifier: Send + Sync {
 
 use crate::{inference_gate::InferenceGate, shutdown::ShutdownController};
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use semver::Version;
+#[cfg(test)]
+use std::fs;
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -314,103 +316,6 @@ impl UpdateManager {
     /// Return the current update state snapshot.
     pub async fn state(&self) -> UpdateState {
         self.inner.state.read().await.clone()
-    }
-
-    /// Check GitHub for a newer release (synchronous, no download).
-    ///
-    /// This only queries the GitHub Releases API (timeout 5 s) and updates the
-    /// internal state.  It intentionally does **not** start downloading the
-    /// payload so the caller can return a fast response.
-    pub async fn check_only(&self, force: bool) -> Result<UpdateState> {
-        if !force {
-            if let Some(cache) = load_cache(&self.inner.cache_path).ok().flatten() {
-                let age = Utc::now().signed_duration_since(cache.last_checked_at);
-                if age.to_std().unwrap_or(Duration::MAX) < self.inner.ttl {
-                    self.apply_cache(cache).await?;
-                    return Ok(self.state().await);
-                }
-            }
-        }
-
-        let timeout = Duration::from_secs(5);
-        let release = match fetch_latest_release(
-            &self.inner.http_client,
-            &self.inner.owner,
-            &self.inner.repo,
-            timeout,
-            self.inner.github_api_base_url.as_deref(),
-        )
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                // GitHub API failure (429 rate limit, timeout, etc.):
-                // preserve existing Available state (especially payload: Ready)
-                // or fall back to cached data.
-                tracing::warn!("GitHub API failed, falling back to cache: {e}");
-                let current = self.state().await;
-                if matches!(&current, UpdateState::Available { .. }) {
-                    return Ok(current);
-                }
-                if let Some(cache) = load_cache(&self.inner.cache_path).ok().flatten() {
-                    self.apply_cache(cache).await?;
-                    return Ok(self.state().await);
-                }
-                return Err(e);
-            }
-        };
-        let latest = parse_tag_to_version(&release.tag_name)?;
-        if latest <= self.inner.current_version {
-            *self.inner.state.write().await = UpdateState::UpToDate {
-                checked_at: Some(Utc::now()),
-            };
-            save_cache(
-                &self.inner.cache_path,
-                UpdateCacheFile {
-                    last_checked_at: Utc::now(),
-                    latest_version: Some(latest.to_string()),
-                    release_url: Some(release.html_url.clone()),
-                    portable_asset_url: None,
-                    installer_asset_url: None,
-                },
-            )?;
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
-            notify_tray_up_to_date(&self.inner.tray_proxy).await;
-            return Ok(self.state().await);
-        }
-
-        let platform = Platform::detect()?;
-        let (portable_asset, installer_asset) = select_assets(&release, &platform);
-
-        let cache = UpdateCacheFile {
-            last_checked_at: Utc::now(),
-            latest_version: Some(latest.to_string()),
-            release_url: Some(release.html_url.clone()),
-            portable_asset_url: portable_asset
-                .as_ref()
-                .map(|a| a.browser_download_url.clone()),
-            installer_asset_url: installer_asset
-                .as_ref()
-                .map(|a| a.browser_download_url.clone()),
-        };
-        save_cache(&self.inner.cache_path, cache.clone())?;
-
-        {
-            *self.inner.state.write().await = UpdateState::Available {
-                current: self.inner.current_version.to_string(),
-                latest: latest.to_string(),
-                release_url: release.html_url,
-                portable_asset_url: cache.portable_asset_url.clone(),
-                installer_asset_url: cache.installer_asset_url.clone(),
-                payload: PayloadState::NotReady,
-                checked_at: cache.last_checked_at,
-            };
-        }
-
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        notify_tray_available(&self.inner.tray_proxy, latest.to_string()).await;
-
-        Ok(self.state().await)
     }
 
     /// Spawn a background task that downloads the update payload (if available).
@@ -822,489 +727,6 @@ impl UpdateManager {
                 Err(anyhow!("Update is already in progress"))
             }
             _ => Err(anyhow!("No update is available")),
-        }
-    }
-
-    async fn check_and_maybe_download(&self, force: bool) -> Result<()> {
-        if !force {
-            if let Some(cache) = load_cache(&self.inner.cache_path).ok().flatten() {
-                let age = Utc::now().signed_duration_since(cache.last_checked_at);
-                if age.to_std().unwrap_or(Duration::MAX) < self.inner.ttl {
-                    self.apply_cache(cache).await?;
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    {
-                        match &*self.inner.state.read().await {
-                            UpdateState::Available { latest, .. } => {
-                                notify_tray_available(&self.inner.tray_proxy, latest.clone()).await;
-                            }
-                            UpdateState::UpToDate { .. } => {
-                                notify_tray_up_to_date(&self.inner.tray_proxy).await;
-                            }
-                            _ => {}
-                        }
-                    }
-                    // Start download if update is available.
-                    if matches!(
-                        self.inner.state.read().await.clone(),
-                        UpdateState::Available { .. }
-                    ) {
-                        let _ = self.ensure_payload_ready().await;
-                    }
-                    return Ok(());
-                }
-            }
-        }
-
-        let timeout = if force {
-            Duration::from_secs(10)
-        } else {
-            Duration::from_secs(2)
-        };
-        let release = fetch_latest_release(
-            &self.inner.http_client,
-            &self.inner.owner,
-            &self.inner.repo,
-            timeout,
-            self.inner.github_api_base_url.as_deref(),
-        )
-        .await?;
-        let latest = parse_tag_to_version(&release.tag_name)?;
-        if latest <= self.inner.current_version {
-            *self.inner.state.write().await = UpdateState::UpToDate {
-                checked_at: Some(Utc::now()),
-            };
-            save_cache(
-                &self.inner.cache_path,
-                UpdateCacheFile {
-                    last_checked_at: Utc::now(),
-                    latest_version: Some(latest.to_string()),
-                    release_url: Some(release.html_url.clone()),
-                    portable_asset_url: None,
-                    installer_asset_url: None,
-                },
-            )?;
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
-            notify_tray_up_to_date(&self.inner.tray_proxy).await;
-            return Ok(());
-        }
-
-        let platform = Platform::detect()?;
-        let (portable_asset, installer_asset) = select_assets(&release, &platform);
-
-        let cache = UpdateCacheFile {
-            last_checked_at: Utc::now(),
-            latest_version: Some(latest.to_string()),
-            release_url: Some(release.html_url.clone()),
-            portable_asset_url: portable_asset
-                .as_ref()
-                .map(|a| a.browser_download_url.clone()),
-            installer_asset_url: installer_asset
-                .as_ref()
-                .map(|a| a.browser_download_url.clone()),
-        };
-        save_cache(&self.inner.cache_path, cache.clone())?;
-
-        {
-            let mut st = self.inner.state.write().await;
-            *st = UpdateState::Available {
-                current: self.inner.current_version.to_string(),
-                latest: latest.to_string(),
-                release_url: release.html_url,
-                portable_asset_url: cache.portable_asset_url.clone(),
-                installer_asset_url: cache.installer_asset_url.clone(),
-                payload: PayloadState::NotReady,
-                checked_at: cache.last_checked_at,
-            };
-        }
-
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        notify_tray_available(&self.inner.tray_proxy, latest.to_string()).await;
-
-        // Background download (best-effort).
-        let _ = self.ensure_payload_ready().await;
-        Ok(())
-    }
-
-    async fn apply_cache(&self, cache: UpdateCacheFile) -> Result<()> {
-        let latest_version = cache.latest_version.clone().unwrap_or_default();
-        if latest_version.is_empty() {
-            *self.inner.state.write().await = UpdateState::UpToDate {
-                checked_at: Some(cache.last_checked_at),
-            };
-            return Ok(());
-        }
-        let latest = Version::parse(&latest_version).context("cached latest_version is invalid")?;
-        if latest <= self.inner.current_version {
-            *self.inner.state.write().await = UpdateState::UpToDate {
-                checked_at: Some(cache.last_checked_at),
-            };
-            return Ok(());
-        }
-        let release_url = cache.release_url.clone().unwrap_or_else(|| {
-            format!(
-                "https://github.com/{}/{}/releases/latest",
-                self.inner.owner, self.inner.repo
-            )
-        });
-        *self.inner.state.write().await = UpdateState::Available {
-            current: self.inner.current_version.to_string(),
-            latest: latest.to_string(),
-            release_url,
-            portable_asset_url: cache.portable_asset_url.clone(),
-            installer_asset_url: cache.installer_asset_url.clone(),
-            payload: PayloadState::NotReady,
-            checked_at: cache.last_checked_at,
-        };
-        Ok(())
-    }
-
-    /// Record an update check failure.
-    ///
-    /// Preserves an already-discovered `Available` state even if a subsequent
-    /// manual check temporarily fails.
-    pub async fn record_check_failure(&self, message: String) {
-        {
-            let mut st = self.inner.state.write().await;
-            // Keep an already discovered update actionable even if a subsequent
-            // manual check temporarily fails (e.g., transient GitHub outage).
-            if matches!(&*st, UpdateState::Available { .. }) {
-                return;
-            }
-
-            let (latest, release_url) = match &*st {
-                UpdateState::Draining { latest, .. } => (Some(latest.clone()), None),
-                UpdateState::Applying { latest, .. } => (Some(latest.clone()), None),
-                UpdateState::Failed {
-                    latest,
-                    release_url,
-                    ..
-                } => (latest.clone(), release_url.clone()),
-                _ => (None, None),
-            };
-
-            *st = UpdateState::Failed {
-                latest,
-                release_url,
-                message: message.clone(),
-                failed_at: Utc::now(),
-            };
-        }
-
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        notify_tray_failed(&self.inner.tray_proxy, message).await;
-    }
-
-    async fn ensure_payload_ready(&self) -> Result<PayloadKind> {
-        let (latest, release_url, portable, installer) = {
-            let st = self.inner.state.read().await;
-            match &*st {
-                UpdateState::Available {
-                    latest,
-                    release_url,
-                    portable_asset_url,
-                    installer_asset_url,
-                    ..
-                } => (
-                    latest.clone(),
-                    release_url.clone(),
-                    portable_asset_url.clone(),
-                    installer_asset_url.clone(),
-                ),
-                _ => return Err(anyhow!("No update is available")),
-            }
-        };
-
-        {
-            let mut st = self.inner.state.write().await;
-            if let UpdateState::Available {
-                payload: PayloadState::Ready { kind },
-                ..
-            } = &*st
-            {
-                return Ok(kind.clone());
-            }
-            if let UpdateState::Available { payload, .. } = &mut *st {
-                *payload = PayloadState::Downloading {
-                    started_at: Utc::now(),
-                    downloaded_bytes: None,
-                    total_bytes: None,
-                };
-            }
-        }
-
-        let platform = Platform::detect()?;
-        let current_exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("llmlb"));
-        let plan = choose_apply_plan(
-            &platform,
-            &current_exe,
-            portable.as_deref(),
-            installer.as_deref(),
-        );
-
-        let Some(plan) = plan else {
-            let dir = current_exe.parent().unwrap_or_else(|| Path::new("."));
-            let writable = is_dir_writable(dir).unwrap_or(false);
-            let msg = if !writable && installer.is_none() {
-                format!(
-                    "Automatic update is not supported because '{}' is not writable. Please reinstall from: {}",
-                    dir.display(),
-                    release_url
-                )
-            } else {
-                format!(
-                    "No suitable update asset found for this platform. Please download from: {}",
-                    release_url
-                )
-            };
-            self.set_payload_error(msg.clone()).await;
-            return Err(anyhow!(msg));
-        };
-
-        let update_dir = self.inner.updates_dir.join(&latest);
-        fs::create_dir_all(&update_dir).ok();
-
-        let state_ref = self.inner.clone();
-        let progress_cb: ProgressCallback = Box::new(move |downloaded, total| {
-            if let Ok(mut st) = state_ref.state.try_write() {
-                if let UpdateState::Available { payload, .. } = &mut *st {
-                    if matches!(payload, PayloadState::Downloading { .. }) {
-                        *payload = PayloadState::Downloading {
-                            started_at: Utc::now(),
-                            downloaded_bytes: Some(downloaded),
-                            total_bytes: total,
-                        };
-                    }
-                }
-            }
-        });
-
-        let kind = match plan {
-            ApplyPlan::Portable { url } => {
-                let asset_name =
-                    asset_name_from_url(&url).unwrap_or_else(|| "llmlb-update".to_string());
-                let archive_path = update_dir.join(&asset_name);
-                download_to_path(
-                    &self.inner.http_client,
-                    &url,
-                    &archive_path,
-                    Some(progress_cb),
-                )
-                .await?;
-                let extract_dir = update_dir.join("extract");
-                if extract_dir.exists() {
-                    fs::remove_dir_all(&extract_dir).ok();
-                }
-                fs::create_dir_all(&extract_dir)?;
-                extract_archive(&archive_path, &extract_dir)?;
-                let binary_name = platform.binary_name();
-                let binary_path = find_extracted_binary(&extract_dir, &binary_name)?
-                    .ok_or_else(|| anyhow!("Extracted archive did not contain {binary_name}"))?;
-                PayloadKind::Portable {
-                    binary_path: binary_path.to_string_lossy().to_string(),
-                }
-            }
-            ApplyPlan::Installer { url, kind } => {
-                let asset_name =
-                    asset_name_from_url(&url).unwrap_or_else(|| "llmlb-installer".to_string());
-                let installer_path = update_dir.join(&asset_name);
-                download_to_path(&self.inner.http_client, &url, &installer_path, None).await?;
-                PayloadKind::Installer {
-                    installer_path: installer_path.to_string_lossy().to_string(),
-                    kind,
-                }
-            }
-        };
-
-        {
-            let mut st = self.inner.state.write().await;
-            if let UpdateState::Available { payload, .. } = &mut *st {
-                *payload = PayloadState::Ready { kind: kind.clone() };
-            }
-        }
-
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        notify_tray_ready(&self.inner.tray_proxy).await;
-
-        Ok(kind)
-    }
-
-    async fn set_payload_error(&self, msg: String) {
-        let mut st = self.inner.state.write().await;
-        if let UpdateState::Available { payload, .. } = &mut *st {
-            *payload = PayloadState::Error { message: msg };
-        }
-    }
-
-    async fn require_ready_payload(&self) -> Result<PayloadKind> {
-        let st = self.inner.state.read().await;
-        match &*st {
-            UpdateState::Available {
-                payload: PayloadState::Ready { kind },
-                ..
-            } => Ok(kind.clone()),
-            UpdateState::Available { .. } => Err(anyhow!("Update payload is not ready")),
-            UpdateState::Draining { .. } | UpdateState::Applying { .. } => {
-                Err(anyhow!("Update is already in progress"))
-            }
-            _ => Err(anyhow!("No update is available")),
-        }
-    }
-
-    async fn set_applying_state(
-        &self,
-        latest: &str,
-        method: ApplyMethod,
-        phase: ApplyPhase,
-        started_at: DateTime<Utc>,
-        timeout_at: Option<DateTime<Utc>>,
-    ) {
-        *self.inner.state.write().await = UpdateState::Applying {
-            latest: latest.to_string(),
-            method,
-            phase: phase.clone(),
-            phase_message: phase.message().to_string(),
-            started_at,
-            timeout_at,
-        };
-        self.notify_state_changed();
-    }
-
-    async fn apply_flow(&self, mode: ApplyRequestMode) -> Result<()> {
-        let payload = match mode {
-            ApplyRequestMode::Normal => self.ensure_payload_ready().await?,
-            ApplyRequestMode::Force => self.require_ready_payload().await?,
-            ApplyRequestMode::None => return Err(anyhow!("No apply request mode")),
-        };
-        let apply_method = match &payload {
-            PayloadKind::Portable { .. } => ApplyMethod::PortableReplace,
-            PayloadKind::Installer { kind, .. } => match kind {
-                InstallerKind::MacPkg => ApplyMethod::MacPkg,
-                InstallerKind::WindowsSetup => ApplyMethod::WindowsSetup,
-            },
-        };
-        let latest = {
-            let st = self.inner.state.read().await;
-            match &*st {
-                UpdateState::Available { latest, .. } => latest.clone(),
-                _ => return Err(anyhow!("No update is available")),
-            }
-        };
-
-        // Start draining after payload is ready to minimize downtime.
-        self.inner.gate.start_rejecting();
-        let applying_started_at = Utc::now();
-
-        if mode == ApplyRequestMode::Force {
-            // Mark as in-progress before waiting so UI/API cannot trigger duplicate apply actions.
-            self.set_applying_state(
-                &latest,
-                apply_method.clone(),
-                ApplyPhase::Starting,
-                applying_started_at,
-                None,
-            )
-            .await;
-            // Force mode cancels active in-flight work instead of waiting for drain completion.
-            self.inner.gate.abort_in_flight();
-            if tokio::time::timeout(Duration::from_secs(3), self.inner.gate.wait_for_idle())
-                .await
-                .is_err()
-            {
-                tracing::warn!(
-                    "force apply proceeding while in-flight requests are still unwinding"
-                );
-            }
-        }
-
-        if mode == ApplyRequestMode::Normal {
-            let requested_at = Utc::now();
-            let drain_timeout = Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS);
-            let timeout_at =
-                requested_at + chrono::Duration::seconds(DEFAULT_DRAIN_TIMEOUT_SECS as i64);
-            let deadline = tokio::time::Instant::now() + drain_timeout;
-
-            loop {
-                let in_flight = self.inner.gate.in_flight();
-                if in_flight == 0 {
-                    break;
-                }
-                {
-                    *self.inner.state.write().await = UpdateState::Draining {
-                        latest: latest.clone(),
-                        in_flight,
-                        requested_at,
-                        timeout_at,
-                    };
-                    self.notify_state_changed();
-                }
-                if tokio::time::timeout_at(deadline, self.inner.gate.wait_for_idle())
-                    .await
-                    .is_err()
-                {
-                    // Drain timed out — cancel and restore normal operation.
-                    tracing::warn!(
-                        "drain timed out after {}s with {} in-flight requests",
-                        DEFAULT_DRAIN_TIMEOUT_SECS,
-                        self.inner.gate.in_flight()
-                    );
-                    self.inner.gate.stop_rejecting();
-                    *self.inner.state.write().await = UpdateState::Failed {
-                        latest: Some(latest.clone()),
-                        release_url: None,
-                        message: format!("Drain timed out after {}s", DEFAULT_DRAIN_TIMEOUT_SECS),
-                        failed_at: Utc::now(),
-                    };
-                    self.notify_state_changed();
-                    return Err(anyhow!(
-                        "Drain timed out after {}s",
-                        DEFAULT_DRAIN_TIMEOUT_SECS
-                    ));
-                }
-            }
-            self.set_applying_state(
-                &latest,
-                apply_method.clone(),
-                ApplyPhase::Starting,
-                applying_started_at,
-                None,
-            )
-            .await;
-        }
-
-        let current_exe =
-            std::env::current_exe().context("Failed to resolve current executable path")?;
-        let args_file = write_restart_args_file(&self.inner.updates_dir.join(&latest))?;
-
-        match payload {
-            PayloadKind::Portable { binary_path } => {
-                self.set_applying_state(
-                    &latest,
-                    apply_method.clone(),
-                    ApplyPhase::Restarting,
-                    applying_started_at,
-                    None,
-                )
-                .await;
-                spawn_internal_apply_update(&current_exe, &binary_path, &args_file)?;
-                self.inner.shutdown.request_shutdown();
-                Ok(())
-            }
-            PayloadKind::Installer {
-                installer_path,
-                kind,
-            } => {
-                self.set_applying_state(
-                    &latest,
-                    apply_method.clone(),
-                    ApplyPhase::RunningInstaller,
-                    applying_started_at,
-                    None,
-                )
-                .await;
-                spawn_internal_run_installer(&current_exe, &installer_path, kind, &args_file)?;
-                self.inner.shutdown.request_shutdown();
-                Ok(())
-            }
         }
     }
 }
