@@ -98,17 +98,7 @@ pub(crate) fn forward_streaming_response(response: reqwest::Response) -> Result<
     let body = Body::from_stream(stream);
     let mut axum_response = Response::new(body);
     *axum_response.status_mut() = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK);
-    {
-        let response_headers = axum_response.headers_mut();
-        for (name, value) in headers.iter() {
-            if let (Ok(header_name), Ok(header_value)) = (
-                HeaderName::from_bytes(name.as_str().as_bytes()),
-                HeaderValue::from_bytes(value.as_bytes()),
-            ) {
-                response_headers.insert(header_name, header_value);
-            }
-        }
-    }
+    copy_upstream_headers(axum_response.headers_mut(), &headers);
     use axum::http::header;
     if !axum_response
         .headers()
@@ -310,17 +300,7 @@ pub(crate) fn forward_streaming_response_with_tps_tracking(
     let body = Body::from_stream(tracked_stream);
     let mut axum_response = Response::new(body);
     *axum_response.status_mut() = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK);
-    {
-        let response_headers = axum_response.headers_mut();
-        for (name, value) in headers.iter() {
-            if let (Ok(header_name), Ok(header_value)) = (
-                HeaderName::from_bytes(name.as_str().as_bytes()),
-                HeaderValue::from_bytes(value.as_bytes()),
-            ) {
-                response_headers.insert(header_name, header_value);
-            }
-        }
-    }
+    copy_upstream_headers(axum_response.headers_mut(), &headers);
     use axum::http::header;
     if !axum_response
         .headers()
@@ -381,6 +361,25 @@ pub(crate) fn add_queue_headers(response: &mut Response, wait_ms: u128) {
     let wait_value = wait_ms.to_string();
     if let Ok(value) = HeaderValue::from_str(&wait_value) {
         headers.insert(HeaderName::from_static("x-queue-wait-ms"), value);
+    }
+}
+
+/// 上流(reqwest)レスポンスのヘッダを axum レスポンスへ転記する。
+///
+/// http crate のバージョン差を吸収するため `HeaderName`/`HeaderValue::from_bytes`
+/// 経由で複製する。既定 Content-Type や CONTENT_LENGTH の扱いは呼び出し元の責務
+/// （本関数は純粋転記のみで、フィルタや上書きは行わない）。
+pub(crate) fn copy_upstream_headers(
+    dst: &mut axum::http::HeaderMap,
+    src: &reqwest::header::HeaderMap,
+) {
+    for (name, value) in src.iter() {
+        if let (Ok(header_name), Ok(header_value)) = (
+            HeaderName::from_bytes(name.as_str().as_bytes()),
+            HeaderValue::from_bytes(value.as_bytes()),
+        ) {
+            dst.insert(header_name, header_value);
+        }
     }
 }
 

@@ -4,9 +4,10 @@
 //! Anthropic Message 形状へ変換する純粋関数群を submodule として切り出した。
 //! トランスポート処理から分離され、単体テストしやすい。
 
+use crate::api::proxy::copy_upstream_headers;
 use crate::token::TokenUsage;
 use axum::body::{Body, Bytes};
-use axum::http::{header, HeaderName, HeaderValue, StatusCode};
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
@@ -143,14 +144,7 @@ pub(super) fn build_response_from_upstream(
 ) -> Response {
     let mut response = Response::new(Body::from(body));
     *response.status_mut() = status;
-    for (name, value) in headers.iter() {
-        if let (Ok(header_name), Ok(header_value)) = (
-            HeaderName::from_bytes(name.as_str().as_bytes()),
-            HeaderValue::from_bytes(value.as_bytes()),
-        ) {
-            response.headers_mut().insert(header_name, header_value);
-        }
-    }
+    copy_upstream_headers(response.headers_mut(), headers);
     if !response.headers().contains_key(header::CONTENT_TYPE) {
         response.headers_mut().insert(
             header::CONTENT_TYPE,

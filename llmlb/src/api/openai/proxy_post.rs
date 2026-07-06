@@ -16,8 +16,9 @@ use crate::api::openai_util::{
     UPSTREAM_ERROR_SUMMARY_MAX_BYTES,
 };
 use crate::api::proxy::{
-    add_queue_headers, forward_streaming_response_with_tps_tracking, record_endpoint_request_stats,
-    save_request_record, select_available_endpoint_with_queue_for_model,
+    add_queue_headers, copy_upstream_headers, forward_streaming_response_with_tps_tracking,
+    record_endpoint_request_stats, save_request_record,
+    select_available_endpoint_with_queue_for_model,
     select_available_endpoint_with_queue_for_model_and_api, update_inference_latency,
     QueueSelection,
 };
@@ -29,7 +30,7 @@ use crate::types::endpoint::SupportedAPI;
 use crate::AppState;
 use axum::{
     body::Body,
-    http::{HeaderName, HeaderValue, StatusCode},
+    http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -396,17 +397,7 @@ pub(super) async fn proxy_openai_post(
 
             let mut response = Response::new(Body::from(body_bytes));
             *response.status_mut() = status;
-            {
-                let response_headers = response.headers_mut();
-                for (name, value) in headers.iter() {
-                    if let (Ok(header_name), Ok(header_value)) = (
-                        HeaderName::from_bytes(name.as_str().as_bytes()),
-                        HeaderValue::from_bytes(value.as_bytes()),
-                    ) {
-                        response_headers.insert(header_name, header_value);
-                    }
-                }
-            }
+            copy_upstream_headers(response.headers_mut(), &headers);
             if !response
                 .headers()
                 .contains_key(axum::http::header::CONTENT_TYPE)

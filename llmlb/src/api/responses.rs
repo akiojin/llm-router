@@ -10,7 +10,7 @@ use crate::common::protocol::{RecordStatus, RequestResponseRecord, RequestType, 
 use axum::{
     body::Body,
     extract::{ConnectInfo, State},
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::Response,
     Json,
 };
@@ -29,7 +29,7 @@ use crate::{
         models::load_registered_model,
         openai_util::{sanitize_openai_payload_for_history, upstream_error_message_from_bytes},
         proxy::{
-            add_queue_headers, forward_streaming_response,
+            add_queue_headers, copy_upstream_headers, forward_streaming_response,
             forward_streaming_response_with_tps_tracking, forward_to_endpoint,
             record_endpoint_request_stats, save_request_record,
             select_available_endpoint_with_queue_for_model, update_inference_latency,
@@ -430,17 +430,7 @@ pub async fn post_responses(
     // バックエンドのレスポンス（ステータス/ヘッダ/本文）をパススルー
     let mut axum_response = Response::new(Body::from(body_bytes));
     *axum_response.status_mut() = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK);
-    {
-        let response_headers = axum_response.headers_mut();
-        for (name, value) in headers.iter() {
-            if let (Ok(header_name), Ok(header_value)) = (
-                HeaderName::from_bytes(name.as_str().as_bytes()),
-                HeaderValue::from_bytes(value.as_bytes()),
-            ) {
-                response_headers.insert(header_name, header_value);
-            }
-        }
-    }
+    copy_upstream_headers(axum_response.headers_mut(), &headers);
 
     if let Some(wait_ms) = queued_wait_ms {
         add_queue_headers(&mut axum_response, wait_ms);
