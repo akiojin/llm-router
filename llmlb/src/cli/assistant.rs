@@ -2,17 +2,15 @@
 //!
 //! Provides helper functionality previously available in the legacy MCP server as a CLI.
 
-use anyhow::{anyhow, Context, Result};
-use clap::{Args, Subcommand, ValueEnum};
+use anyhow::{Context, Result};
 use reqwest::Url;
-use serde::Serialize;
-use serde_json::Value;
 use std::path::PathBuf;
-use std::time::Instant;
 
+mod args;
 mod curl;
 mod guide;
 mod openapi;
+pub use args::{AssistantArgs, AssistantCommand, CurlArgs, GuideArgs, GuideCategory, OpenApiArgs};
 use curl::*;
 use guide::{
     dashboard_guide, endpoint_management_guide, model_management_guide, openai_guide,
@@ -26,79 +24,6 @@ const DEFAULT_ROUTER_URL: &str = "http://localhost:32768";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const MAX_TIMEOUT_SECS: u64 = 300;
 const MIN_TIMEOUT_SECS: u64 = 1;
-
-/// Arguments for the assistant subcommand
-#[derive(Args, Debug, Clone)]
-pub struct AssistantArgs {
-    /// Assistant helper subcommand
-    #[command(subcommand)]
-    pub command: AssistantCommand,
-}
-
-/// Assistant subcommands
-#[derive(Subcommand, Debug, Clone)]
-pub enum AssistantCommand {
-    /// Execute curl command with safety checks and optional auth injection
-    Curl(CurlArgs),
-    /// Print OpenAPI spec (JSON)
-    Openapi(OpenApiArgs),
-    /// Print API guide text
-    Guide(GuideArgs),
-}
-
-/// Arguments for `assistant curl`
-#[derive(Args, Debug, Clone)]
-pub struct CurlArgs {
-    /// curl command to execute
-    #[arg(long)]
-    pub command: String,
-
-    /// Disable automatic auth header injection
-    #[arg(long, default_value_t = false)]
-    pub no_auto_auth: bool,
-
-    /// Request timeout in seconds (1-300)
-    #[arg(long)]
-    pub timeout: Option<u64>,
-
-    /// Output as JSON (compatible with automation)
-    #[arg(long, default_value_t = false)]
-    pub json: bool,
-}
-
-/// Arguments for `assistant openapi`
-#[derive(Args, Debug, Clone)]
-pub struct OpenApiArgs {
-    /// Path to OpenAPI file (YAML/JSON)
-    #[arg(long)]
-    pub path: Option<PathBuf>,
-}
-
-/// Arguments for `assistant guide`
-#[derive(Args, Debug, Clone)]
-pub struct GuideArgs {
-    /// Guide category
-    #[arg(long, value_enum)]
-    pub category: GuideCategory,
-}
-
-/// Guide categories
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
-pub enum GuideCategory {
-    /// API overview and auth notes
-    Overview,
-    /// OpenAI-compatible /v1/* APIs
-    #[value(name = "openai-compatible")]
-    OpenAiCompatible,
-    /// /api/endpoints APIs
-    #[value(name = "endpoint-management")]
-    EndpointManagement,
-    /// /api/models/* APIs
-    #[value(name = "model-management")]
-    ModelManagement,
-    /// /api/dashboard/* APIs
-    Dashboard,
-}
 
 #[derive(Debug, Clone)]
 struct AssistantConfig {
@@ -140,19 +65,6 @@ impl AssistantConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct CurlResult {
-    success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    status_code: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    body: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    duration_ms: u128,
-    executed_command: String,
-}
-
 /// Execute an assistant command
 pub async fn execute(command: &AssistantCommand) -> Result<()> {
     let config = AssistantConfig::from_env()?;
@@ -161,88 +73,6 @@ pub async fn execute(command: &AssistantCommand) -> Result<()> {
         AssistantCommand::Openapi(args) => execute_openapi(args, &config),
         AssistantCommand::Guide(args) => execute_guide(args, &config),
     }
-}
-
-async fn execute_curl(args: &CurlArgs, config: &AssistantConfig) -> Result<()> {
-    let start = Instant::now();
-    let timeout_secs = args
-        .timeout
-        .unwrap_or(config.default_timeout)
-        .clamp(MIN_TIMEOUT_SECS, MAX_TIMEOUT_SECS);
-
-    if let Err(reason) = sanitize_command(&args.command) {
-        let result = CurlResult {
-            success: false,
-            status_code: None,
-            body: None,
-            error: Some(format!("Security violation: {reason}")),
-            duration_ms: start.elapsed().as_millis(),
-            executed_command: mask_sensitive(&args.command),
-        };
-        print_curl_result(&result, args.json)?;
-        return Err(curl_failure_error(&result));
-    }
-
-    let Some(url) = extract_url(&args.command) else {
-        let result = CurlResult {
-            success: false,
-            status_code: None,
-            body: None,
-            error: Some("Could not extract URL from curl command".to_string()),
-            duration_ms: start.elapsed().as_millis(),
-            executed_command: mask_sensitive(&args.command),
-        };
-        print_curl_result(&result, args.json)?;
-        return Err(curl_failure_error(&result));
-    };
-
-    if let Err(reason) = validate_host(&url, &config.router_url) {
-        let result = CurlResult {
-            success: false,
-            status_code: None,
-            body: None,
-            error: Some(reason),
-            duration_ms: start.elapsed().as_millis(),
-            executed_command: mask_sensitive(&args.command),
-        };
-        print_curl_result(&result, args.json)?;
-        return Err(curl_failure_error(&result));
-    }
-
-    let command = if args.no_auto_auth {
-        args.command.clone()
-    } else {
-        inject_auth_headers(&args.command, &url, config)
-    };
-
-    let exec_result = execute_curl_command(&command, timeout_secs).await;
-    let duration_ms = start.elapsed().as_millis();
-
-    let result = match exec_result {
-        Ok((status_code, body, success)) => CurlResult {
-            success,
-            status_code,
-            body,
-            error: None,
-            duration_ms,
-            executed_command: mask_sensitive(&command),
-        },
-        Err(error) => CurlResult {
-            success: false,
-            status_code: None,
-            body: None,
-            error: Some(error.to_string()),
-            duration_ms,
-            executed_command: mask_sensitive(&command),
-        },
-    };
-
-    print_curl_result(&result, args.json)?;
-    if !result.success {
-        return Err(curl_failure_error(&result));
-    }
-
-    Ok(())
 }
 
 fn execute_openapi(args: &OpenApiArgs, config: &AssistantConfig) -> Result<()> {
@@ -262,47 +92,6 @@ fn execute_guide(args: &GuideArgs, config: &AssistantConfig) -> Result<()> {
     };
     println!("{text}");
     Ok(())
-}
-
-fn print_curl_result(result: &CurlResult, as_json: bool) -> Result<()> {
-    if as_json {
-        println!("{}", serde_json::to_string_pretty(result)?);
-        return Ok(());
-    }
-
-    if result.success {
-        if let Some(status) = result.status_code {
-            println!("Success (HTTP {status}, {} ms)", result.duration_ms);
-        } else {
-            println!("Success ({} ms)", result.duration_ms);
-        }
-    } else {
-        let message = result.error.as_deref().unwrap_or("unknown error");
-        println!("Error: {message}");
-    }
-
-    if let Some(body) = &result.body {
-        match body {
-            Value::String(text) => println!("{text}"),
-            _ => println!("{}", serde_json::to_string_pretty(body)?),
-        }
-    }
-
-    Ok(())
-}
-
-fn curl_failure_error(result: &CurlResult) -> anyhow::Error {
-    if let Some(message) = result.error.as_deref() {
-        return anyhow!(message.to_string());
-    }
-
-    if let Some(status_code) = result.status_code {
-        return anyhow!(format!(
-            "HTTP request failed with status code {status_code}"
-        ));
-    }
-
-    anyhow!("assistant curl command failed")
 }
 
 #[cfg(test)]

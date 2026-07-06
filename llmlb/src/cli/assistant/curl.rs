@@ -3,15 +3,16 @@
 //!
 //! arch-review [H6] round2: cli/assistant.rs から curl 実行機構を分離。
 
-use super::AssistantConfig;
+use super::{AssistantConfig, CurlArgs, MAX_TIMEOUT_SECS, MIN_TIMEOUT_SECS};
 use anyhow::{anyhow, Context, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Url;
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::process::Stdio;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::time::timeout;
 
@@ -355,4 +356,140 @@ pub(super) fn mask_sensitive(command: &str) -> String {
     let masked = BEARER_RE.replace_all(command, "Bearer ***");
     let masked = API_KEY_HEADER_RE.replace_all(&masked, "X-API-Key: ***");
     SK_RE.replace_all(&masked, "sk_***").to_string()
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct CurlResult {
+    pub(super) success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) status_code: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) body: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) error: Option<String>,
+    pub(super) duration_ms: u128,
+    pub(super) executed_command: String,
+}
+
+pub(super) async fn execute_curl(args: &CurlArgs, config: &AssistantConfig) -> Result<()> {
+    let start = Instant::now();
+    let timeout_secs = args
+        .timeout
+        .unwrap_or(config.default_timeout)
+        .clamp(MIN_TIMEOUT_SECS, MAX_TIMEOUT_SECS);
+
+    if let Err(reason) = sanitize_command(&args.command) {
+        let result = CurlResult {
+            success: false,
+            status_code: None,
+            body: None,
+            error: Some(format!("Security violation: {reason}")),
+            duration_ms: start.elapsed().as_millis(),
+            executed_command: mask_sensitive(&args.command),
+        };
+        print_curl_result(&result, args.json)?;
+        return Err(curl_failure_error(&result));
+    }
+
+    let Some(url) = extract_url(&args.command) else {
+        let result = CurlResult {
+            success: false,
+            status_code: None,
+            body: None,
+            error: Some("Could not extract URL from curl command".to_string()),
+            duration_ms: start.elapsed().as_millis(),
+            executed_command: mask_sensitive(&args.command),
+        };
+        print_curl_result(&result, args.json)?;
+        return Err(curl_failure_error(&result));
+    };
+
+    if let Err(reason) = validate_host(&url, &config.router_url) {
+        let result = CurlResult {
+            success: false,
+            status_code: None,
+            body: None,
+            error: Some(reason),
+            duration_ms: start.elapsed().as_millis(),
+            executed_command: mask_sensitive(&args.command),
+        };
+        print_curl_result(&result, args.json)?;
+        return Err(curl_failure_error(&result));
+    }
+
+    let command = if args.no_auto_auth {
+        args.command.clone()
+    } else {
+        inject_auth_headers(&args.command, &url, config)
+    };
+
+    let exec_result = execute_curl_command(&command, timeout_secs).await;
+    let duration_ms = start.elapsed().as_millis();
+
+    let result = match exec_result {
+        Ok((status_code, body, success)) => CurlResult {
+            success,
+            status_code,
+            body,
+            error: None,
+            duration_ms,
+            executed_command: mask_sensitive(&command),
+        },
+        Err(error) => CurlResult {
+            success: false,
+            status_code: None,
+            body: None,
+            error: Some(error.to_string()),
+            duration_ms,
+            executed_command: mask_sensitive(&command),
+        },
+    };
+
+    print_curl_result(&result, args.json)?;
+    if !result.success {
+        return Err(curl_failure_error(&result));
+    }
+
+    Ok(())
+}
+
+pub(super) fn print_curl_result(result: &CurlResult, as_json: bool) -> Result<()> {
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(result)?);
+        return Ok(());
+    }
+
+    if result.success {
+        if let Some(status) = result.status_code {
+            println!("Success (HTTP {status}, {} ms)", result.duration_ms);
+        } else {
+            println!("Success ({} ms)", result.duration_ms);
+        }
+    } else {
+        let message = result.error.as_deref().unwrap_or("unknown error");
+        println!("Error: {message}");
+    }
+
+    if let Some(body) = &result.body {
+        match body {
+            Value::String(text) => println!("{text}"),
+            _ => println!("{}", serde_json::to_string_pretty(body)?),
+        }
+    }
+
+    Ok(())
+}
+
+pub(super) fn curl_failure_error(result: &CurlResult) -> anyhow::Error {
+    if let Some(message) = result.error.as_deref() {
+        return anyhow!(message.to_string());
+    }
+
+    if let Some(status_code) = result.status_code {
+        return anyhow!(format!(
+            "HTTP request failed with status code {status_code}"
+        ));
+    }
+
+    anyhow!("assistant curl command failed")
 }
