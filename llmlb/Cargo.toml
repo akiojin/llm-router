@@ -96,5 +96,5 @@ wiremock = "0.6.5"
 criterion = { version = "0.8", features = ["async_tokio"] }
 sqlx = { version = "0.8.1", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate", "chrono", "uuid"] }
 serial_test = "3.5"
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
 proptest = "1"
