@@ -1320,6 +1320,7 @@ mod tests {
     use super::*;
     use crate::audit::types::ActorType;
     use chrono::Utc;
+    use tempfile::TempDir;
 
     async fn create_test_pool() -> SqlitePool {
         crate::db::test_utils::test_db_pool().await
@@ -1347,6 +1348,176 @@ mod tests {
             batch_id: None,
             is_migrated: false,
         }
+    }
+
+    async fn prepare_legacy_archive() -> (TempDir, String, SqlitePool) {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("audit-archive.db");
+        let path = path.to_string_lossy().into_owned();
+        let pool = create_archive_pool(&path).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS audit_hash_chain_state (\
+             id INTEGER PRIMARY KEY CHECK (id = 1), \
+             algorithm_version INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT OR REPLACE INTO audit_hash_chain_state (id, algorithm_version) VALUES (1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        (directory, path, pool)
+    }
+
+    async fn insert_legacy_archive_batch(
+        pool: &SqlitePool,
+        sequence_number: i64,
+        previous_hash: &str,
+        entry: AuditLogEntry,
+    ) -> String {
+        let storage = AuditLogStorage::new(pool.clone());
+        storage
+            .insert_batch(std::slice::from_ref(&entry))
+            .await
+            .unwrap();
+        let hash = hash_chain::compute_legacy_batch_hash(
+            previous_hash,
+            sequence_number,
+            &entry.timestamp,
+            &entry.timestamp,
+            1,
+            std::slice::from_ref(&entry),
+        );
+        let batch_id = storage
+            .insert_batch_hash(&AuditBatchHash {
+                id: None,
+                sequence_number,
+                batch_start: entry.timestamp,
+                batch_end: entry.timestamp,
+                record_count: 1,
+                hash: hash.clone(),
+                previous_hash: previous_hash.to_string(),
+            })
+            .await
+            .unwrap();
+        let entry_id: i64 =
+            sqlx::query_scalar("SELECT id FROM audit_log_entries WHERE request_path = ?")
+                .bind(&entry.request_path)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        storage
+            .update_entries_batch_id(&[entry_id], batch_id)
+            .await
+            .unwrap();
+        hash
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_legacy_batches_once() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool.clone());
+        assert!(hash_chain::verify_chain(&storage).await.unwrap().valid);
+
+        let migrated_hash = storage.get_all_batch_hashes().await.unwrap()[0]
+            .hash
+            .clone();
+        sqlx::query(
+            "UPDATE audit_log_entries SET client_ip = '198.51.100.9' \
+             WHERE request_path = '/api/archive-legacy'",
+        )
+        .execute(&migrated_pool)
+        .await
+        .unwrap();
+        migrated_pool.close().await;
+
+        let reopened_pool = create_archive_pool(&path).await.unwrap();
+        let reopened = AuditLogStorage::new(reopened_pool);
+        assert_eq!(
+            reopened.get_all_batch_hashes().await.unwrap()[0].hash,
+            migrated_hash,
+            "a later archive open must not rebaseline tampered data"
+        );
+        assert!(!hash_chain::verify_chain(&reopened).await.unwrap().valid);
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_disconnected_legacy_batches() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-1", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            4,
+            "external-main-chain-hash",
+            make_entry("GET", "/api/archive-4", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        let batches = storage.get_all_batch_hashes().await.unwrap();
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[1].previous_hash, "external-main-chain-hash");
+        let entries = storage
+            .get_entries_for_batch(batches[1].id.unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            batches[1].hash,
+            hash_chain::compute_batch_hash(
+                &batches[1].previous_hash,
+                batches[1].sequence_number,
+                &batches[1].batch_start,
+                &batches[1].batch_end,
+                batches[1].record_count,
+                &entries,
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_tampered_legacy_batch() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        sqlx::query(
+            "UPDATE audit_log_entries SET request_path = '/api/tampered' \
+             WHERE request_path = '/api/archive-legacy'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("tampered archive must fail closed");
+        assert!(error.to_string().contains("audit hash chain"));
     }
 
     #[tokio::test]
