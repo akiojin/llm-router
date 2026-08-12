@@ -1416,6 +1416,50 @@ mod tests {
         hash
     }
 
+    async fn insert_current_archive_batch(
+        pool: &SqlitePool,
+        sequence_number: i64,
+        previous_hash: &str,
+        entry: AuditLogEntry,
+    ) -> String {
+        let storage = AuditLogStorage::new(pool.clone());
+        storage
+            .insert_batch(std::slice::from_ref(&entry))
+            .await
+            .unwrap();
+        let hash = hash_chain::compute_batch_hash(
+            previous_hash,
+            sequence_number,
+            &entry.timestamp,
+            &entry.timestamp,
+            1,
+            std::slice::from_ref(&entry),
+        );
+        let batch_id = storage
+            .insert_batch_hash(&AuditBatchHash {
+                id: None,
+                sequence_number,
+                batch_start: entry.timestamp,
+                batch_end: entry.timestamp,
+                record_count: 1,
+                hash: hash.clone(),
+                previous_hash: previous_hash.to_string(),
+            })
+            .await
+            .unwrap();
+        let entry_id: i64 =
+            sqlx::query_scalar("SELECT id FROM audit_log_entries WHERE request_path = ?")
+                .bind(&entry.request_path)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        storage
+            .update_entries_batch_id(&[entry_id], batch_id)
+            .await
+            .unwrap();
+        hash
+    }
+
     #[tokio::test]
     async fn test_create_archive_pool_rehashes_legacy_batches_once() {
         let (_directory, path, pool) = prepare_legacy_archive().await;
@@ -1467,7 +1511,7 @@ mod tests {
         insert_legacy_archive_batch(
             &pool,
             4,
-            "external-main-chain-hash",
+            &"a".repeat(64),
             make_entry("GET", "/api/archive-4", 200, ActorType::User),
         )
         .await;
@@ -1477,7 +1521,7 @@ mod tests {
         let storage = AuditLogStorage::new(migrated_pool);
         let batches = storage.get_all_batch_hashes().await.unwrap();
         assert_eq!(batches.len(), 2);
-        assert_eq!(batches[1].previous_hash, "external-main-chain-hash");
+        assert_eq!(batches[1].previous_hash, "a".repeat(64));
         let entries = storage
             .get_entries_for_batch(batches[1].id.unwrap())
             .await
@@ -1493,6 +1537,105 @@ mod tests {
                 &entries,
             )
         );
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_mixed_legacy_and_current_batches() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        let legacy_hash = insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        insert_current_archive_batch(
+            &pool,
+            2,
+            &legacy_hash,
+            make_entry("GET", "/api/archive-current", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        assert!(hash_chain::verify_chain(&storage).await.unwrap().valid);
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_invalid_external_anchor() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            4,
+            "not-a-sha256",
+            make_entry("GET", "/api/archive-invalid-anchor", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("an invalid external anchor must fail closed");
+        assert!(error.to_string().contains("audit hash chain"));
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_internal_predecessor_skip() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        let hash_1 = insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-1", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            2,
+            &hash_1,
+            make_entry("GET", "/api/archive-2", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            3,
+            &hash_1,
+            make_entry("GET", "/api/archive-3", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("an internal predecessor skip must fail closed");
+        assert!(error.to_string().contains("audit hash chain"));
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_contiguous_external_predecessor() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-1", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            2,
+            &"b".repeat(64),
+            make_entry("GET", "/api/archive-2", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("a contiguous batch must reference its immediate predecessor");
+        assert!(error.to_string().contains("audit hash chain"));
     }
 
     #[tokio::test]
