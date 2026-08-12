@@ -78,6 +78,10 @@ pub async fn create_archive_pool(path: &str) -> RouterResult<SqlitePool> {
         .execute(&pool)
         .await
         .map_err(|e| LbError::Database(format!("Failed to create archive index: {}", e)))?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_archive_batch ON audit_log_entries(batch_id)")
+        .execute(&pool)
+        .await
+        .map_err(|e| LbError::Database(format!("Failed to create archive batch index: {e}")))?;
 
     sqlx::query(
         "CREATE VIRTUAL TABLE IF NOT EXISTS audit_log_fts USING fts5(
@@ -436,9 +440,14 @@ impl AuditLogStorage {
             }
 
             let new_previous = if allow_external_predecessors {
-                let is_contiguous = previous_sequence.is_some_and(|sequence: i64| {
-                    sequence.checked_add(1) == Some(batch.sequence_number)
-                });
+                // Each archival run re-roots the first remaining main-DB batch at genesis.
+                // A later run can therefore append a genesis-rooted segment even when its
+                // sequence immediately follows the preceding archived segment.
+                let starts_rebased_segment = batch.previous_hash == GENESIS_HASH;
+                let is_contiguous = !starts_rebased_segment
+                    && previous_sequence.is_some_and(|sequence: i64| {
+                        sequence.checked_add(1) == Some(batch.sequence_number)
+                    });
                 if is_contiguous {
                     if batch.previous_hash != expected_stored_previous {
                         return Err(LbError::Database(format!(
