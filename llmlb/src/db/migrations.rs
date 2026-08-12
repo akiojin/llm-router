@@ -230,6 +230,21 @@ mod tests {
     use crate::db::audit_log::AuditLogStorage;
     use chrono::{DateTime, Duration, Utc};
     use sha2::{Digest, Sha256};
+    use sqlx::migrate::Migrator;
+    use std::borrow::Cow;
+
+    async fn migrate_through_v5_5(pool: &SqlitePool) {
+        let migrations = sqlx::migrate!("./migrations")
+            .iter()
+            .filter(|migration| migration.version <= 25)
+            .cloned()
+            .collect();
+        let migrator = Migrator {
+            migrations: Cow::Owned(migrations),
+            ..Migrator::DEFAULT
+        };
+        migrator.run(pool).await.unwrap();
+    }
 
     fn audit_entry(timestamp: DateTime<Utc>, request_path: &str, client_ip: &str) -> AuditLogEntry {
         AuditLogEntry {
@@ -478,7 +493,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_migrations_rehashes_legacy_audit_batches() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        migrate_through_v5_5(&pool).await;
         let storage = AuditLogStorage::new(pool.clone());
 
         let timestamp = Utc::now();
@@ -525,7 +540,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_migrations_does_not_rebaseline_audit_hashes_twice() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        migrate_through_v5_5(&pool).await;
         let storage = AuditLogStorage::new(pool.clone());
 
         insert_legacy_audit_batch(
@@ -560,7 +575,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_migrations_rehashes_mixed_legacy_and_current_batches() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        migrate_through_v5_5(&pool).await;
         let storage = AuditLogStorage::new(pool.clone());
 
         let timestamp = Utc::now();
@@ -595,7 +610,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_migrations_rejects_tampered_legacy_audit_batch() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        migrate_through_v5_5(&pool).await;
         let storage = AuditLogStorage::new(pool.clone());
 
         insert_legacy_audit_batch(
