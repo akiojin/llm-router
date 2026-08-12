@@ -1188,12 +1188,7 @@ async fn test_delete_endpoint_invalid_api_key() {
 #[tokio::test]
 #[serial]
 async fn test_viewer_cannot_create_endpoint() {
-    let TestApp {
-        app,
-        db_pool,
-        admin_key: _,
-        ..
-    } = build_app().await;
+    let TestApp { app, db_pool, .. } = build_app().await;
 
     // Viewerユーザーを作成
     let password_hash = llmlb::auth::password::hash_password("viewer123").unwrap();
