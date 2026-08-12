@@ -1564,6 +1564,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_archive_pool_rehashes_mixed_batches_across_segments() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        insert_current_archive_batch(
+            &pool,
+            4,
+            &"a".repeat(64),
+            make_entry("GET", "/api/archive-current", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        let batches = storage.get_all_batch_hashes().await.unwrap();
+        assert_eq!(batches.len(), 2);
+        for batch in batches {
+            let entries = storage
+                .get_entries_for_batch(batch.id.unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                batch.hash,
+                hash_chain::compute_batch_hash(
+                    &batch.previous_hash,
+                    batch.sequence_number,
+                    &batch.batch_start,
+                    &batch.batch_end,
+                    batch.record_count,
+                    &entries,
+                )
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_create_archive_pool_rejects_invalid_external_anchor() {
         let (_directory, path, pool) = prepare_legacy_archive().await;
         insert_legacy_archive_batch(
