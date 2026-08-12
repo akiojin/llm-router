@@ -225,6 +225,118 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), LbError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audit::hash_chain::{self, GENESIS_HASH};
+    use crate::audit::types::{ActorType, AuditBatchHash, AuditLogEntry};
+    use crate::db::audit_log::AuditLogStorage;
+    use chrono::{DateTime, Duration, Utc};
+    use sha2::{Digest, Sha256};
+
+    fn audit_entry(timestamp: DateTime<Utc>, request_path: &str, client_ip: &str) -> AuditLogEntry {
+        AuditLogEntry {
+            id: None,
+            timestamp,
+            http_method: "GET".to_string(),
+            request_path: request_path.to_string(),
+            status_code: 200,
+            actor_type: ActorType::User,
+            actor_id: Some("user-1".to_string()),
+            actor_username: Some("admin".to_string()),
+            api_key_owner_id: None,
+            client_ip: Some(client_ip.to_string()),
+            duration_ms: Some(10),
+            input_tokens: None,
+            output_tokens: None,
+            total_tokens: None,
+            model_name: None,
+            endpoint_id: None,
+            detail: None,
+            batch_id: None,
+            is_migrated: false,
+        }
+    }
+
+    fn compute_legacy_record_hash(entry: &AuditLogEntry) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(entry.timestamp.to_rfc3339().as_bytes());
+        hasher.update(entry.http_method.as_bytes());
+        hasher.update(entry.request_path.as_bytes());
+        hasher.update(entry.status_code.to_string().as_bytes());
+        hasher.update(entry.actor_type.as_str().as_bytes());
+        if let Some(ref actor_id) = entry.actor_id {
+            hasher.update(actor_id.as_bytes());
+        }
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    fn compute_legacy_batch_hash(
+        previous_hash: &str,
+        sequence_number: i64,
+        entry: &AuditLogEntry,
+    ) -> String {
+        let mut records_hasher = Sha256::new();
+        records_hasher.update(compute_legacy_record_hash(entry).as_bytes());
+        let records_hash: String = records_hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+
+        let mut hasher = Sha256::new();
+        hasher.update(previous_hash.as_bytes());
+        hasher.update(sequence_number.to_string().as_bytes());
+        hasher.update(entry.timestamp.to_rfc3339().as_bytes());
+        hasher.update(entry.timestamp.to_rfc3339().as_bytes());
+        hasher.update(b"1");
+        hasher.update(records_hash.as_bytes());
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    async fn insert_legacy_audit_batch(
+        pool: &SqlitePool,
+        storage: &AuditLogStorage,
+        sequence_number: i64,
+        previous_hash: &str,
+        entry: AuditLogEntry,
+    ) -> String {
+        storage
+            .insert_batch(std::slice::from_ref(&entry))
+            .await
+            .unwrap();
+
+        let hash = compute_legacy_batch_hash(previous_hash, sequence_number, &entry);
+        let batch_id = storage
+            .insert_batch_hash(&AuditBatchHash {
+                id: None,
+                sequence_number,
+                batch_start: entry.timestamp,
+                batch_end: entry.timestamp,
+                record_count: 1,
+                hash: hash.clone(),
+                previous_hash: previous_hash.to_string(),
+            })
+            .await
+            .unwrap();
+        let entry_id: i64 =
+            sqlx::query_scalar("SELECT id FROM audit_log_entries WHERE request_path = ?")
+                .bind(&entry.request_path)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        storage
+            .update_entries_batch_id(&[entry_id], batch_id)
+            .await
+            .unwrap();
+
+        hash
+    }
 
     #[tokio::test]
     async fn test_initialize_database() {
@@ -315,6 +427,88 @@ mod tests {
                 .fetch_one(&pool)
                 .await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_rehashes_legacy_audit_batches() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let storage = AuditLogStorage::new(pool.clone());
+
+        let timestamp = Utc::now();
+        let old_hash_1 = insert_legacy_audit_batch(
+            &pool,
+            &storage,
+            1,
+            GENESIS_HASH,
+            audit_entry(timestamp, "/api/legacy-1", "192.0.2.1"),
+        )
+        .await;
+        let old_hash_2 = insert_legacy_audit_batch(
+            &pool,
+            &storage,
+            2,
+            &old_hash_1,
+            audit_entry(
+                timestamp + Duration::seconds(1),
+                "/api/legacy-2",
+                "192.0.2.2",
+            ),
+        )
+        .await;
+
+        let before = hash_chain::verify_chain(&storage).await.unwrap();
+        assert!(
+            !before.valid,
+            "legacy hashes must reproduce the false alarm"
+        );
+
+        run_migrations(&pool).await.unwrap();
+
+        let after = hash_chain::verify_chain(&storage).await.unwrap();
+        assert!(after.valid, "migration must rehash every legacy batch");
+        assert_eq!(after.batches_checked, 2);
+
+        let migrated_batches = storage.get_all_batch_hashes().await.unwrap();
+        assert_ne!(migrated_batches[0].hash, old_hash_1);
+        assert_ne!(migrated_batches[1].hash, old_hash_2);
+        assert_eq!(migrated_batches[0].previous_hash, GENESIS_HASH);
+        assert_eq!(migrated_batches[1].previous_hash, migrated_batches[0].hash);
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_does_not_rebaseline_audit_hashes_twice() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let storage = AuditLogStorage::new(pool.clone());
+
+        insert_legacy_audit_batch(
+            &pool,
+            &storage,
+            1,
+            GENESIS_HASH,
+            audit_entry(Utc::now(), "/api/legacy", "192.0.2.1"),
+        )
+        .await;
+
+        run_migrations(&pool).await.unwrap();
+        assert!(hash_chain::verify_chain(&storage).await.unwrap().valid);
+
+        sqlx::query(
+            "UPDATE audit_log_entries SET client_ip = '198.51.100.9' WHERE request_path = '/api/legacy'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(!hash_chain::verify_chain(&storage).await.unwrap().valid);
+
+        run_migrations(&pool).await.unwrap();
+
+        let after_second_start = hash_chain::verify_chain(&storage).await.unwrap();
+        assert!(
+            !after_second_start.valid,
+            "a later startup must not bless tampered audit data"
+        );
     }
 
     #[tokio::test]
