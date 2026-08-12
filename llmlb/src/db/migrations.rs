@@ -338,6 +338,52 @@ mod tests {
         hash
     }
 
+    async fn insert_current_audit_batch(
+        pool: &SqlitePool,
+        storage: &AuditLogStorage,
+        sequence_number: i64,
+        previous_hash: &str,
+        entry: AuditLogEntry,
+    ) -> String {
+        storage
+            .insert_batch(std::slice::from_ref(&entry))
+            .await
+            .unwrap();
+
+        let hash = hash_chain::compute_batch_hash(
+            previous_hash,
+            sequence_number,
+            &entry.timestamp,
+            &entry.timestamp,
+            1,
+            std::slice::from_ref(&entry),
+        );
+        let batch_id = storage
+            .insert_batch_hash(&AuditBatchHash {
+                id: None,
+                sequence_number,
+                batch_start: entry.timestamp,
+                batch_end: entry.timestamp,
+                record_count: 1,
+                hash: hash.clone(),
+                previous_hash: previous_hash.to_string(),
+            })
+            .await
+            .unwrap();
+        let entry_id: i64 =
+            sqlx::query_scalar("SELECT id FROM audit_log_entries WHERE request_path = ?")
+                .bind(&entry.request_path)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        storage
+            .update_entries_batch_id(&[entry_id], batch_id)
+            .await
+            .unwrap();
+
+        hash
+    }
+
     #[tokio::test]
     async fn test_initialize_database() {
         // テスト用の一時データベース
@@ -509,6 +555,70 @@ mod tests {
             !after_second_start.valid,
             "a later startup must not bless tampered audit data"
         );
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_rehashes_mixed_legacy_and_current_batches() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let storage = AuditLogStorage::new(pool.clone());
+
+        let timestamp = Utc::now();
+        let legacy_hash = insert_legacy_audit_batch(
+            &pool,
+            &storage,
+            1,
+            GENESIS_HASH,
+            audit_entry(timestamp, "/api/legacy", "192.0.2.1"),
+        )
+        .await;
+        insert_current_audit_batch(
+            &pool,
+            &storage,
+            2,
+            &legacy_hash,
+            audit_entry(
+                timestamp + Duration::seconds(1),
+                "/api/current",
+                "192.0.2.2",
+            ),
+        )
+        .await;
+
+        run_migrations(&pool).await.unwrap();
+
+        let result = hash_chain::verify_chain(&storage).await.unwrap();
+        assert!(result.valid, "mixed legacy/current chains must be upgraded");
+        assert_eq!(result.batches_checked, 2);
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_rejects_tampered_legacy_audit_batch() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let storage = AuditLogStorage::new(pool.clone());
+
+        insert_legacy_audit_batch(
+            &pool,
+            &storage,
+            1,
+            GENESIS_HASH,
+            audit_entry(Utc::now(), "/api/legacy", "192.0.2.1"),
+        )
+        .await;
+        sqlx::query(
+            "UPDATE audit_log_entries SET request_path = '/api/tampered' WHERE request_path = '/api/legacy'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let error = run_migrations(&pool)
+            .await
+            .expect_err("tampered legacy data must fail closed");
+
+        assert!(error.to_string().contains("audit hash chain"));
+        assert!(!hash_chain::verify_chain(&storage).await.unwrap().valid);
     }
 
     #[tokio::test]
