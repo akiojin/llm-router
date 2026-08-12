@@ -218,6 +218,14 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), LbError> {
         .await
         .map_err(|e| LbError::Database(format!("Failed to run migrations: {}", e)))?;
 
+    let migrated_batches = crate::db::audit_log::AuditLogStorage::new(pool.clone())
+        .migrate_hash_chain_to_v2()
+        .await
+        .map_err(|e| LbError::Database(format!("Failed to migrate audit hash chain: {e}")))?;
+    if migrated_batches > 0 {
+        tracing::info!(migrated_batches, "Migrated audit hash chain to version 2");
+    }
+
     tracing::info!("Database migrations completed successfully");
     Ok(())
 }

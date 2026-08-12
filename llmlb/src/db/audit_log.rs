@@ -8,6 +8,7 @@ use crate::common::error::{LbError, RouterResult};
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
+use std::collections::HashSet;
 
 /// アーカイブDBプールを作成
 ///
@@ -117,6 +118,36 @@ pub async fn create_archive_pool(path: &str) -> RouterResult<SqlitePool> {
     .execute(&pool)
     .await
     .map_err(|e| LbError::Database(format!("Failed to create archive FTS delete trigger: {}", e)))?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS audit_hash_chain_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            algorithm_version INTEGER NOT NULL
+        )",
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| {
+        LbError::Database(format!(
+            "Failed to create archive audit hash chain state: {e}"
+        ))
+    })?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO audit_hash_chain_state (id, algorithm_version) VALUES (1, 1)",
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| {
+        LbError::Database(format!(
+            "Failed to initialize archive audit hash chain state: {e}"
+        ))
+    })?;
+
+    let storage = AuditLogStorage::new(pool.clone());
+    if let Err(error) = storage.migrate_archive_hash_chain_to_v2().await {
+        pool.close().await;
+        return Err(error);
+    }
 
     Ok(pool)
 }
@@ -316,6 +347,237 @@ impl AuditLogStorage {
     /// 新しいAuditLogStorageを作成
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    /// `client_ip` を含まない v1 バッチを現行 v2 ハッシュへ一度だけ移行する。
+    ///
+    /// 保存済みチェーンが v1 または v2 のどちらかで正当な場合だけ全バッチを
+    /// v2 で再計算する。更新と方式バージョンの確定は同一トランザクションで
+    /// 行い、改ざんや途中失敗を新しい基準として確定しない。
+    pub(crate) async fn migrate_hash_chain_to_v2(&self) -> RouterResult<i64> {
+        self.migrate_hash_chain_to_v2_inner(false).await
+    }
+
+    /// アーカイブ済みチェーンを、外部DBにある直前バッチへの参照を保って移行する。
+    async fn migrate_archive_hash_chain_to_v2(&self) -> RouterResult<i64> {
+        self.migrate_hash_chain_to_v2_inner(true).await
+    }
+
+    async fn migrate_hash_chain_to_v2_inner(
+        &self,
+        allow_external_predecessors: bool,
+    ) -> RouterResult<i64> {
+        const CURRENT_VERSION: i64 = 2;
+
+        let mut tx = self.pool.begin().await.map_err(|e| {
+            LbError::Database(format!("Failed to begin audit hash chain migration: {e}"))
+        })?;
+        let version: i64 =
+            sqlx::query_scalar("SELECT algorithm_version FROM audit_hash_chain_state WHERE id = 1")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| {
+                    LbError::Database(format!("Failed to read audit hash chain version: {e}"))
+                })?;
+
+        if version == CURRENT_VERSION {
+            tx.commit().await.map_err(|e| {
+                LbError::Database(format!("Failed to finish audit hash chain check: {e}"))
+            })?;
+            return Ok(0);
+        }
+        if version != 1 {
+            return Err(LbError::Database(format!(
+                "Unsupported audit hash chain version: {version}"
+            )));
+        }
+
+        let rows = sqlx::query_as::<_, AuditBatchHashRow>(
+            "SELECT id, sequence_number, batch_start, batch_end, \
+             record_count, hash, previous_hash \
+             FROM audit_batch_hashes ORDER BY sequence_number ASC",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| {
+            LbError::Database(format!(
+                "Failed to load audit hash chain for migration: {e}"
+            ))
+        })?;
+
+        let stored_hashes = rows
+            .iter()
+            .map(|row| row.hash.clone())
+            .collect::<HashSet<_>>();
+        let mut seen_hashes = HashSet::with_capacity(rows.len());
+        let mut expected_stored_previous = GENESIS_HASH.to_string();
+        let mut continuous_new_previous = GENESIS_HASH.to_string();
+        let mut previous_sequence = None;
+        let mut updates = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            let batch = AuditBatchHash::try_from(row)?;
+            let batch_id = batch.id.ok_or_else(|| {
+                LbError::Database("Audit hash chain batch is missing its id".to_string())
+            })?;
+
+            if !seen_hashes.insert(batch.hash.clone()) {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: duplicate hash",
+                    batch.sequence_number
+                )));
+            }
+
+            if !allow_external_predecessors && batch.previous_hash != expected_stored_previous {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: previous hash mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let new_previous = if allow_external_predecessors {
+                let is_contiguous = previous_sequence.is_some_and(|sequence: i64| {
+                    sequence.checked_add(1) == Some(batch.sequence_number)
+                });
+                if is_contiguous {
+                    if batch.previous_hash != expected_stored_previous {
+                        return Err(LbError::Database(format!(
+                            "Invalid audit hash chain before migration at batch {}: contiguous predecessor mismatch",
+                            batch.sequence_number
+                        )));
+                    }
+                    continuous_new_previous.clone()
+                } else {
+                    let valid_external_anchor = batch.previous_hash.len() == 64
+                        && batch
+                            .previous_hash
+                            .bytes()
+                            .all(|byte| byte.is_ascii_hexdigit());
+                    if !valid_external_anchor
+                        || stored_hashes.contains(&batch.previous_hash)
+                        || (batch.sequence_number == 1 && batch.previous_hash != GENESIS_HASH)
+                    {
+                        return Err(LbError::Database(format!(
+                            "Invalid audit hash chain before migration at batch {}: invalid external predecessor",
+                            batch.sequence_number
+                        )));
+                    }
+                    batch.previous_hash.clone()
+                }
+            } else {
+                continuous_new_previous.clone()
+            };
+
+            if allow_external_predecessors
+                && previous_sequence.is_some_and(|sequence| sequence >= batch.sequence_number)
+            {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: sequence order mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let entry_rows = sqlx::query_as::<_, AuditLogRow>(
+                "SELECT id, timestamp, http_method, request_path, status_code, \
+                 actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
+                 duration_ms, input_tokens, output_tokens, total_tokens, \
+                 model_name, endpoint_id, detail, batch_id, is_migrated \
+                 FROM audit_log_entries WHERE batch_id = ? ORDER BY timestamp ASC",
+            )
+            .bind(batch_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| {
+                LbError::Database(format!(
+                    "Failed to load audit batch {} for migration: {e}",
+                    batch.sequence_number
+                ))
+            })?;
+            let entries = entry_rows
+                .into_iter()
+                .map(AuditLogEntry::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if batch.record_count != entries.len() as i64 {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: record count mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let current_hash = hash_chain::compute_batch_hash(
+                &batch.previous_hash,
+                batch.sequence_number,
+                &batch.batch_start,
+                &batch.batch_end,
+                batch.record_count,
+                &entries,
+            );
+            let legacy_hash = hash_chain::compute_legacy_batch_hash(
+                &batch.previous_hash,
+                batch.sequence_number,
+                &batch.batch_start,
+                &batch.batch_end,
+                batch.record_count,
+                &entries,
+            );
+            if batch.hash != current_hash && batch.hash != legacy_hash {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: hash mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let new_hash = hash_chain::compute_batch_hash(
+                &new_previous,
+                batch.sequence_number,
+                &batch.batch_start,
+                &batch.batch_end,
+                batch.record_count,
+                &entries,
+            );
+            updates.push((batch_id, new_hash.clone(), new_previous));
+            expected_stored_previous = batch.hash;
+            continuous_new_previous = new_hash;
+            previous_sequence = Some(batch.sequence_number);
+        }
+
+        let migrated_count = updates.len() as i64;
+        for (batch_id, hash, previous_hash) in updates {
+            sqlx::query("UPDATE audit_batch_hashes SET hash = ?, previous_hash = ? WHERE id = ?")
+                .bind(hash)
+                .bind(previous_hash)
+                .bind(batch_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    LbError::Database(format!("Failed to update audit hash chain: {e}"))
+                })?;
+        }
+
+        let result = sqlx::query(
+            "UPDATE audit_hash_chain_state SET algorithm_version = ? \
+             WHERE id = 1 AND algorithm_version = 1",
+        )
+        .bind(CURRENT_VERSION)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            LbError::Database(format!(
+                "Failed to finalize audit hash chain migration: {e}"
+            ))
+        })?;
+        if result.rows_affected() != 1 {
+            return Err(LbError::Database(
+                "Audit hash chain version changed during migration".to_string(),
+            ));
+        }
+
+        tx.commit().await.map_err(|e| {
+            LbError::Database(format!("Failed to commit audit hash chain migration: {e}"))
+        })?;
+
+        Ok(migrated_count)
     }
 
     /// 監査ログを一括挿入

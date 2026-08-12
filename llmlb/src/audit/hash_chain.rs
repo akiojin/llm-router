@@ -51,6 +51,24 @@ pub fn compute_record_hash(entry: &AuditLogEntry) -> String {
         .collect()
 }
 
+/// `client_ip` がハッシュ対象になる前の個別エントリハッシュを計算する。
+fn compute_legacy_record_hash(entry: &AuditLogEntry) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(entry.timestamp.to_rfc3339().as_bytes());
+    hasher.update(entry.http_method.as_bytes());
+    hasher.update(entry.request_path.as_bytes());
+    hasher.update(entry.status_code.to_string().as_bytes());
+    hasher.update(entry.actor_type.as_str().as_bytes());
+    if let Some(ref actor_id) = entry.actor_id {
+        hasher.update(actor_id.as_bytes());
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// バッチハッシュを計算
 ///
 /// `SHA-256(previous_hash || seq || start || end || count || records_hash)`
@@ -66,6 +84,42 @@ pub fn compute_batch_hash(
     let mut records_hasher = Sha256::new();
     for entry in entries {
         records_hasher.update(compute_record_hash(entry).as_bytes());
+    }
+    let records_hash: String = records_hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+
+    let mut hasher = Sha256::new();
+    hasher.update(previous_hash.as_bytes());
+    hasher.update(seq.to_string().as_bytes());
+    hasher.update(start.to_rfc3339().as_bytes());
+    hasher.update(end.to_rfc3339().as_bytes());
+    hasher.update(count.to_string().as_bytes());
+    hasher.update(records_hash.as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// `client_ip` 導入前のレコードハッシュを使ってバッチハッシュを計算する。
+///
+/// Issue #694 の一回限りの移行で、保存済みバッチが旧方式として正当かを
+/// 検証するためだけに使用する。
+pub(crate) fn compute_legacy_batch_hash(
+    previous_hash: &str,
+    seq: i64,
+    start: &DateTime<Utc>,
+    end: &DateTime<Utc>,
+    count: i64,
+    entries: &[AuditLogEntry],
+) -> String {
+    let mut records_hasher = Sha256::new();
+    for entry in entries {
+        records_hasher.update(compute_legacy_record_hash(entry).as_bytes());
     }
     let records_hash: String = records_hasher
         .finalize()
