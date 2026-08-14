@@ -1591,29 +1591,32 @@ mod tests {
     #[test]
     fn test_heuristic_merges_redistributor_into_explicit_first_party() {
         // Codex review 回帰: BUILTIN 由来で explicit canonical を持つ一次配布元モデル
-        // （google/gemma-4-26b-a4b）に、explicit canonical を持たない再配布 GGUF が
+        // （google/gemma-4-26B-A4B-it）に、explicit canonical を持たない再配布 GGUF が
         // 同一 identity として集約されること（Pass 1 の first-party もアンカーになる）。
         let models = vec![
-            ("gemma4", Some("google/gemma-4-26b-a4b")), // Ollama alias (Pass1)
-            ("google/gemma-4-26b-a4b", Some("google/gemma-4-26b-a4b")), // self explicit (Pass1)
-            ("ggml-org/gemma-4-26B-A4B-GGUF", None),    // redistributor (Pass2)
+            ("gemma4:26b", Some("google/gemma-4-26B-A4B-it")), // Ollama alias (Pass1)
+            (
+                "google/gemma-4-26B-A4B-it",
+                Some("google/gemma-4-26B-A4B-it"),
+            ), // self explicit (Pass1)
+            ("ggml-org/gemma-4-26B-A4B-it-GGUF", None),        // redistributor (Pass2)
         ];
         let res = build_canonical_maps(models.into_iter());
         assert_eq!(
-            res.canonical_for("ggml-org/gemma-4-26B-A4B-GGUF"),
-            "google/gemma-4-26b-a4b"
+            res.canonical_for("ggml-org/gemma-4-26B-A4B-it-GGUF"),
+            "google/gemma-4-26B-A4B-it"
         );
-        let aliases = res.aliases_for("google/gemma-4-26b-a4b");
-        assert!(aliases.contains(&"ggml-org/gemma-4-26B-A4B-GGUF".to_string()));
-        assert!(aliases.contains(&"gemma4".to_string()));
+        let aliases = res.aliases_for("google/gemma-4-26B-A4B-it");
+        assert!(aliases.contains(&"ggml-org/gemma-4-26B-A4B-it-GGUF".to_string()));
+        assert!(aliases.contains(&"gemma4:26b".to_string()));
     }
 
     #[test]
     fn test_heuristic_no_anchor_when_first_party_is_redistributor_only() {
         // 一次配布元が explicit でも self でも存在しない場合はマージしない。
         let models = vec![
-            ("gemma4", Some("google/gemma-4-26b-a4b")), // 別 identity (base/26b-a4b)
-            ("bartowski/qwen3-99b-it-GGUF", None),      // 一次配布元(Qwen)未観測の re-dist
+            ("gemma4:26b", Some("google/gemma-4-26B-A4B-it")), // 別 identity (26B-it)
+            ("bartowski/qwen3-99b-it-GGUF", None),             // 一次配布元(Qwen)未観測の re-dist
         ];
         let res = build_canonical_maps(models.into_iter());
         assert_eq!(
