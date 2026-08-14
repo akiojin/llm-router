@@ -14,13 +14,14 @@
 ルール:
 
 - canonical 名は HuggingFace 上で**実在するリポジトリ ID** を採用する（例:
-  `zai-org/glm-4.7-flash`、`openai/gpt-oss-20b`）。組織名が変わったモデルでは、
+  `zai-org/GLM-4.7-Flash`、`openai/gpt-oss-20b`）。組織名が変わったモデルでは、
   旧 org の表記を alias として残す（例: `THUDM/glm-4.7-flash` → alias）。
 - alias 名は **各エンドポイントタイプ固有の命名形式** に従う。
-  - Ollama: `family:tag`（例: `gpt-oss:20b`、`gemma4`）
+  - Ollama: `family:tag`（例: `gpt-oss:20b`、`gemma4:e4b`）
   - LM Studio: HuggingFace 形式（例: `openai/gpt-oss-20b`）
-- `:latest` のような **可変タグは alias に含めない**。世代交代でルックアップ先が
-  ねじれて、後方互換性を壊すため（例: `gemma4:latest` を撤廃）。
+- 新規 mapping では `:latest` のような **可変タグを原則登録しない**。Issue #643 の
+  Gemma 4 mapping には `gemma4:latest` を登録せず、SKU 固定タグを使う。一方、
+  Qwen / GLM / Nomic 等の既存 `:latest` alias は後方互換性のため残り得る。
 - 量子化サフィックス（`:Q4_K_M` など）は現状 ID に同居しているケースがあるが、
   正規化方針は別 SPEC で扱う（後述「量子化サフィックス方針」）。
 
@@ -47,22 +48,52 @@
 モデルの context length のみを登録する。バリエーションごとに異なる値が公称される
 モデル（量子化バリエーションで差がある等）は登録しない。
 
+Issue #643 で確認した fallback 値は次のとおり。
+
+| canonical | context length (tokens) |
+|---|---:|
+| `google/gemma-4-E2B-it` | 131072 |
+| `google/gemma-4-E4B-it` | 131072 |
+| `google/gemma-4-26B-A4B` | 262144 |
+| `google/gemma-4-26B-A4B-it` | 262144 |
+| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16` | 1048576 |
+| `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 262144 |
+| `Qwen/Qwen3-Coder-Next` | 262144 |
+| `zai-org/GLM-4.7-Flash` | 202752 |
+
+Nemotron 30B の 1048576 はモデルカードの公称最大 1M tokens であり、標準設定の値と
+異なる場合がある。実際の応答では前述のとおりエンドポイント申告値を優先する。
+
 新しいモデルを追加する際は出典（HF README / 公式リリースノート等）を PR 説明に
 記載する。
 
-## SKU 命名と派生バリエーション（G-2）
+## 検証済み SKU と派生バリエーション（G-1 / G-2 / G-5 / C-3）
 
 ggml-org のように community 配布版のリポジトリは、独自 SKU 接頭辞（`E2B`、`E4B`
-等）を付ける場合がある。これらは公式の SKU と区別される派生で、自動的な canonical
-集約はしない方針。必要なら個別に `BUILTIN_MAPPINGS` に登録する。
+等）を付ける場合がある。Issue #643 では一次情報と照合し、同一 SKU の GGUF
+再配布を次の official canonical へ明示的に集約した。サイズ違い、および base と
+instruction-tuned（`-it`）は別 SKU として扱う。
 
-例:
+| official canonical | 検証済みの対応・備考 |
+|---|---|
+| `google/gemma-4-E2B-it` | `ggml-org/gemma-4-E2B-it-GGUF` |
+| `google/gemma-4-E4B-it` | `ggml-org/gemma-4-E4B-it-GGUF` |
+| `google/gemma-4-26B-A4B` | Google 公式 base。対応する Ollama alias は割り当てない |
+| `google/gemma-4-26B-A4B-it` | `ggml-org/gemma-4-26B-A4B-it-GGUF` |
+| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16` | NVIDIA 公式 30B-A3B BF16 |
+| `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | NVIDIA 公式 4B BF16 |
+| `Qwen/Qwen3-Coder-Next` | Qwen 公式 |
+| `zai-org/GLM-4.7-Flash` | Z.ai 公式。旧 `THUDM/glm-4.7-flash` は alias |
 
-- `ggml-org/gemma-4-E2B-it-GGUF`: ggml-org community エッジ派生（仮）
-- `google/gemma-4-26b-a4b`: Google 公式の MoE 版（実在性は別途確認）
+Gemma 4 の Ollama runtime 名は、SKU を一意にする固定タグだけを利用する。
 
-派生バリエーションは「同じ世代の別 SKU」として扱う。利用者には UI/ドキュメントで
-派生関係を明示する（dashboard 側の表示改善は別 SPEC）。
+- E2B instruction-tuned: `gemma4:e2b`
+- E4B instruction-tuned: outbound は固定タグ `gemma4:e4b` を優先する。既存の
+  bare `gemma4` は互換入力専用の legacy alias として受理する
+- 26B instruction-tuned: `gemma4:26b`
+- 26B base: Ollama alias なし
+
+`gemma4:latest` は参照先が将来変わり得るため、alias に含めない。
 
 ## 量子化サフィックス方針（G-3、暫定実装済み）
 
@@ -98,7 +129,9 @@ ggml-org のように community 配布版のリポジトリは、独自 SKU 接�
 
 「`id` を量子化なしへ正規化し、エンドポイントへのルーティング時に `quantization`
 を別経路で扱う」構造的分離はクライアント・dashboard・OpenAI 互換契約への影響が
-大きいため、この PR では扱わず別 SPEC（要 Issue 起票）で扱う。
+大きい。SPEC #575 US-029 では requestable な detail ID を維持し、canonical と
+variant の集約情報を別に提供する互換方針を採用したため、G-3-struct の破壊的な ID
+正規化案は superseded とする。
 
 ## 異常検知ログ（C-defensive）
 
@@ -114,14 +147,16 @@ ggml-org のように community 配布版のリポジトリは、独自 SKU 接�
 ほぼ常に `Registered` / `null` だが、UI 連動のため API レスポンスからは削除しない。
 状態管理を実装するか、フィールドそのものを廃止するかは別 SPEC で扱う。
 
-## 別 SPEC へ送る項目（このブランチでは扱わない）
+## Issue #643 の対応状況と残課題
 
-- B-4: `lifecycle_status` / `download_progress` の挙動見直し（UI 連動の影響範囲が広い）
-- G-1: ggml-org gemma-4-E2B/E4B の canonical 追加（Gemma 4 系 SKU の実在性確認 G-5 が前提。本書時点では self-canonical fallback で `canonical_name` に id 自身が入る暫定動作）
-- G-3 構造分離: `id` から量子化部分を除去し別経路でルーティングする破壊的変更（本書時点では `quantization` フィールド追加で情報の別出しまで実施）
-- G-5: Gemma 4 SKU 実在性の事実確認（外部リソース照合）
-- C-1 / C-2 / G-6: 単一エンドポイントの大量モデル誤申告の根本対応（エンドポイント側設定。本書時点では sync_models() の警告ログで早期検知のみ）
-- C-3: モデル名妥当性の事実確認（外部リソース照合）
+- G-1 / G-5 / C-3: Issue #643 で公式モデル ID、派生関係、runtime alias、context
+  fallback を一次情報と照合し、`BUILTIN_MAPPINGS` と本書へ反映済み。
+- G-3-struct: SPEC #575 US-029 の互換方針により superseded。requestable な `id` は
+  維持し、canonical / variant 情報で集約する。
+- B-4: `lifecycle_status` / `download_progress` は UI/API のプロダクト判断が必要なため、
+  lifecycle 状態管理の実装またはフィールド廃止を別 owner/decision として扱う。
+- C-1 / C-2 / G-6: 単一エンドポイントの大量モデル誤申告は operator / endpoint 側の
+  責務として扱う。llmlb 側は `sync_models()` の警告ログで早期検知する。
 
 ## 関連リンク
 
