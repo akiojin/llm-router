@@ -275,6 +275,10 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
         canonical: "google/gemma-4-E2B-it",
         aliases: &[
             EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4:e2b",
+            },
+            EngineAlias {
                 engine: EndpointType::LmStudio,
                 name: "google/gemma-4-e2b-it",
             },
@@ -288,6 +292,14 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
         canonical: "google/gemma-4-E4B-it",
         aliases: &[
             EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4:e4b",
+            },
+            EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4",
+            },
+            EngineAlias {
                 engine: EndpointType::LmStudio,
                 name: "google/gemma-4-e4b-it",
             },
@@ -297,18 +309,29 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
         ],
     },
-    // Gemma 4 (26B-A4B): `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
-    // 具体タグ `gemma4` のみを Ollama alias として保持。
+    // Gemma 4: `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
+    // base と instruction-tuned は別 canonical とし、固定 Ollama tag は instruction-tuned にだけ割り当てる。
     ModelMapping {
         canonical: "google/gemma-4-26B-A4B",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "google/gemma-4-26b-a4b",
+        }],
+    },
+    ModelMapping {
+        canonical: "google/gemma-4-26B-A4B-it",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
-                name: "gemma4",
+                name: "gemma4:26b",
             },
             EngineAlias {
                 engine: EndpointType::LmStudio,
-                name: "google/gemma-4-26b-a4b",
+                name: "google/gemma-4-26b-a4b-it",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "ggml-org/gemma-4-26B-A4B-it-GGUF",
             },
         ],
     },
@@ -748,8 +771,9 @@ const KNOWN_CONTEXT_LENGTHS: &[(&str, u32)] = &[
     ("google/gemma-4-E2B-it", 131_072),
     ("google/gemma-4-E4B-it", 131_072),
     ("google/gemma-4-26B-A4B", 262_144),
+    ("google/gemma-4-26B-A4B-it", 262_144),
     // GLM
-    ("zai-org/GLM-4.7-Flash", 131_072),
+    ("zai-org/GLM-4.7-Flash", 202_752),
     // Nvidia Nemotron
     ("nvidia/nemotron-3-super-120b-a12b", 131_072),
     ("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", 1_048_576),
