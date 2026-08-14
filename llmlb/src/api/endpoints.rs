@@ -981,24 +981,20 @@ pub async fn sync_endpoint_models(
             )
                 .into_response()
         }
-        Err(err) => {
-            let lb_error = match err {
-                SyncError::ConnectionError(msg) => {
-                    LbError::ServiceUnavailable(format!("Failed to connect: {}", msg))
-                }
-                SyncError::HttpError(status, _) => {
-                    LbError::Http(format!("Endpoint returned HTTP {}", status))
-                }
-                SyncError::ParseError(msg) => {
-                    LbError::Http(format!("Failed to parse response: {}", msg))
-                }
-                SyncError::DbError(msg) => {
-                    LbError::Database(format!("Failed to update models: {}", msg))
-                }
-            };
+        Err(err) => AppError(sync_error_to_lb_error(err)).into_response(),
+    }
+}
 
-            AppError(lb_error).into_response()
+fn sync_error_to_lb_error(err: SyncError) -> LbError {
+    match err {
+        SyncError::ConnectionError(msg) => {
+            LbError::ServiceUnavailable(format!("Failed to connect: {}", msg))
         }
+        SyncError::HttpError(status, _) => {
+            LbError::Http(format!("Endpoint returned HTTP {}", status))
+        }
+        SyncError::ParseError(msg) => LbError::Http(format!("Failed to parse response: {}", msg)),
+        SyncError::DbError(msg) => LbError::Database(format!("Failed to update models: {}", msg)),
     }
 }
 
@@ -1323,6 +1319,75 @@ pub async fn delete_endpoint_model_handler(
                 id,
                 endpoint.endpoint_type.as_str()
             );
+
+            let engine_model =
+                crate::models::mapping::resolve_engine_name(&model, &endpoint.endpoint_type);
+            if let Err(error) = sync::sync_models_with_type(
+                &state.db_pool,
+                &state.http_client,
+                id,
+                &endpoint.base_url,
+                endpoint.api_key.as_deref(),
+                endpoint.inference_timeout_secs as u64,
+                Some(endpoint.endpoint_type),
+            )
+            .await
+            {
+                tracing::error!(
+                    endpoint_id = %id,
+                    model = %model,
+                    error = %error,
+                    "Upstream model was deleted but post-delete model sync failed"
+                );
+                return AppError(sync_error_to_lb_error(error)).into_response();
+            }
+
+            let synced_models = match db::list_endpoint_models(&state.db_pool, id).await {
+                Ok(models) => models,
+                Err(error) => {
+                    tracing::error!(
+                        endpoint_id = %id,
+                        model = %model,
+                        error = %error,
+                        "Upstream model was deleted but post-delete reconciliation could not be verified"
+                    );
+                    return AppError(LbError::Database(
+                        "Failed to verify post-delete model reconciliation".to_string(),
+                    ))
+                    .into_response();
+                }
+            };
+
+            if synced_models.iter().any(|synced_model| {
+                synced_model.model_id == model
+                    || engine_model.is_some_and(|name| synced_model.model_id == name)
+            }) {
+                tracing::error!(
+                    endpoint_id = %id,
+                    model = %model,
+                    engine_model = engine_model.unwrap_or(model.as_str()),
+                    error = "deleted model remains in endpoint_models after sync",
+                    "Upstream model was deleted but post-delete reconciliation failed"
+                );
+                return AppError(LbError::Internal(
+                    "Post-delete model reconciliation left stale metadata".to_string(),
+                ))
+                .into_response();
+            }
+
+            if let Err(error) = state.endpoint_registry.refresh_model_mappings(id).await {
+                tracing::error!(
+                    endpoint_id = %id,
+                    model = %model,
+                    error = %error,
+                    "Upstream model was deleted but model mappings could not be refreshed"
+                );
+                return AppError(LbError::Database(
+                    "Failed to refresh post-delete model mappings".to_string(),
+                ))
+                .into_response();
+            }
+
             StatusCode::NO_CONTENT.into_response()
         }
         Err(e) => {
