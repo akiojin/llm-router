@@ -1100,46 +1100,101 @@ mod tests {
     }
 
     #[test]
-    fn test_gemma4_ollama_resolves_to_canonical() {
-        // `gemma4:latest` は撤廃済み（将来世代の登場で意味がねじれるため）。
-        let removed = resolve_canonical("gemma4:latest", &EndpointType::Ollama);
-        assert_eq!(removed, None);
+    fn test_issue_643_gemma4_e2b_ollama_forwarding_uses_specific_tag() {
+        let canonical = "google/gemma-4-E2B-it";
 
-        // 具体タグ `gemma4` は引き続き alias として解決される。
-        let result = resolve_canonical("gemma4", &EndpointType::Ollama);
-        assert_eq!(result, Some("google/gemma-4-26B-A4B"));
+        assert_eq!(
+            resolve_engine_name(canonical, &EndpointType::Ollama),
+            Some("gemma4:e2b")
+        );
+        assert_eq!(
+            resolve_canonical("gemma4:e2b", &EndpointType::Ollama),
+            Some(canonical)
+        );
     }
 
     #[test]
-    fn test_gemma4_lm_studio_resolves_to_canonical() {
-        let result = resolve_canonical("google/gemma-4-26b-a4b", &EndpointType::LmStudio);
-        assert_eq!(result, Some("google/gemma-4-26B-A4B"));
+    fn test_issue_643_gemma4_e4b_ollama_forwarding_prefers_specific_tag() {
+        let canonical = "google/gemma-4-E4B-it";
+
+        assert_eq!(
+            resolve_engine_name(canonical, &EndpointType::Ollama),
+            Some("gemma4:e4b")
+        );
+        for alias in ["gemma4", "gemma4:e4b"] {
+            assert_eq!(
+                resolve_canonical(alias, &EndpointType::Ollama),
+                Some(canonical),
+                "failed for {alias}"
+            );
+        }
+        assert_eq!(
+            resolve_canonical("gemma4:latest", &EndpointType::Ollama),
+            None
+        );
     }
 
     #[test]
-    fn test_gemma4_engine_name_resolution() {
-        // `:latest` 撤廃により Ollama 側の優先 alias は具体タグ `gemma4`
-        let ollama = resolve_engine_name("google/gemma-4-26B-A4B", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("gemma4"));
+    fn test_issue_643_gemma4_26b_it_ollama_forwarding_uses_specific_tag() {
+        let canonical = "google/gemma-4-26B-A4B-it";
 
-        let lms = resolve_engine_name("google/gemma-4-26B-A4B", &EndpointType::LmStudio);
-        assert_eq!(lms, Some("google/gemma-4-26b-a4b"));
+        assert_eq!(
+            resolve_canonical("gemma4:26b", &EndpointType::Ollama),
+            Some(canonical)
+        );
+        assert_eq!(
+            resolve_engine_name(canonical, &EndpointType::Ollama),
+            Some("gemma4:26b")
+        );
     }
 
     #[test]
-    fn test_issue_643_gemma4_e2b_and_e4b_gguf_aliases_resolve_distinct_official_canonicals() {
-        let e2b = resolve_canonical("ggml-org/gemma-4-E2B-it-GGUF", &EndpointType::LmStudio);
-        let e4b = resolve_canonical("ggml-org/gemma-4-E4B-it-GGUF", &EndpointType::LmStudio);
+    fn test_issue_643_gemma4_e2b_and_e4b_lm_studio_aliases_stay_distinct() {
+        let e2b = "google/gemma-4-E2B-it";
+        let e4b = "google/gemma-4-E4B-it";
 
-        assert_eq!(e2b, Some("google/gemma-4-E2B-it"));
-        assert_eq!(e4b, Some("google/gemma-4-E4B-it"));
+        for alias in ["google/gemma-4-e2b-it", "ggml-org/gemma-4-E2B-it-GGUF"] {
+            assert_eq!(
+                resolve_canonical(alias, &EndpointType::LmStudio),
+                Some(e2b),
+                "failed for {alias}"
+            );
+        }
+        for alias in ["google/gemma-4-e4b-it", "ggml-org/gemma-4-E4B-it-GGUF"] {
+            assert_eq!(
+                resolve_canonical(alias, &EndpointType::LmStudio),
+                Some(e4b),
+                "failed for {alias}"
+            );
+        }
     }
 
     #[test]
-    fn test_issue_643_gemma4_26b_preserves_official_canonical() {
-        let result = resolve_canonical("google/gemma-4-26B-A4B", &EndpointType::LmStudio);
+    fn test_issue_643_gemma4_26b_base_and_it_lm_studio_aliases_do_not_cross() {
+        let base = "google/gemma-4-26B-A4B";
+        let instruct = "google/gemma-4-26B-A4B-it";
 
-        assert_eq!(result, Some("google/gemma-4-26B-A4B"));
+        assert!(resolve_engine_names(base, &EndpointType::Ollama).is_empty());
+        assert_eq!(
+            resolve_canonical("google/gemma-4-26b-a4b", &EndpointType::LmStudio),
+            Some(base)
+        );
+        assert_eq!(
+            resolve_canonical("google/gemma-4-26b-a4b-it", &EndpointType::LmStudio),
+            Some(instruct)
+        );
+        assert_eq!(
+            resolve_canonical("ggml-org/gemma-4-26B-A4B-it-GGUF", &EndpointType::LmStudio),
+            Some(instruct)
+        );
+        assert_eq!(
+            resolve_engine_name(base, &EndpointType::LmStudio),
+            Some("google/gemma-4-26b-a4b")
+        );
+        assert_eq!(
+            resolve_engine_name(instruct, &EndpointType::LmStudio),
+            Some("google/gemma-4-26b-a4b-it")
+        );
     }
 
     #[test]
@@ -1288,7 +1343,6 @@ mod tests {
             known_max_tokens("Qwen/Qwen3-Coder-30B-A3B-Instruct"),
             Some(262_144)
         );
-        assert_eq!(known_max_tokens("zai-org/GLM-4.7-Flash"), Some(131_072));
         assert_eq!(
             known_max_tokens("nomic-ai/nomic-embed-text-v1.5"),
             Some(8_192)
@@ -1297,9 +1351,13 @@ mod tests {
 
     #[test]
     fn test_issue_643_known_max_tokens_gemma4_official_canonicals() {
+        let instruct_26b = "google/gemma-4-26B-A4B-it";
+
         assert_eq!(known_max_tokens("google/gemma-4-E2B-it"), Some(131_072));
         assert_eq!(known_max_tokens("google/gemma-4-E4B-it"), Some(131_072));
         assert_eq!(known_max_tokens("google/gemma-4-26B-A4B"), Some(262_144));
+        assert_eq!(known_max_tokens(instruct_26b), Some(262_144));
+        assert_eq!(resolve_max_tokens(instruct_26b, None), Some(262_144));
     }
 
     #[test]
@@ -1321,7 +1379,10 @@ mod tests {
 
     #[test]
     fn test_issue_643_known_max_tokens_glm_flash_official_canonical() {
-        assert_eq!(known_max_tokens("zai-org/GLM-4.7-Flash"), Some(131_072));
+        let canonical = "zai-org/GLM-4.7-Flash";
+
+        assert_eq!(known_max_tokens(canonical), Some(202_752));
+        assert_eq!(resolve_max_tokens(canonical, None), Some(202_752));
     }
 
     #[test]
