@@ -24,6 +24,8 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const MODEL_ID: &str = "delete-me";
 const CANONICAL_MODEL_ID: &str = "example/delete-me-canonical";
+const KNOWN_CANONICAL_MODEL_ID: &str = "openai/gpt-oss-20b";
+const KNOWN_OLLAMA_MODEL_ID: &str = "gpt-oss:20b";
 
 struct TestApp {
     app: Router,
@@ -143,6 +145,10 @@ fn admin_request(admin_key: &str) -> axum::http::request::Builder {
 }
 
 async fn request_delete(app: &TestApp, endpoint_id: Uuid) -> Response<Body> {
+    request_delete_model(app, endpoint_id, MODEL_ID).await
+}
+
+async fn request_delete_model(app: &TestApp, endpoint_id: Uuid, model: &str) -> Response<Body> {
     app.app
         .clone()
         .oneshot(
@@ -151,7 +157,7 @@ async fn request_delete(app: &TestApp, endpoint_id: Uuid) -> Response<Body> {
                 .uri(format!("/api/endpoints/{endpoint_id}/models/delete"))
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "model": MODEL_ID }))
+                    serde_json::to_vec(&json!({ "model": model }))
                         .expect("serialize delete request"),
                 ))
                 .expect("build delete request"),
@@ -430,4 +436,166 @@ async fn as_024_4_delete_requests_are_isolated_per_endpoint() {
         .expect("failed upstream request recording must be enabled");
     assert_eq!(failed_requests.len(), 1);
     assert_eq!(failed_requests[0].url.path(), "/api/delete");
+}
+
+#[tokio::test]
+#[serial]
+async fn post_delete_sync_failure_preserves_sqlite_and_registry_metadata() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/api/delete"))
+        .and(body_json(json!({ "name": MODEL_ID })))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("sync failed"))
+        .mount(&upstream)
+        .await;
+
+    let (endpoint, model) = seeded_endpoint("sync failure", upstream.uri(), EndpointType::Ollama);
+    let endpoint_id = endpoint.id;
+    let app = build_app(vec![(endpoint, model)]).await;
+
+    let response = request_delete(&app, endpoint_id).await;
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+    let models = list_models_over_http(&app, endpoint_id).await;
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0]["model_id"], MODEL_ID);
+    assert_eq!(app.endpoint_registry.find_by_model(MODEL_ID).await.len(), 1);
+    assert_eq!(
+        app.endpoint_registry
+            .find_by_model(CANONICAL_MODEL_ID)
+            .await
+            .len(),
+        1
+    );
+
+    let requests = upstream
+        .received_requests()
+        .await
+        .expect("upstream request recording must be enabled");
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].url.path(), "/api/delete");
+    assert_eq!(requests[1].url.path(), "/v1/models");
+}
+
+#[tokio::test]
+#[serial]
+async fn stale_post_delete_sync_result_fails_closed_without_refreshing_registry() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/api/delete"))
+        .and(body_json(json!({ "name": MODEL_ID })))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": "list",
+            "data": [{ "id": MODEL_ID, "object": "model" }]
+        })))
+        .mount(&upstream)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/show"))
+        .and(body_json(json!({ "model": MODEL_ID })))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&upstream)
+        .await;
+
+    let (endpoint, model) = seeded_endpoint("stale sync", upstream.uri(), EndpointType::Ollama);
+    let endpoint_id = endpoint.id;
+    let app = build_app(vec![(endpoint, model)]).await;
+
+    let response = request_delete(&app, endpoint_id).await;
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let models = list_models_over_http(&app, endpoint_id).await;
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0]["model_id"], MODEL_ID);
+    assert_eq!(app.endpoint_registry.find_by_model(MODEL_ID).await.len(), 1);
+    assert_eq!(
+        app.endpoint_registry
+            .find_by_model(CANONICAL_MODEL_ID)
+            .await
+            .len(),
+        1
+    );
+
+    let requests = upstream
+        .received_requests()
+        .await
+        .expect("upstream request recording must be enabled");
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0].url.path(), "/api/delete");
+    assert_eq!(requests[1].url.path(), "/v1/models");
+    assert_eq!(requests[2].url.path(), "/api/show");
+}
+
+#[tokio::test]
+#[serial]
+async fn canonical_delete_uses_ollama_engine_name_and_removes_both_mappings() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/api/delete"))
+        .and(body_json(json!({ "name": KNOWN_OLLAMA_MODEL_ID })))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": "list",
+            "data": []
+        })))
+        .mount(&upstream)
+        .await;
+
+    let (endpoint, mut model) =
+        seeded_endpoint("known mapping", upstream.uri(), EndpointType::Ollama);
+    model.model_id = KNOWN_OLLAMA_MODEL_ID.to_string();
+    model.canonical_name = Some(KNOWN_CANONICAL_MODEL_ID.to_string());
+    let endpoint_id = endpoint.id;
+    let app = build_app(vec![(endpoint, model)]).await;
+
+    assert_eq!(
+        app.endpoint_registry
+            .find_by_model(KNOWN_OLLAMA_MODEL_ID)
+            .await
+            .len(),
+        1
+    );
+    assert_eq!(
+        app.endpoint_registry
+            .find_by_model(KNOWN_CANONICAL_MODEL_ID)
+            .await
+            .len(),
+        1
+    );
+
+    let response = request_delete_model(&app, endpoint_id, KNOWN_CANONICAL_MODEL_ID).await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert!(list_models_over_http(&app, endpoint_id).await.is_empty());
+    assert!(app
+        .endpoint_registry
+        .find_by_model(KNOWN_OLLAMA_MODEL_ID)
+        .await
+        .is_empty());
+    assert!(app
+        .endpoint_registry
+        .find_by_model(KNOWN_CANONICAL_MODEL_ID)
+        .await
+        .is_empty());
+
+    let requests = upstream
+        .received_requests()
+        .await
+        .expect("upstream request recording must be enabled");
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].url.path(), "/api/delete");
+    assert_eq!(requests[1].url.path(), "/v1/models");
 }
