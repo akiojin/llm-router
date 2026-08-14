@@ -143,5 +143,9 @@ mod api_keys_api_test;
 #[path = "contract/endpoints_contract_extended_test.rs"]
 mod endpoints_contract_extended_test;
 
+// SPEC #585 FR-027 / Issue #696: 公開ルートの契約テスト欠落を補完
+#[path = "contract/api_route_coverage_test.rs"]
+mod api_route_coverage_test;
+
 // Tests are defined inside the modules; this harness ensures they are built
 // and executed when running `cargo test`.
