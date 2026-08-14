@@ -22,6 +22,9 @@ mod endpoints_put_test;
 #[path = "contract/endpoints_delete_test.rs"]
 mod endpoints_delete_test;
 
+#[path = "contract/endpoints_model_delete_test.rs"]
+mod endpoints_model_delete_test;
+
 #[path = "contract/endpoints_test_test.rs"]
 mod endpoints_test_test;
 
