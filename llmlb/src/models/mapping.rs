@@ -970,17 +970,6 @@ mod tests {
     }
 
     #[test]
-    fn test_glm47_mapping() {
-        // canonical は zai-org に統一（HF 上の現行リポジトリ）
-        let result = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(result, Some("zai-org/glm-4.7-flash"));
-
-        // 旧 THUDM 名は alias として canonical に解決される
-        let legacy = resolve_canonical("THUDM/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(legacy, Some("zai-org/glm-4.7-flash"));
-    }
-
-    #[test]
     fn test_nomic_embedding_mapping() {
         let result = resolve_canonical(
             "text-embedding-nomic-embed-text-v1.5",
@@ -1017,12 +1006,12 @@ mod tests {
     }
 
     #[test]
-    fn test_nvidia_nemotron_nano_mapping() {
+    fn test_issue_643_nemotron_nano_30b_aliases_resolve_official_canonical() {
         let ollama = resolve_canonical("nemotron-3-nano:30b", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("nvidia/Nemotron-3-Nano"));
+        assert_eq!(ollama, Some("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"));
 
-        let result = resolve_canonical("nvidia/nemotron-3-nano", &EndpointType::LmStudio);
-        assert_eq!(result, Some("nvidia/Nemotron-3-Nano"));
+        let legacy = resolve_canonical("nvidia/nemotron-3-nano", &EndpointType::LmStudio);
+        assert_eq!(legacy, Some("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"));
     }
 
     #[test]
@@ -1038,16 +1027,16 @@ mod tests {
     }
 
     #[test]
-    fn test_glm_flash_mapping() {
+    fn test_issue_643_glm_flash_aliases_resolve_official_canonical() {
         let ollama = resolve_canonical("glm-4.7-flash:latest", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("zai-org/glm-4.7-flash"));
+        assert_eq!(ollama, Some("zai-org/GLM-4.7-Flash"));
 
-        let result = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(result, Some("zai-org/glm-4.7-flash"));
+        let lowercase = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
+        assert_eq!(lowercase, Some("zai-org/GLM-4.7-Flash"));
 
         // legacy THUDM/... も alias 経由で canonical に解決される
         let legacy = resolve_canonical("THUDM/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(legacy, Some("zai-org/glm-4.7-flash"));
+        assert_eq!(legacy, Some("zai-org/GLM-4.7-Flash"));
     }
 
     #[test]
@@ -1081,29 +1070,52 @@ mod tests {
 
         // 具体タグ `gemma4` は引き続き alias として解決される。
         let result = resolve_canonical("gemma4", &EndpointType::Ollama);
-        assert_eq!(result, Some("google/gemma-4-26b-a4b"));
+        assert_eq!(result, Some("google/gemma-4-26B-A4B"));
     }
 
     #[test]
     fn test_gemma4_lm_studio_resolves_to_canonical() {
         let result = resolve_canonical("google/gemma-4-26b-a4b", &EndpointType::LmStudio);
-        assert_eq!(result, Some("google/gemma-4-26b-a4b"));
+        assert_eq!(result, Some("google/gemma-4-26B-A4B"));
     }
 
     #[test]
     fn test_gemma4_engine_name_resolution() {
         // `:latest` 撤廃により Ollama 側の優先 alias は具体タグ `gemma4`
-        let ollama = resolve_engine_name("google/gemma-4-26b-a4b", &EndpointType::Ollama);
+        let ollama = resolve_engine_name("google/gemma-4-26B-A4B", &EndpointType::Ollama);
         assert_eq!(ollama, Some("gemma4"));
 
-        let lms = resolve_engine_name("google/gemma-4-26b-a4b", &EndpointType::LmStudio);
+        let lms = resolve_engine_name("google/gemma-4-26B-A4B", &EndpointType::LmStudio);
         assert_eq!(lms, Some("google/gemma-4-26b-a4b"));
     }
 
     #[test]
-    fn test_nemotron_nano_4b_alias_resolves() {
+    fn test_issue_643_gemma4_e2b_and_e4b_gguf_aliases_resolve_distinct_official_canonicals() {
+        let e2b = resolve_canonical("ggml-org/gemma-4-E2B-it-GGUF", &EndpointType::LmStudio);
+        let e4b = resolve_canonical("ggml-org/gemma-4-E4B-it-GGUF", &EndpointType::LmStudio);
+
+        assert_eq!(e2b, Some("google/gemma-4-E2B-it"));
+        assert_eq!(e4b, Some("google/gemma-4-E4B-it"));
+    }
+
+    #[test]
+    fn test_issue_643_gemma4_26b_preserves_official_canonical() {
+        let result = resolve_canonical("google/gemma-4-26B-A4B", &EndpointType::LmStudio);
+
+        assert_eq!(result, Some("google/gemma-4-26B-A4B"));
+    }
+
+    #[test]
+    fn test_issue_643_qwen3_coder_next_preserves_official_canonical() {
+        let result = resolve_canonical("Qwen/Qwen3-Coder-Next", &EndpointType::LmStudio);
+
+        assert_eq!(result, Some("Qwen/Qwen3-Coder-Next"));
+    }
+
+    #[test]
+    fn test_issue_643_nemotron_nano_4b_alias_resolves_official_canonical() {
         let result = resolve_canonical("nvidia/nemotron-3-nano-4b", &EndpointType::LmStudio);
-        assert_eq!(result, Some("nvidia/Nemotron-3-Nano"));
+        assert_eq!(result, Some("nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"));
     }
 
     #[test]
@@ -1239,11 +1251,40 @@ mod tests {
             known_max_tokens("Qwen/Qwen3-Coder-30B-A3B-Instruct"),
             Some(262_144)
         );
-        assert_eq!(known_max_tokens("zai-org/glm-4.7-flash"), Some(131_072));
+        assert_eq!(known_max_tokens("zai-org/GLM-4.7-Flash"), Some(131_072));
         assert_eq!(
             known_max_tokens("nomic-ai/nomic-embed-text-v1.5"),
             Some(8_192)
         );
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_gemma4_official_canonicals() {
+        assert_eq!(known_max_tokens("google/gemma-4-E2B-it"), Some(131_072));
+        assert_eq!(known_max_tokens("google/gemma-4-E4B-it"), Some(131_072));
+        assert_eq!(known_max_tokens("google/gemma-4-26B-A4B"), Some(262_144));
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_nemotron_nano_official_canonicals() {
+        assert_eq!(
+            known_max_tokens("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"),
+            Some(1_048_576)
+        );
+        assert_eq!(
+            known_max_tokens("nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"),
+            Some(262_144)
+        );
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_qwen3_coder_next_official_canonical() {
+        assert_eq!(known_max_tokens("Qwen/Qwen3-Coder-Next"), Some(262_144));
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_glm_flash_official_canonical() {
+        assert_eq!(known_max_tokens("zai-org/GLM-4.7-Flash"), Some(131_072));
     }
 
     #[test]
