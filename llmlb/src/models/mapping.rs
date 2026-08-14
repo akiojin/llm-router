@@ -191,7 +191,7 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
         ],
     },
     ModelMapping {
-        canonical: "nvidia/Nemotron-3-Nano",
+        canonical: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
@@ -201,11 +201,14 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
                 engine: EndpointType::LmStudio,
                 name: "nvidia/nemotron-3-nano",
             },
-            EngineAlias {
-                engine: EndpointType::LmStudio,
-                name: "nvidia/nemotron-3-nano-4b",
-            },
         ],
+    },
+    ModelMapping {
+        canonical: "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "nvidia/nemotron-3-nano-4b",
+        }],
     },
     ModelMapping {
         canonical: "Qwen/Qwen2.5-14B-Instruct-AWQ",
@@ -245,10 +248,10 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
         ],
     },
-    // GLM-4.7-Flash: HuggingFace 上の現行リポジトリは `zai-org/glm-4.7-flash`（旧 THUDM）。
+    // GLM-4.7-Flash: HuggingFace 上の現行リポジトリは `zai-org/GLM-4.7-Flash`（旧 THUDM）。
     // canonical は実在するリポジトリ ID に合わせ、`THUDM/...` は alias として残す。
     ModelMapping {
-        canonical: "zai-org/glm-4.7-flash",
+        canonical: "zai-org/GLM-4.7-Flash",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
@@ -260,14 +263,44 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
             EngineAlias {
                 engine: EndpointType::LmStudio,
+                name: "zai-org/glm-4.7-flash",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
                 name: "THUDM/glm-4.7-flash",
+            },
+        ],
+    },
+    ModelMapping {
+        canonical: "google/gemma-4-E2B-it",
+        aliases: &[
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "google/gemma-4-e2b-it",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "ggml-org/gemma-4-E2B-it-GGUF",
+            },
+        ],
+    },
+    ModelMapping {
+        canonical: "google/gemma-4-E4B-it",
+        aliases: &[
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "google/gemma-4-e4b-it",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "ggml-org/gemma-4-E4B-it-GGUF",
             },
         ],
     },
     // Gemma 4 (26B-A4B): `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
     // 具体タグ `gemma4` のみを Ollama alias として保持。
     ModelMapping {
-        canonical: "google/gemma-4-26b-a4b",
+        canonical: "google/gemma-4-26B-A4B",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
@@ -707,16 +740,20 @@ const KNOWN_CONTEXT_LENGTHS: &[(&str, u32)] = &[
     ("openai/gpt-oss-120b", 131_072),
     // Qwen
     ("Qwen/Qwen3-Coder-30B-A3B-Instruct", 262_144),
+    ("Qwen/Qwen3-Coder-Next", 262_144),
     ("Qwen/Qwen3.5-35B-A3B", 262_144),
     ("Qwen/Qwen2.5-14B-Instruct-AWQ", 32_768),
     // Google Gemma
     ("google/gemma-3-27b-it", 131_072),
-    ("google/gemma-4-26b-a4b", 131_072),
+    ("google/gemma-4-E2B-it", 131_072),
+    ("google/gemma-4-E4B-it", 131_072),
+    ("google/gemma-4-26B-A4B", 262_144),
     // GLM
-    ("zai-org/glm-4.7-flash", 131_072),
+    ("zai-org/GLM-4.7-Flash", 131_072),
     // Nvidia Nemotron
     ("nvidia/nemotron-3-super-120b-a12b", 131_072),
-    ("nvidia/Nemotron-3-Nano", 131_072),
+    ("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", 1_048_576),
+    ("nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16", 262_144),
     // Meta Llama
     ("meta-llama/Llama-3.3-70B-Instruct", 131_072),
     // Embeddings
