@@ -8,6 +8,7 @@ use crate::common::error::{LbError, RouterResult};
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
+use std::collections::HashSet;
 
 /// アーカイブDBプールを作成
 ///
@@ -77,6 +78,10 @@ pub async fn create_archive_pool(path: &str) -> RouterResult<SqlitePool> {
         .execute(&pool)
         .await
         .map_err(|e| LbError::Database(format!("Failed to create archive index: {}", e)))?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_archive_batch ON audit_log_entries(batch_id)")
+        .execute(&pool)
+        .await
+        .map_err(|e| LbError::Database(format!("Failed to create archive batch index: {e}")))?;
 
     sqlx::query(
         "CREATE VIRTUAL TABLE IF NOT EXISTS audit_log_fts USING fts5(
@@ -117,6 +122,36 @@ pub async fn create_archive_pool(path: &str) -> RouterResult<SqlitePool> {
     .execute(&pool)
     .await
     .map_err(|e| LbError::Database(format!("Failed to create archive FTS delete trigger: {}", e)))?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS audit_hash_chain_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            algorithm_version INTEGER NOT NULL
+        )",
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| {
+        LbError::Database(format!(
+            "Failed to create archive audit hash chain state: {e}"
+        ))
+    })?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO audit_hash_chain_state (id, algorithm_version) VALUES (1, 1)",
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| {
+        LbError::Database(format!(
+            "Failed to initialize archive audit hash chain state: {e}"
+        ))
+    })?;
+
+    let storage = AuditLogStorage::new(pool.clone());
+    if let Err(error) = storage.migrate_archive_hash_chain_to_v2().await {
+        pool.close().await;
+        return Err(error);
+    }
 
     Ok(pool)
 }
@@ -316,6 +351,242 @@ impl AuditLogStorage {
     /// 新しいAuditLogStorageを作成
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    /// `client_ip` を含まない v1 バッチを現行 v2 ハッシュへ一度だけ移行する。
+    ///
+    /// 保存済みチェーンが v1 または v2 のどちらかで正当な場合だけ全バッチを
+    /// v2 で再計算する。更新と方式バージョンの確定は同一トランザクションで
+    /// 行い、改ざんや途中失敗を新しい基準として確定しない。
+    pub(crate) async fn migrate_hash_chain_to_v2(&self) -> RouterResult<i64> {
+        self.migrate_hash_chain_to_v2_inner(false).await
+    }
+
+    /// アーカイブ済みチェーンを、外部DBにある直前バッチへの参照を保って移行する。
+    async fn migrate_archive_hash_chain_to_v2(&self) -> RouterResult<i64> {
+        self.migrate_hash_chain_to_v2_inner(true).await
+    }
+
+    async fn migrate_hash_chain_to_v2_inner(
+        &self,
+        allow_external_predecessors: bool,
+    ) -> RouterResult<i64> {
+        const CURRENT_VERSION: i64 = 2;
+
+        let mut tx = self.pool.begin().await.map_err(|e| {
+            LbError::Database(format!("Failed to begin audit hash chain migration: {e}"))
+        })?;
+        let version: i64 =
+            sqlx::query_scalar("SELECT algorithm_version FROM audit_hash_chain_state WHERE id = 1")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| {
+                    LbError::Database(format!("Failed to read audit hash chain version: {e}"))
+                })?;
+
+        if version == CURRENT_VERSION {
+            tx.commit().await.map_err(|e| {
+                LbError::Database(format!("Failed to finish audit hash chain check: {e}"))
+            })?;
+            return Ok(0);
+        }
+        if version != 1 {
+            return Err(LbError::Database(format!(
+                "Unsupported audit hash chain version: {version}"
+            )));
+        }
+
+        let rows = sqlx::query_as::<_, AuditBatchHashRow>(
+            "SELECT id, sequence_number, batch_start, batch_end, \
+             record_count, hash, previous_hash \
+             FROM audit_batch_hashes ORDER BY sequence_number ASC",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| {
+            LbError::Database(format!(
+                "Failed to load audit hash chain for migration: {e}"
+            ))
+        })?;
+
+        let stored_hashes = rows
+            .iter()
+            .map(|row| row.hash.clone())
+            .collect::<HashSet<_>>();
+        let mut seen_hashes = HashSet::with_capacity(rows.len());
+        let mut expected_stored_previous = GENESIS_HASH.to_string();
+        let mut continuous_new_previous = GENESIS_HASH.to_string();
+        let mut previous_sequence = None;
+        let mut updates = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            let batch = AuditBatchHash::try_from(row)?;
+            let batch_id = batch.id.ok_or_else(|| {
+                LbError::Database("Audit hash chain batch is missing its id".to_string())
+            })?;
+
+            if !seen_hashes.insert(batch.hash.clone()) {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: duplicate hash",
+                    batch.sequence_number
+                )));
+            }
+
+            if !allow_external_predecessors && batch.previous_hash != expected_stored_previous {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: previous hash mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let new_previous = if allow_external_predecessors {
+                // Each archival run re-roots the first remaining main-DB batch at genesis.
+                // A later run can therefore append a genesis-rooted segment even when its
+                // sequence immediately follows the preceding archived segment.
+                let starts_rebased_segment = batch.previous_hash == GENESIS_HASH;
+                let is_contiguous = !starts_rebased_segment
+                    && previous_sequence.is_some_and(|sequence: i64| {
+                        sequence.checked_add(1) == Some(batch.sequence_number)
+                    });
+                if is_contiguous {
+                    if batch.previous_hash != expected_stored_previous {
+                        return Err(LbError::Database(format!(
+                            "Invalid audit hash chain before migration at batch {}: contiguous predecessor mismatch",
+                            batch.sequence_number
+                        )));
+                    }
+                    continuous_new_previous.clone()
+                } else {
+                    let valid_external_anchor = batch.previous_hash.len() == 64
+                        && batch
+                            .previous_hash
+                            .bytes()
+                            .all(|byte| byte.is_ascii_hexdigit());
+                    if !valid_external_anchor
+                        || stored_hashes.contains(&batch.previous_hash)
+                        || (batch.sequence_number == 1 && batch.previous_hash != GENESIS_HASH)
+                    {
+                        return Err(LbError::Database(format!(
+                            "Invalid audit hash chain before migration at batch {}: invalid external predecessor",
+                            batch.sequence_number
+                        )));
+                    }
+                    batch.previous_hash.clone()
+                }
+            } else {
+                continuous_new_previous.clone()
+            };
+
+            if allow_external_predecessors
+                && previous_sequence.is_some_and(|sequence| sequence >= batch.sequence_number)
+            {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: sequence order mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let entry_rows = sqlx::query_as::<_, AuditLogRow>(
+                "SELECT id, timestamp, http_method, request_path, status_code, \
+                 actor_type, actor_id, actor_username, api_key_owner_id, client_ip, \
+                 duration_ms, input_tokens, output_tokens, total_tokens, \
+                 model_name, endpoint_id, detail, batch_id, is_migrated \
+                 FROM audit_log_entries WHERE batch_id = ? ORDER BY timestamp ASC",
+            )
+            .bind(batch_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| {
+                LbError::Database(format!(
+                    "Failed to load audit batch {} for migration: {e}",
+                    batch.sequence_number
+                ))
+            })?;
+            let entries = entry_rows
+                .into_iter()
+                .map(AuditLogEntry::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if batch.record_count != entries.len() as i64 {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: record count mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let current_hash = hash_chain::compute_batch_hash(
+                &batch.previous_hash,
+                batch.sequence_number,
+                &batch.batch_start,
+                &batch.batch_end,
+                batch.record_count,
+                &entries,
+            );
+            let legacy_hash = hash_chain::compute_legacy_batch_hash(
+                &batch.previous_hash,
+                batch.sequence_number,
+                &batch.batch_start,
+                &batch.batch_end,
+                batch.record_count,
+                &entries,
+            );
+            if batch.hash != current_hash && batch.hash != legacy_hash {
+                return Err(LbError::Database(format!(
+                    "Invalid audit hash chain before migration at batch {}: hash mismatch",
+                    batch.sequence_number
+                )));
+            }
+
+            let new_hash = hash_chain::compute_batch_hash(
+                &new_previous,
+                batch.sequence_number,
+                &batch.batch_start,
+                &batch.batch_end,
+                batch.record_count,
+                &entries,
+            );
+            updates.push((batch_id, new_hash.clone(), new_previous));
+            expected_stored_previous = batch.hash;
+            continuous_new_previous = new_hash;
+            previous_sequence = Some(batch.sequence_number);
+        }
+
+        let migrated_count = updates.len() as i64;
+        for (batch_id, hash, previous_hash) in updates {
+            sqlx::query("UPDATE audit_batch_hashes SET hash = ?, previous_hash = ? WHERE id = ?")
+                .bind(hash)
+                .bind(previous_hash)
+                .bind(batch_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    LbError::Database(format!("Failed to update audit hash chain: {e}"))
+                })?;
+        }
+
+        let result = sqlx::query(
+            "UPDATE audit_hash_chain_state SET algorithm_version = ? \
+             WHERE id = 1 AND algorithm_version = 1",
+        )
+        .bind(CURRENT_VERSION)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            LbError::Database(format!(
+                "Failed to finalize audit hash chain migration: {e}"
+            ))
+        })?;
+        if result.rows_affected() != 1 {
+            return Err(LbError::Database(
+                "Audit hash chain version changed during migration".to_string(),
+            ));
+        }
+
+        tx.commit().await.map_err(|e| {
+            LbError::Database(format!("Failed to commit audit hash chain migration: {e}"))
+        })?;
+
+        Ok(migrated_count)
     }
 
     /// 監査ログを一括挿入
@@ -1320,6 +1591,7 @@ mod tests {
     use super::*;
     use crate::audit::types::ActorType;
     use chrono::Utc;
+    use tempfile::TempDir;
 
     async fn create_test_pool() -> SqlitePool {
         crate::db::test_utils::test_db_pool().await
@@ -1347,6 +1619,420 @@ mod tests {
             batch_id: None,
             is_migrated: false,
         }
+    }
+
+    async fn prepare_legacy_archive() -> (TempDir, String, SqlitePool) {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("audit-archive.db");
+        let path = path.to_string_lossy().into_owned();
+        let pool = create_archive_pool(&path).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS audit_hash_chain_state (\
+             id INTEGER PRIMARY KEY CHECK (id = 1), \
+             algorithm_version INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT OR REPLACE INTO audit_hash_chain_state (id, algorithm_version) VALUES (1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        (directory, path, pool)
+    }
+
+    async fn insert_legacy_archive_batch(
+        pool: &SqlitePool,
+        sequence_number: i64,
+        previous_hash: &str,
+        entry: AuditLogEntry,
+    ) -> String {
+        let storage = AuditLogStorage::new(pool.clone());
+        storage
+            .insert_batch(std::slice::from_ref(&entry))
+            .await
+            .unwrap();
+        let hash = hash_chain::compute_legacy_batch_hash(
+            previous_hash,
+            sequence_number,
+            &entry.timestamp,
+            &entry.timestamp,
+            1,
+            std::slice::from_ref(&entry),
+        );
+        let batch_id = storage
+            .insert_batch_hash(&AuditBatchHash {
+                id: None,
+                sequence_number,
+                batch_start: entry.timestamp,
+                batch_end: entry.timestamp,
+                record_count: 1,
+                hash: hash.clone(),
+                previous_hash: previous_hash.to_string(),
+            })
+            .await
+            .unwrap();
+        let entry_id: i64 =
+            sqlx::query_scalar("SELECT id FROM audit_log_entries WHERE request_path = ?")
+                .bind(&entry.request_path)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        storage
+            .update_entries_batch_id(&[entry_id], batch_id)
+            .await
+            .unwrap();
+        hash
+    }
+
+    async fn insert_current_archive_batch(
+        pool: &SqlitePool,
+        sequence_number: i64,
+        previous_hash: &str,
+        entry: AuditLogEntry,
+    ) -> String {
+        let storage = AuditLogStorage::new(pool.clone());
+        storage
+            .insert_batch(std::slice::from_ref(&entry))
+            .await
+            .unwrap();
+        let hash = hash_chain::compute_batch_hash(
+            previous_hash,
+            sequence_number,
+            &entry.timestamp,
+            &entry.timestamp,
+            1,
+            std::slice::from_ref(&entry),
+        );
+        let batch_id = storage
+            .insert_batch_hash(&AuditBatchHash {
+                id: None,
+                sequence_number,
+                batch_start: entry.timestamp,
+                batch_end: entry.timestamp,
+                record_count: 1,
+                hash: hash.clone(),
+                previous_hash: previous_hash.to_string(),
+            })
+            .await
+            .unwrap();
+        let entry_id: i64 =
+            sqlx::query_scalar("SELECT id FROM audit_log_entries WHERE request_path = ?")
+                .bind(&entry.request_path)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        storage
+            .update_entries_batch_id(&[entry_id], batch_id)
+            .await
+            .unwrap();
+        hash
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_legacy_batches_once() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool.clone());
+        assert!(hash_chain::verify_chain(&storage).await.unwrap().valid);
+
+        let migrated_hash = storage.get_all_batch_hashes().await.unwrap()[0]
+            .hash
+            .clone();
+        sqlx::query(
+            "UPDATE audit_log_entries SET client_ip = '198.51.100.9' \
+             WHERE request_path = '/api/archive-legacy'",
+        )
+        .execute(&migrated_pool)
+        .await
+        .unwrap();
+        migrated_pool.close().await;
+
+        let reopened_pool = create_archive_pool(&path).await.unwrap();
+        let reopened = AuditLogStorage::new(reopened_pool);
+        assert_eq!(
+            reopened.get_all_batch_hashes().await.unwrap()[0].hash,
+            migrated_hash,
+            "a later archive open must not rebaseline tampered data"
+        );
+        assert!(!hash_chain::verify_chain(&reopened).await.unwrap().valid);
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_disconnected_legacy_batches() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-1", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            4,
+            &"a".repeat(64),
+            make_entry("GET", "/api/archive-4", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        let batches = storage.get_all_batch_hashes().await.unwrap();
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[1].previous_hash, "a".repeat(64));
+        let entries = storage
+            .get_entries_for_batch(batches[1].id.unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            batches[1].hash,
+            hash_chain::compute_batch_hash(
+                &batches[1].previous_hash,
+                batches[1].sequence_number,
+                &batches[1].batch_start,
+                &batches[1].batch_end,
+                batches[1].record_count,
+                &entries,
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_mixed_legacy_and_current_batches() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        let legacy_hash = insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        insert_current_archive_batch(
+            &pool,
+            2,
+            &legacy_hash,
+            make_entry("GET", "/api/archive-current", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        assert!(hash_chain::verify_chain(&storage).await.unwrap().valid);
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_mixed_batches_across_segments() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        insert_current_archive_batch(
+            &pool,
+            4,
+            &"a".repeat(64),
+            make_entry("GET", "/api/archive-current", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        let batches = storage.get_all_batch_hashes().await.unwrap();
+        assert_eq!(batches.len(), 2);
+        for batch in batches {
+            let entries = storage
+                .get_entries_for_batch(batch.id.unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                batch.hash,
+                hash_chain::compute_batch_hash(
+                    &batch.previous_hash,
+                    batch.sequence_number,
+                    &batch.batch_start,
+                    &batch.batch_end,
+                    batch.record_count,
+                    &entries,
+                )
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rehashes_consecutive_rebased_segments() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-first-run", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            2,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-second-run", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let migrated_pool = create_archive_pool(&path).await.unwrap();
+        let storage = AuditLogStorage::new(migrated_pool);
+        let batches = storage.get_all_batch_hashes().await.unwrap();
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[1].previous_hash, GENESIS_HASH);
+        for batch in batches {
+            let entries = storage
+                .get_entries_for_batch(batch.id.unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                batch.hash,
+                hash_chain::compute_batch_hash(
+                    &batch.previous_hash,
+                    batch.sequence_number,
+                    &batch.batch_start,
+                    &batch.batch_end,
+                    batch.record_count,
+                    &entries,
+                )
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_creates_batch_index() {
+        let pool = create_archive_pool(":memory:").await.unwrap();
+
+        let index_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master \
+             WHERE type = 'index' AND tbl_name = 'audit_log_entries' \
+             AND name = 'idx_archive_batch'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(index_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_invalid_external_anchor() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            4,
+            "not-a-sha256",
+            make_entry("GET", "/api/archive-invalid-anchor", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("an invalid external anchor must fail closed");
+        assert!(error.to_string().contains("audit hash chain"));
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_internal_predecessor_skip() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        let hash_1 = insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-1", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            2,
+            &hash_1,
+            make_entry("GET", "/api/archive-2", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            3,
+            &hash_1,
+            make_entry("GET", "/api/archive-3", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("an internal predecessor skip must fail closed");
+        assert!(error.to_string().contains("audit hash chain"));
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_contiguous_external_predecessor() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-1", 200, ActorType::User),
+        )
+        .await;
+        insert_legacy_archive_batch(
+            &pool,
+            2,
+            &"b".repeat(64),
+            make_entry("GET", "/api/archive-2", 200, ActorType::User),
+        )
+        .await;
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("a contiguous batch must reference its immediate predecessor");
+        assert!(error.to_string().contains("audit hash chain"));
+    }
+
+    #[tokio::test]
+    async fn test_create_archive_pool_rejects_tampered_legacy_batch() {
+        let (_directory, path, pool) = prepare_legacy_archive().await;
+        insert_legacy_archive_batch(
+            &pool,
+            1,
+            GENESIS_HASH,
+            make_entry("GET", "/api/archive-legacy", 200, ActorType::User),
+        )
+        .await;
+        sqlx::query(
+            "UPDATE audit_log_entries SET request_path = '/api/tampered' \
+             WHERE request_path = '/api/archive-legacy'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let error = create_archive_pool(&path)
+            .await
+            .expect_err("tampered archive must fail closed");
+        assert!(error.to_string().contains("audit hash chain"));
     }
 
     #[tokio::test]
