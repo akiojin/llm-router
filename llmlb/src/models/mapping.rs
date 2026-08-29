@@ -191,7 +191,7 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
         ],
     },
     ModelMapping {
-        canonical: "nvidia/Nemotron-3-Nano",
+        canonical: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
@@ -201,11 +201,14 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
                 engine: EndpointType::LmStudio,
                 name: "nvidia/nemotron-3-nano",
             },
-            EngineAlias {
-                engine: EndpointType::LmStudio,
-                name: "nvidia/nemotron-3-nano-4b",
-            },
         ],
+    },
+    ModelMapping {
+        canonical: "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "nvidia/nemotron-3-nano-4b",
+        }],
     },
     ModelMapping {
         canonical: "Qwen/Qwen2.5-14B-Instruct-AWQ",
@@ -245,10 +248,10 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
         ],
     },
-    // GLM-4.7-Flash: HuggingFace 上の現行リポジトリは `zai-org/glm-4.7-flash`（旧 THUDM）。
+    // GLM-4.7-Flash: HuggingFace 上の現行リポジトリは `zai-org/GLM-4.7-Flash`（旧 THUDM）。
     // canonical は実在するリポジトリ ID に合わせ、`THUDM/...` は alias として残す。
     ModelMapping {
-        canonical: "zai-org/glm-4.7-flash",
+        canonical: "zai-org/GLM-4.7-Flash",
         aliases: &[
             EngineAlias {
                 engine: EndpointType::Ollama,
@@ -260,22 +263,75 @@ pub static BUILTIN_MAPPINGS: &[ModelMapping] = &[
             },
             EngineAlias {
                 engine: EndpointType::LmStudio,
+                name: "zai-org/glm-4.7-flash",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
                 name: "THUDM/glm-4.7-flash",
             },
         ],
     },
-    // Gemma 4 (26B-A4B): `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
-    // 具体タグ `gemma4` のみを Ollama alias として保持。
     ModelMapping {
-        canonical: "google/gemma-4-26b-a4b",
+        canonical: "google/gemma-4-E2B-it",
         aliases: &[
+            EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4:e2b",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "google/gemma-4-e2b-it",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "ggml-org/gemma-4-E2B-it-GGUF",
+            },
+        ],
+    },
+    ModelMapping {
+        canonical: "google/gemma-4-E4B-it",
+        aliases: &[
+            EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4:e4b",
+            },
             EngineAlias {
                 engine: EndpointType::Ollama,
                 name: "gemma4",
             },
             EngineAlias {
                 engine: EndpointType::LmStudio,
-                name: "google/gemma-4-26b-a4b",
+                name: "google/gemma-4-e4b-it",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "ggml-org/gemma-4-E4B-it-GGUF",
+            },
+        ],
+    },
+    // Gemma 4: `:latest` は将来世代の登場で意味がねじれる反パターンのため alias から外す。
+    // base と instruction-tuned は別 canonical とし、固定 Ollama tag は instruction-tuned にだけ割り当てる。
+    ModelMapping {
+        canonical: "google/gemma-4-26B-A4B",
+        aliases: &[EngineAlias {
+            engine: EndpointType::LmStudio,
+            name: "google/gemma-4-26b-a4b",
+        }],
+    },
+    ModelMapping {
+        canonical: "google/gemma-4-26B-A4B-it",
+        aliases: &[
+            EngineAlias {
+                engine: EndpointType::Ollama,
+                name: "gemma4:26b",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "google/gemma-4-26b-a4b-it",
+            },
+            EngineAlias {
+                engine: EndpointType::LmStudio,
+                name: "ggml-org/gemma-4-26B-A4B-it-GGUF",
             },
         ],
     },
@@ -707,16 +763,21 @@ const KNOWN_CONTEXT_LENGTHS: &[(&str, u32)] = &[
     ("openai/gpt-oss-120b", 131_072),
     // Qwen
     ("Qwen/Qwen3-Coder-30B-A3B-Instruct", 262_144),
+    ("Qwen/Qwen3-Coder-Next", 262_144),
     ("Qwen/Qwen3.5-35B-A3B", 262_144),
     ("Qwen/Qwen2.5-14B-Instruct-AWQ", 32_768),
     // Google Gemma
     ("google/gemma-3-27b-it", 131_072),
-    ("google/gemma-4-26b-a4b", 131_072),
+    ("google/gemma-4-E2B-it", 131_072),
+    ("google/gemma-4-E4B-it", 131_072),
+    ("google/gemma-4-26B-A4B", 262_144),
+    ("google/gemma-4-26B-A4B-it", 262_144),
     // GLM
-    ("zai-org/glm-4.7-flash", 131_072),
+    ("zai-org/GLM-4.7-Flash", 202_752),
     // Nvidia Nemotron
     ("nvidia/nemotron-3-super-120b-a12b", 131_072),
-    ("nvidia/Nemotron-3-Nano", 131_072),
+    ("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", 1_048_576),
+    ("nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16", 262_144),
     // Meta Llama
     ("meta-llama/Llama-3.3-70B-Instruct", 131_072),
     // Embeddings
@@ -970,17 +1031,6 @@ mod tests {
     }
 
     #[test]
-    fn test_glm47_mapping() {
-        // canonical は zai-org に統一（HF 上の現行リポジトリ）
-        let result = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(result, Some("zai-org/glm-4.7-flash"));
-
-        // 旧 THUDM 名は alias として canonical に解決される
-        let legacy = resolve_canonical("THUDM/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(legacy, Some("zai-org/glm-4.7-flash"));
-    }
-
-    #[test]
     fn test_nomic_embedding_mapping() {
         let result = resolve_canonical(
             "text-embedding-nomic-embed-text-v1.5",
@@ -1017,12 +1067,12 @@ mod tests {
     }
 
     #[test]
-    fn test_nvidia_nemotron_nano_mapping() {
+    fn test_issue_643_nemotron_nano_30b_aliases_resolve_official_canonical() {
         let ollama = resolve_canonical("nemotron-3-nano:30b", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("nvidia/Nemotron-3-Nano"));
+        assert_eq!(ollama, Some("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"));
 
-        let result = resolve_canonical("nvidia/nemotron-3-nano", &EndpointType::LmStudio);
-        assert_eq!(result, Some("nvidia/Nemotron-3-Nano"));
+        let legacy = resolve_canonical("nvidia/nemotron-3-nano", &EndpointType::LmStudio);
+        assert_eq!(legacy, Some("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"));
     }
 
     #[test]
@@ -1038,16 +1088,16 @@ mod tests {
     }
 
     #[test]
-    fn test_glm_flash_mapping() {
+    fn test_issue_643_glm_flash_aliases_resolve_official_canonical() {
         let ollama = resolve_canonical("glm-4.7-flash:latest", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("zai-org/glm-4.7-flash"));
+        assert_eq!(ollama, Some("zai-org/GLM-4.7-Flash"));
 
-        let result = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(result, Some("zai-org/glm-4.7-flash"));
+        let lowercase = resolve_canonical("zai-org/glm-4.7-flash", &EndpointType::LmStudio);
+        assert_eq!(lowercase, Some("zai-org/GLM-4.7-Flash"));
 
         // legacy THUDM/... も alias 経由で canonical に解決される
         let legacy = resolve_canonical("THUDM/glm-4.7-flash", &EndpointType::LmStudio);
-        assert_eq!(legacy, Some("zai-org/glm-4.7-flash"));
+        assert_eq!(legacy, Some("zai-org/GLM-4.7-Flash"));
     }
 
     #[test]
@@ -1074,36 +1124,114 @@ mod tests {
     }
 
     #[test]
-    fn test_gemma4_ollama_resolves_to_canonical() {
-        // `gemma4:latest` は撤廃済み（将来世代の登場で意味がねじれるため）。
-        let removed = resolve_canonical("gemma4:latest", &EndpointType::Ollama);
-        assert_eq!(removed, None);
+    fn test_issue_643_gemma4_e2b_ollama_forwarding_uses_specific_tag() {
+        let canonical = "google/gemma-4-E2B-it";
 
-        // 具体タグ `gemma4` は引き続き alias として解決される。
-        let result = resolve_canonical("gemma4", &EndpointType::Ollama);
-        assert_eq!(result, Some("google/gemma-4-26b-a4b"));
+        assert_eq!(
+            resolve_engine_name(canonical, &EndpointType::Ollama),
+            Some("gemma4:e2b")
+        );
+        assert_eq!(
+            resolve_canonical("gemma4:e2b", &EndpointType::Ollama),
+            Some(canonical)
+        );
     }
 
     #[test]
-    fn test_gemma4_lm_studio_resolves_to_canonical() {
-        let result = resolve_canonical("google/gemma-4-26b-a4b", &EndpointType::LmStudio);
-        assert_eq!(result, Some("google/gemma-4-26b-a4b"));
+    fn test_issue_643_gemma4_e4b_ollama_forwarding_prefers_specific_tag() {
+        let canonical = "google/gemma-4-E4B-it";
+
+        assert_eq!(
+            resolve_engine_name(canonical, &EndpointType::Ollama),
+            Some("gemma4:e4b")
+        );
+        for alias in ["gemma4", "gemma4:e4b"] {
+            assert_eq!(
+                resolve_canonical(alias, &EndpointType::Ollama),
+                Some(canonical),
+                "failed for {alias}"
+            );
+        }
+        assert_eq!(
+            resolve_canonical("gemma4:latest", &EndpointType::Ollama),
+            None
+        );
     }
 
     #[test]
-    fn test_gemma4_engine_name_resolution() {
-        // `:latest` 撤廃により Ollama 側の優先 alias は具体タグ `gemma4`
-        let ollama = resolve_engine_name("google/gemma-4-26b-a4b", &EndpointType::Ollama);
-        assert_eq!(ollama, Some("gemma4"));
+    fn test_issue_643_gemma4_26b_it_ollama_forwarding_uses_specific_tag() {
+        let canonical = "google/gemma-4-26B-A4B-it";
 
-        let lms = resolve_engine_name("google/gemma-4-26b-a4b", &EndpointType::LmStudio);
-        assert_eq!(lms, Some("google/gemma-4-26b-a4b"));
+        assert_eq!(
+            resolve_canonical("gemma4:26b", &EndpointType::Ollama),
+            Some(canonical)
+        );
+        assert_eq!(
+            resolve_engine_name(canonical, &EndpointType::Ollama),
+            Some("gemma4:26b")
+        );
     }
 
     #[test]
-    fn test_nemotron_nano_4b_alias_resolves() {
+    fn test_issue_643_gemma4_e2b_and_e4b_lm_studio_aliases_stay_distinct() {
+        let e2b = "google/gemma-4-E2B-it";
+        let e4b = "google/gemma-4-E4B-it";
+
+        for alias in ["google/gemma-4-e2b-it", "ggml-org/gemma-4-E2B-it-GGUF"] {
+            assert_eq!(
+                resolve_canonical(alias, &EndpointType::LmStudio),
+                Some(e2b),
+                "failed for {alias}"
+            );
+        }
+        for alias in ["google/gemma-4-e4b-it", "ggml-org/gemma-4-E4B-it-GGUF"] {
+            assert_eq!(
+                resolve_canonical(alias, &EndpointType::LmStudio),
+                Some(e4b),
+                "failed for {alias}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_issue_643_gemma4_26b_base_and_it_lm_studio_aliases_do_not_cross() {
+        let base = "google/gemma-4-26B-A4B";
+        let instruct = "google/gemma-4-26B-A4B-it";
+
+        assert!(resolve_engine_names(base, &EndpointType::Ollama).is_empty());
+        assert_eq!(
+            resolve_canonical("google/gemma-4-26b-a4b", &EndpointType::LmStudio),
+            Some(base)
+        );
+        assert_eq!(
+            resolve_canonical("google/gemma-4-26b-a4b-it", &EndpointType::LmStudio),
+            Some(instruct)
+        );
+        assert_eq!(
+            resolve_canonical("ggml-org/gemma-4-26B-A4B-it-GGUF", &EndpointType::LmStudio),
+            Some(instruct)
+        );
+        assert_eq!(
+            resolve_engine_name(base, &EndpointType::LmStudio),
+            Some("google/gemma-4-26b-a4b")
+        );
+        assert_eq!(
+            resolve_engine_name(instruct, &EndpointType::LmStudio),
+            Some("google/gemma-4-26b-a4b-it")
+        );
+    }
+
+    #[test]
+    fn test_issue_643_qwen3_coder_next_preserves_official_canonical() {
+        let result = resolve_canonical("Qwen/Qwen3-Coder-Next", &EndpointType::LmStudio);
+
+        assert_eq!(result, Some("Qwen/Qwen3-Coder-Next"));
+    }
+
+    #[test]
+    fn test_issue_643_nemotron_nano_4b_alias_resolves_official_canonical() {
         let result = resolve_canonical("nvidia/nemotron-3-nano-4b", &EndpointType::LmStudio);
-        assert_eq!(result, Some("nvidia/Nemotron-3-Nano"));
+        assert_eq!(result, Some("nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"));
     }
 
     #[test]
@@ -1239,11 +1367,46 @@ mod tests {
             known_max_tokens("Qwen/Qwen3-Coder-30B-A3B-Instruct"),
             Some(262_144)
         );
-        assert_eq!(known_max_tokens("zai-org/glm-4.7-flash"), Some(131_072));
         assert_eq!(
             known_max_tokens("nomic-ai/nomic-embed-text-v1.5"),
             Some(8_192)
         );
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_gemma4_official_canonicals() {
+        let instruct_26b = "google/gemma-4-26B-A4B-it";
+
+        assert_eq!(known_max_tokens("google/gemma-4-E2B-it"), Some(131_072));
+        assert_eq!(known_max_tokens("google/gemma-4-E4B-it"), Some(131_072));
+        assert_eq!(known_max_tokens("google/gemma-4-26B-A4B"), Some(262_144));
+        assert_eq!(known_max_tokens(instruct_26b), Some(262_144));
+        assert_eq!(resolve_max_tokens(instruct_26b, None), Some(262_144));
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_nemotron_nano_official_canonicals() {
+        assert_eq!(
+            known_max_tokens("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"),
+            Some(1_048_576)
+        );
+        assert_eq!(
+            known_max_tokens("nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"),
+            Some(262_144)
+        );
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_qwen3_coder_next_official_canonical() {
+        assert_eq!(known_max_tokens("Qwen/Qwen3-Coder-Next"), Some(262_144));
+    }
+
+    #[test]
+    fn test_issue_643_known_max_tokens_glm_flash_official_canonical() {
+        let canonical = "zai-org/GLM-4.7-Flash";
+
+        assert_eq!(known_max_tokens(canonical), Some(202_752));
+        assert_eq!(resolve_max_tokens(canonical, None), Some(202_752));
     }
 
     #[test]
@@ -1428,29 +1591,32 @@ mod tests {
     #[test]
     fn test_heuristic_merges_redistributor_into_explicit_first_party() {
         // Codex review 回帰: BUILTIN 由来で explicit canonical を持つ一次配布元モデル
-        // （google/gemma-4-26b-a4b）に、explicit canonical を持たない再配布 GGUF が
+        // （google/gemma-4-26B-A4B-it）に、explicit canonical を持たない再配布 GGUF が
         // 同一 identity として集約されること（Pass 1 の first-party もアンカーになる）。
         let models = vec![
-            ("gemma4", Some("google/gemma-4-26b-a4b")), // Ollama alias (Pass1)
-            ("google/gemma-4-26b-a4b", Some("google/gemma-4-26b-a4b")), // self explicit (Pass1)
-            ("ggml-org/gemma-4-26B-A4B-GGUF", None),    // redistributor (Pass2)
+            ("gemma4:26b", Some("google/gemma-4-26B-A4B-it")), // Ollama alias (Pass1)
+            (
+                "google/gemma-4-26B-A4B-it",
+                Some("google/gemma-4-26B-A4B-it"),
+            ), // self explicit (Pass1)
+            ("ggml-org/gemma-4-26B-A4B-it-GGUF", None),        // redistributor (Pass2)
         ];
         let res = build_canonical_maps(models.into_iter());
         assert_eq!(
-            res.canonical_for("ggml-org/gemma-4-26B-A4B-GGUF"),
-            "google/gemma-4-26b-a4b"
+            res.canonical_for("ggml-org/gemma-4-26B-A4B-it-GGUF"),
+            "google/gemma-4-26B-A4B-it"
         );
-        let aliases = res.aliases_for("google/gemma-4-26b-a4b");
-        assert!(aliases.contains(&"ggml-org/gemma-4-26B-A4B-GGUF".to_string()));
-        assert!(aliases.contains(&"gemma4".to_string()));
+        let aliases = res.aliases_for("google/gemma-4-26B-A4B-it");
+        assert!(aliases.contains(&"ggml-org/gemma-4-26B-A4B-it-GGUF".to_string()));
+        assert!(aliases.contains(&"gemma4:26b".to_string()));
     }
 
     #[test]
     fn test_heuristic_no_anchor_when_first_party_is_redistributor_only() {
         // 一次配布元が explicit でも self でも存在しない場合はマージしない。
         let models = vec![
-            ("gemma4", Some("google/gemma-4-26b-a4b")), // 別 identity (base/26b-a4b)
-            ("bartowski/qwen3-99b-it-GGUF", None),      // 一次配布元(Qwen)未観測の re-dist
+            ("gemma4:26b", Some("google/gemma-4-26B-A4B-it")), // 別 identity (26B-it)
+            ("bartowski/qwen3-99b-it-GGUF", None),             // 一次配布元(Qwen)未観測の re-dist
         ];
         let res = build_canonical_maps(models.into_iter());
         assert_eq!(
